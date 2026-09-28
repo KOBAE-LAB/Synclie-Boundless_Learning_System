@@ -180,6 +180,41 @@ export async function updateAutoDiscussionSettingsAction(courseId: string, formD
   revalidatePath(`/courses/${courseId}`);
 }
 
+// F01拡張(受講登録): 授業コードを再発行する(生徒に伝えたコードが漏れた・間違って
+// 別の生徒に伝えた、などの場合用)。既存の参加登録(course_enrollments)には影響しない。
+export async function regenerateJoinCodeAction(courseId: string) {
+  const { user } = await requireRole("teacher");
+  const admin = createAdminClient();
+  await assertOwnsCourse(admin, courseId, user.id);
+
+  const newCode = crypto.randomUUID().replace(/-/g, "").slice(0, 6).toUpperCase();
+  const { error } = await admin.from("courses").update({ join_code: newCode }).eq("id", courseId);
+  if (error) {
+    throw new Error(`コードの再発行に失敗しました: ${error.message}`);
+  }
+
+  revalidatePath(`/courses/${courseId}`);
+}
+
+// F01拡張(受講登録): 参加登録を取り消す(誤って参加した生徒を外す用)。
+// 対話ログ・提出物などの過去データは消さない(受講登録だけを外す)。
+export async function removeEnrollmentAction(courseId: string, studentId: string) {
+  const { user } = await requireRole("teacher");
+  const admin = createAdminClient();
+  await assertOwnsCourse(admin, courseId, user.id);
+
+  const { error } = await admin
+    .from("course_enrollments")
+    .delete()
+    .eq("course_id", courseId)
+    .eq("student_id", studentId);
+  if (error) {
+    throw new Error(`参加登録の削除に失敗しました: ${error.message}`);
+  }
+
+  revalidatePath(`/courses/${courseId}`);
+}
+
 // F02: この授業でまだ知識ベース化されていない資料(pending/failed)をまとめて生成する。
 export async function generateAllPendingRagAction(courseId: string) {
   const { user } = await requireRole("teacher");

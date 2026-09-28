@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { requireConsent } from "@/lib/consent";
+import { requireEnrollment } from "@/lib/courses/enrollment";
 import { SubmitButton } from "@/components/submit-button";
 import { ThinkingIndicator } from "@/components/thinking-indicator";
 import { AutoDiscussionTimer } from "@/components/auto-discussion-timer";
@@ -143,6 +144,7 @@ export default async function LearnCourseSessionPage({
 
   const admin = createAdminClient();
   await requireConsent(admin, user.id);
+  await requireEnrollment(admin, courseId, user.id);
 
   const { data: course } = await admin
     .from("courses")

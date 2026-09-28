@@ -11,6 +11,7 @@ import { evaluateArgument, judgeDiscussion } from "@/lib/ai/argument-evaluation"
 import { recognizeHandwriting } from "@/lib/ai/handwriting";
 import { transcribeAudio } from "@/lib/ai/audio";
 import { AUTO_CONTINUE_CAP } from "@/lib/discussion-tempo";
+import { isEnrolled } from "@/lib/courses/enrollment";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -37,6 +38,29 @@ interface ActivePersonaRow {
 }
 
 async function getOrCreateSession(admin: AdminClient, courseId: string, studentId: string) {
+  // F17: 直前のLTIローンチ(/lti/continue)がこの授業向けのリソースリンクをCookieに
+  // 残していれば、そのリソースリンク経由として記録する(成績連携(AGS)用)。
+  const cookieStore = await cookies();
+  const activeLink = cookieStore.get("lti_active_resource_link")?.value;
+  let ltiResourceLinkId: string | null = null;
+  if (activeLink) {
+    const [linkedCourseId, resourceLinkId] = activeLink.split(":");
+    if (linkedCourseId === courseId) ltiResourceLinkId = resourceLinkId;
+  }
+
+  // F01拡張(受講登録): ページ側のrequireEnrollment()と同じ境界をサーバーアクション側にも
+  // 置く(ページを経由しない直接呼び出しへの防御)。LTI経由の起動はLMS側が既に履修者で
+  // あることを保証しているとみなし、参加登録が無ければここで自動的に作る。
+  if (!(await isEnrolled(admin, courseId, studentId))) {
+    if (ltiResourceLinkId) {
+      await admin
+        .from("course_enrollments")
+        .upsert({ course_id: courseId, student_id: studentId }, { onConflict: "course_id,student_id" });
+    } else {
+      throw new Error("この授業への参加登録がありません。授業コードで参加してから発言してください。");
+    }
+  }
+
   const { data: existing } = await admin
     .from("learning_sessions")
     .select("id")
@@ -51,17 +75,6 @@ async function getOrCreateSession(admin: AdminClient, courseId: string, studentI
   // F19: 授業(courses.mode)が独習モードなら、セッションもsolo_studyとして作る。
   const { data: course } = await admin.from("courses").select("mode").eq("id", courseId).maybeSingle();
   const mode = course?.mode === "solo_study" ? "solo_study" : "group";
-
-  // F17: 直前のLTIローンチ(/lti/continue)がこの授業向けのリソースリンクを
-  // Cookieに残していれば、このセッションをそのリソースリンク経由として記録する
-  // (成績連携(AGS)で「この活動をどの課題の成績として送り返すか」を判定するため)。
-  const cookieStore = await cookies();
-  const activeLink = cookieStore.get("lti_active_resource_link")?.value;
-  let ltiResourceLinkId: string | null = null;
-  if (activeLink) {
-    const [linkedCourseId, resourceLinkId] = activeLink.split(":");
-    if (linkedCourseId === courseId) ltiResourceLinkId = resourceLinkId;
-  }
 
   const { data: created, error } = await admin
     .from("learning_sessions")

@@ -10,6 +10,8 @@ import {
   shareMaterialAction,
   unshareMaterialAction,
   updateAutoDiscussionSettingsAction,
+  regenerateJoinCodeAction,
+  removeEnrollmentAction,
 } from "./actions";
 import { TEMPO_OPTIONS } from "@/lib/discussion-tempo";
 
@@ -49,7 +51,7 @@ export default async function CourseDetailPage({
   const { data: course } = await admin
     .from("courses")
     .select(
-      "id, title, subject, owner_teacher_id, auto_discussion_tempo_seconds, auto_discussion_affects_evaluation",
+      "id, title, subject, owner_teacher_id, join_code, auto_discussion_tempo_seconds, auto_discussion_affects_evaluation",
     )
     .eq("id", courseId)
     .maybeSingle();
@@ -57,6 +59,19 @@ export default async function CourseDetailPage({
   if (!course || course.owner_teacher_id !== user.id) {
     notFound();
   }
+
+  // F01拡張(受講登録): 参加登録している学習者の一覧(名前が無い場合はメールアドレスで表示)。
+  const { data: enrollmentRows } = await admin
+    .from("course_enrollments")
+    .select("student_id, created_at")
+    .eq("course_id", courseId)
+    .order("created_at", { ascending: true });
+  const enrolledStudentIds = (enrollmentRows ?? []).map((e) => e.student_id);
+  const { data: enrolledProfiles } =
+    enrolledStudentIds.length > 0
+      ? await admin.from("profiles").select("id, display_name, email").in("id", enrolledStudentIds)
+      : { data: [] };
+  const profileById = new Map((enrolledProfiles ?? []).map((p) => [p.id, p]));
 
   const { data: materials } = await admin
     .from("course_materials")
@@ -82,6 +97,7 @@ export default async function CourseDetailPage({
   const boundUploadAction = uploadMaterialAction.bind(null, courseId);
   const boundGenerateAllAction = generateAllPendingRagAction.bind(null, courseId);
   const boundUpdateAutoDiscussionAction = updateAutoDiscussionSettingsAction.bind(null, courseId);
+  const boundRegenerateJoinCodeAction = regenerateJoinCodeAction.bind(null, courseId);
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
@@ -143,6 +159,53 @@ export default async function CourseDetailPage({
         </Link>
         を開くと擬似メンバーと議論できる
       </p>
+
+      <div className="mt-8 rounded-lg border border-line p-5">
+        <h2 className="text-sm font-medium text-ink">受講登録</h2>
+        <p className="mt-1 text-sm text-ink-muted">
+          学習者にこの授業コードを伝えてください。学習者は「授業に参加する」画面でこのコードを
+          入力すると、この授業が一覧に表示されるようになります。
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+          <span className="rounded-md border border-line bg-surface-raised px-3 py-1.5 font-mono text-lg tracking-widest text-ink">
+            {course.join_code}
+          </span>
+          <form action={boundRegenerateJoinCodeAction}>
+            <button
+              type="submit"
+              className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface"
+            >
+              コードを再発行する
+            </button>
+          </form>
+        </div>
+
+        <h3 className="mt-4 text-xs font-medium text-ink-faint">
+          参加している学習者({enrolledStudentIds.length}人)
+        </h3>
+        <ul className="mt-2 space-y-1">
+          {enrolledStudentIds.map((studentId) => {
+            const profile = profileById.get(studentId);
+            const boundRemoveAction = removeEnrollmentAction.bind(null, courseId, studentId);
+            return (
+              <li
+                key={studentId}
+                className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm"
+              >
+                <span className="text-ink-muted">{profile?.display_name || profile?.email || studentId}</span>
+                <form action={boundRemoveAction}>
+                  <button type="submit" className="text-xs text-ink-faint hover:text-danger hover:underline">
+                    参加登録を外す
+                  </button>
+                </form>
+              </li>
+            );
+          })}
+          {enrolledStudentIds.length === 0 && (
+            <li className="text-sm text-ink-muted">まだ誰も参加していません。</li>
+          )}
+        </ul>
+      </div>
 
       <div className="mt-8 rounded-lg border border-line p-5">
         <h2 className="text-sm font-medium text-ink">沈黙時の自動継続(テンポ)</h2>

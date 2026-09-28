@@ -240,9 +240,22 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
     `courses/[courseId]/students/actions.ts`の`buildActivityLog`(F09、授業単位)と同じ形の
     `buildCrossCourseActivityLog`を使うが、`course_id`で絞らず学習者の全提出物を束ねる点が違う。
     生成結果は`learner_profiles`/`learner_suggestions`(courseに紐づかない、学習者1人1行)に保存する
-  - `src/app/learn/` — F05(擬似メンバー対話)。学習者向け。`page.tsx`は全授業の一覧
-    (段階1には受講登録の仕組みがまだ無いため、ログイン中の学習者に全授業を見せる簡易実装。
-    本番投入前に受講登録ベースの絞り込みが必要)。`[courseId]/page.tsx`が実際のチャット画面。
+  - `src/app/learn/` — F05(擬似メンバー対話)。学習者向け。`page.tsx`は
+    **受講登録(course_enrollments)している授業だけ**を一覧表示する。「教師が開設した
+    授業コードと学習者をつなげる仕組みが無い」(段階1は全授業を無条件表示していた)という
+    指摘を受けて追加した。教師は`courses/[courseId]/page.tsx`の「受講登録」欄で
+    授業コード(`courses.join_code`。新規作成時に自動生成、`0028_course_enrollments.sql`の
+    列デフォルト式)を確認・再発行でき、参加している学習者の一覧から個別に参加登録を
+    外すこともできる。学習者は`learn/join/`でコードを入力して参加する
+    (`joinCourseByCodeAction`、コードは大文字小文字・空白を無視)。アクセス制御は
+    `src/lib/courses/enrollment.ts`の`requireEnrollment()`(ページ側、未登録なら
+    `/learn?not_enrolled=1`へリダイレクト。`assertOwnsCourse()`と対になる生徒側のガード)と
+    `isEnrolled()`(`actions.ts`の`getOrCreateSession()`内、サーバーアクションを
+    ページ経由せず直接叩かれた場合の防御)の二重チェックにしている。F17(LTI)経由の
+    起動は、プラットフォーム側が履修者であることを既に保証しているとみなし、
+    未登録でもエラーにせず自動的に参加登録する。この機能を入れる前から対話していた
+    学習者(`learning_sessions`に既存行がある)は、マイグレーションで自動的に
+    参加登録済み扱いにしてある(締め出さないため)。`[courseId]/page.tsx`が実際のチャット画面。
     学習者ごとに1つの進行中セッション(`learning_sessions`, `ended_at is null`)を
     get-or-createし、発言のたびに`actions.ts`の`sendMessageAction`が
     (1)学習者発言を保存 → (2)F04で`active`にした擬似メンバーの中から1体選ぶ
@@ -589,6 +602,10 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
     `courses.auto_discussion_tempo_seconds`/`auto_discussion_affects_evaluation`、
     `learning_sessions.auto_discussion_tempo_seconds`、
     `dialogue_turns.auto_generated`を追加(詳細は8章の`learn/`の説明を参照)
+  - `0028_course_enrollments.sql` — F01拡張(受講登録)。`courses.join_code`
+    (参加コード、列デフォルト式で新規作成時に自動生成)と`course_enrollments`
+    (course_id+student_idの組、unique制約)を追加。既存の`learning_sessions`から
+    参加登録済み扱いのバックフィルも行う(詳細は8章の`learn/`の説明を参照)
 - `scripts/stage0/` — 段階0の使い捨てプロトタイプ(`debate_experiment.py`)。
   ペルソナ対話と論証評価の「質感」を、画面なしでローカル検証するためのCLIスクリプト。
   段階1のNext.js実装に置き換わる前提の使い捨てコード。
@@ -644,9 +661,10 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
 - 段階1のCredentials認証は自前のパスワードハッシュ(bcrypt)を`profiles`に保存する方式。
   段階2でSSO(F22)に移行する際、`password_hash`列はそのまま残しつつ、
   SSOプロバイダーのsubject idを別途キーとして使う設計にする(要件定義書6章・12章参照)。
-- 受講登録(どの学習者がどの授業に属するか)の仕組みがまだ無い。`src/app/learn/page.tsx`は
-  ログイン中の学習者に全授業を一覧表示している。本番投入前に受講登録テーブルを追加し、
-  学習者ごとに所属する授業だけを見せるようにすること。
+- 受講登録(どの学習者がどの授業に属するか)は`course_enrollments`+授業コード
+  (`courses.join_code`)で実装済み(詳細は8章の`src/app/learn/`の説明を参照)。
+  ただしRLSポリシーはまだ無いため、このテーブルもアプリ側のガード
+  (`requireEnrollment`/`isEnrolled`)だけに依存している点は他のテーブルと同じ。
 
 ## 9. 開発の進め方
 

@@ -99,6 +99,8 @@ export async function deleteMyDataAction() {
   // F26実装時に追加。
   await admin.from("learner_profiles").delete().eq("student_id", user.id);
   await admin.from("learner_suggestions").delete().eq("student_id", user.id);
+  // 受講登録実装時に追加。参加登録も外し、必要なら授業コードで参加し直してもらう。
+  await admin.from("course_enrollments").delete().eq("student_id", user.id);
 
   revalidatePath("/learn/data");
 }
