@@ -446,8 +446,17 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
   (以前あった未使用のブラウザ用クライアント`client.ts`は削除済み)
 - `src/lib/courses/ownership.ts` — `assertOwnsCourse()`: 教師が自分の授業を操作しているかの
   確認(RLS未整備な段階1のアプリ側ガード)。`courses/[courseId]/`配下の複数のactions.tsから共用
+  (テストは同ディレクトリの`ownership.test.ts`)
+- `src/lib/courses/enrollment.ts` — F01拡張(受講登録)。`requireEnrollment()`(ページ側、
+  未登録なら`/learn?not_enrolled=1`へリダイレクト)・`isEnrolled()`(真偽値、サーバー
+  アクション側の防御用)(テストは同ディレクトリの`enrollment.test.ts`)
 - `src/lib/consent.ts` — F16。`requireConsent()`: 同意していない/撤回済みの学習者を
-  `/consent`へリダイレクトする(`learn/`配下の各ページから呼ぶ)
+  `/consent`へリダイレクトする(`learn/`配下の各ページから呼ぶ。テストは`consent.test.ts`)
+- `src/lib/persona-mention.ts` — F05。`isPersonaMentioned()`: 学習者・擬似メンバーの発言に
+  特定のペルソナが名指しされているかを、正式名の末尾一致(3文字以上)で判定する
+  (`learn/[courseId]/actions.ts`の`pickRespondingPersona`から使う純粋関数。
+  "use server"ファイルはasync関数以外exportできないため別ファイルに切り出した。
+  テストは`persona-mention.test.ts`)
 - `src/lib/ai/` — ペルソナ対話(`persona.ts`)、論証評価(`argument-evaluation.ts`)、
   観点別AIフィードバック(`feedback.ts`、F07。`argument-evaluation.ts`とは別物:
   こちらは点数を返さず、教師が設定した観点ごとの助言を構造化出力で返す)、
@@ -673,6 +682,19 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
 - 段階0〜1はコストを最小化する(安価モデル優先、論証評価の呼び出し回数を絞る、支出上限を設定・監視する)。
 - 実装前に要件定義書の該当章を確認し、齟齬があれば要件定義書を更新してから実装する
   (要件定義書が「正」。このCLAUDE.mdは早見表であり、詳細判断の根拠にはしない)。
+- **自動テスト**: `npm test`(vitest)。CIも自動テストも無い状態が長く続き、話者選択の
+  不自然さ・複数ペルソナでの反論不成立・受講登録の抜け穴など、実機で人手が触るまで
+  気づかれない構造的な不具合が何度か起きたため導入した。実際のSupabaseやNext.jsの
+  ランタイムには繋がず、権限境界の関数(`assertOwnsCourse`/`requireConsent`/
+  `requireEnrollment`・`isEnrolled`)が受け取る`admin`クライアントを、その関数が
+  実際に呼ぶメソッド連鎖(`.from().select().eq().maybeSingle()`等)だけを実装した
+  最小限の偽クライアントに差し替えてテストする方針(`src/lib/courses/ownership.test.ts`
+  等を参照)。`next/navigation`の`redirect()`もテスト内でモックし、呼ばれたかどうかを
+  検証する。**「誰がどの授業・どの学習者データに触れるか」という権限境界に新しい分岐を
+  加えたら、ここにもテストを足すこと**(DBに触れない純粋なロジック、例えば
+  `src/lib/persona-mention.ts`の名指し判定なども同様の対象)。網羅的なテストは目指さず、
+  「書き忘れても`tsc`/ESLintでは気づけない」種類のバグ(権限チェックの抜け漏れ)を
+  優先的にカバーする。
 
 ## 10. 未解決の論点(要件定義書12章より抜粋)
 

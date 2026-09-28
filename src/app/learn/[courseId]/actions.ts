@@ -12,6 +12,7 @@ import { recognizeHandwriting } from "@/lib/ai/handwriting";
 import { transcribeAudio } from "@/lib/ai/audio";
 import { AUTO_CONTINUE_CAP } from "@/lib/discussion-tempo";
 import { isEnrolled } from "@/lib/courses/enrollment";
+import { isPersonaMentioned } from "@/lib/persona-mention";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -85,17 +86,6 @@ async function getOrCreateSession(admin: AdminClient, courseId: string, studentI
     throw new Error(`学習セッションの作成に失敗しました: ${error?.message ?? "不明なエラー"}`);
   }
   return created.id as string;
-}
-
-// 学習者はペルソナの正式名(教師が付けた「討論好きの山田くん」のような説明的な名前)を
-// 全部書くとは限らず、「山田くん」のような末尾の呼び名だけで名指しすることが多い。
-// そのため名前の末尾からの部分一致(3文字以上)で名指しを判定する。
-function isPersonaMentioned(personaName: string, message: string): boolean {
-  const MIN_SUFFIX_LEN = 3;
-  for (let len = personaName.length; len >= MIN_SUFFIX_LEN; len--) {
-    if (message.includes(personaName.slice(-len))) return true;
-  }
-  return false;
 }
 
 // F04で「使用中」にした擬似メンバーの中から、次に発言する1人を選ぶ。
