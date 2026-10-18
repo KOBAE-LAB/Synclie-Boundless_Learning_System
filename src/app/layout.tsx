@@ -9,7 +9,7 @@ import { logoutAction } from "./logout-action";
 // OSの標準フォント(日本語グリフを含む)を使う。オフライン/プロキシ環境でもビルドが安定する。
 
 export const metadata: Metadata = {
-  title: "Synclie",
+  title: "Synclie - Boundless Learning System",
   description: "オンデマンド学習をインタラクティブに、独習を個別最適に。",
 };
 

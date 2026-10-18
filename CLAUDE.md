@@ -1,6 +1,6 @@
 @AGENTS.md
 
-# Synclie — 開発リファレンス (CLAUDE.md)
+# Synclie - Boundless Learning System — 開発リファレンス (CLAUDE.md)
 
 このファイルは、要件定義書(Claude Docs: 「非同期協働学習アプリ 企画・要件定義書」)の要点を
 開発時に参照しやすい形でまとめたものです。詳細な議論の経緯や書きぶりは要件定義書本体を参照し、
@@ -10,7 +10,9 @@
 
 ## 1. コンセプト
 
-- プロダクト名: **Synclie**
+- プロダクト名: **Synclie - Boundless Learning System**(略称 **Synclie**)。
+  旧称は「Synclie - Interactive Ondemand Learning System」(2026-10-19に改称。GitHubリポジトリも
+  `KOBAE-LAB/Synclie-Boundless_Learning_System`にリネーム済み)
 - キーワード: オンデマンドを**インタラクティブに**、独習を**個別最適に**。
 - 校種・職場を問わない**汎用性**が一次的な設計方針。離島など教育資源が制約された環境は、
   「最も厳しい環境で機能すれば、どこでも機能する」という位置づけのテストベッドであり、
@@ -146,7 +148,9 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
   将来また別プロジェクトへ移す場合の参考として残してある
 - **認証**: Auth.js (NextAuth v5)。段階1は簡易ログイン → 段階2でSSO(F22)。
   `src/auth.ts` にプロバイダーを追加していく。
-- **ホスティング**: Vercel(アプリ) + Supabase(データ)
+- **ホスティング**: 当面(暫定)は**さくらVPS**(アプリ) + Supabase(データ)。Vercelは使わない
+  (デプロイ手順と注意点はREADME.mdの「さくらVPSへのデプロイ」を参照)。将来Vercel等へ
+  移す可能性は残すが、現時点でVercel固有の設定・機能には依存させないこと
 - **LLM**: OpenAI(Responses API)。マルチモーダル対応・構造化出力の成熟度・コストを理由に選定
   (Anthropic/Googleとの比較検討の結果)。モデル名は変わりやすいため、
   `src/lib/ai/openai.ts` の `MODEL_PERSONA` / `MODEL_JUDGE` / `MODEL_EMBEDDING`(F02の埋め込み用)
@@ -206,6 +210,9 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
     横長の人物画像・背景写真でもタイルいっぱいに敷き詰められる。
   あわせてアバター用の控えめなアイドルアニメーション(`.avatar-idle`、静止画+CSSのみ)も
   入れている。どちらも`prefers-reduced-motion`を尊重して無効化する
+- `deploy/` — さくらVPS用のsystemdユニット・nginx設定・更新スクリプト(`deploy.sh`)。
+  詳細はREADME.mdの「さくらVPSへのデプロイ」。アップロード上限は`next.config.ts`の
+  `serverActions.bodySizeLimit`とnginxの`client_max_body_size`で揃える
 - `src/app/` — Next.js App Router のページ・APIルート
   - `src/app/page.tsx` — ログイン後の行き先をロールで振り分ける(教師→`/courses`、
     学習者→`/learn`)。`login/actions.ts`の`loginAction`は`redirectTo: "/"`固定にしてあり、

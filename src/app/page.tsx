@@ -20,6 +20,9 @@ export default async function Home() {
       <h1 className="text-3xl font-semibold tracking-tight text-ink">
         Synclie
       </h1>
+      <p className="text-sm font-medium tracking-wide text-ink-muted">
+        Boundless Learning System
+      </p>
       <p className="max-w-xl text-base text-ink-muted">
         オンデマンド学習をインタラクティブに、独習を個別最適に。
         AI擬似メンバーとの協働・討論を通じて学ぶ、離島発・世界水準の学習体験を目指しています。
