@@ -1,0 +1,22 @@
+# systemd ユニット(/etc/systemd/system/synclie-bls.service)。deploy/setup-vps.sh が配置する。
+# このVPSは synclie-share(3006)・tech-integration(3005)と同居しており、メモリも1GBしか
+# 無いため、ポートは3007、メモリ上限を付けて他アプリを巻き込まないようにしている。
+[Unit]
+Description=Synclie - Boundless Learning System (Next.js)
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/apps/synclie-bls
+EnvironmentFile=/home/ubuntu/apps/synclie-bls/.env.local
+Environment=NODE_ENV=production
+Environment=PORT=3007
+Environment=NODE_OPTIONS=--max-old-space-size=384
+ExecStart=/home/ubuntu/apps/synclie-bls/node_modules/.bin/next start --hostname 127.0.0.1
+Restart=always
+RestartSec=5
+MemoryMax=450M
+
+[Install]
+WantedBy=multi-user.target

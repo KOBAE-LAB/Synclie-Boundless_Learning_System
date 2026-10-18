@@ -148,9 +148,12 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
   将来また別プロジェクトへ移す場合の参考として残してある
 - **認証**: Auth.js (NextAuth v5)。段階1は簡易ログイン → 段階2でSSO(F22)。
   `src/auth.ts` にプロバイダーを追加していく。
-- **ホスティング**: 当面(暫定)は**さくらVPS**(アプリ) + Supabase(データ)。Vercelは使わない
-  (デプロイ手順と注意点はREADME.mdの「さくらVPSへのデプロイ」を参照)。将来Vercel等へ
-  移す可能性は残すが、現時点でVercel固有の設定・機能には依存させないこと
+- **ホスティング**: 当面(暫定)は**さくらVPS**(アプリ) + Supabase(データ)。Vercelは使わない。
+  公開URLは https://synclie-boundless-learning-system.kobae-lab.com/ 。同じVPSで他のアプリ
+  (`synclie-share`:3006、`tech-integration`:3005)が動いており、メモリも1GBしかないため、
+  **ビルドはVPS上でなく手元で行う**(`deploy/deploy.sh`)。手順と注意点はREADME.mdの
+  「さくらVPSへのデプロイ」を参照。開発と本番で同じSupabaseを共有している点にも注意。
+  将来Vercel等へ移す可能性は残すが、現時点でVercel固有の設定・機能には依存させないこと
 - **LLM**: OpenAI(Responses API)。マルチモーダル対応・構造化出力の成熟度・コストを理由に選定
   (Anthropic/Googleとの比較検討の結果)。モデル名は変わりやすいため、
   `src/lib/ai/openai.ts` の `MODEL_PERSONA` / `MODEL_JUDGE` / `MODEL_EMBEDDING`(F02の埋め込み用)
@@ -210,9 +213,9 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
     横長の人物画像・背景写真でもタイルいっぱいに敷き詰められる。
   あわせてアバター用の控えめなアイドルアニメーション(`.avatar-idle`、静止画+CSSのみ)も
   入れている。どちらも`prefers-reduced-motion`を尊重して無効化する
-- `deploy/` — さくらVPS用のsystemdユニット・nginx設定・更新スクリプト(`deploy.sh`)。
-  詳細はREADME.mdの「さくらVPSへのデプロイ」。アップロード上限は`next.config.ts`の
-  `serverActions.bodySizeLimit`とnginxの`client_max_body_size`で揃える
+- `deploy/` — さくらVPS用の更新スクリプト(`deploy.sh`、手元で実行)・初期設定(`setup-vps.sh`)・
+  systemdユニット。詳細はREADME.mdの「さくらVPSへのデプロイ」。アップロード上限は
+  `next.config.ts`の`serverActions.bodySizeLimit`とnginxの`client_max_body_size`で揃える
 - `src/app/` — Next.js App Router のページ・APIルート
   - `src/app/page.tsx` — ログイン後の行き先をロールで振り分ける(教師→`/courses`、
     学習者→`/learn`)。`login/actions.ts`の`loginAction`は`redirectTo: "/"`固定にしてあり、

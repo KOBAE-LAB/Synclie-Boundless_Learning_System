@@ -34,40 +34,45 @@ npm run dev
 
 ## さくらVPSへのデプロイ(暫定)
 
-当面はさくらVPS上でNext.jsを常駐させて動かします(DB・Storageは引き続きSupabase)。
-設定ファイルのひな形は [`deploy/`](./deploy) にあります。**実際のVPSでの動作は未検証です**
-(実機で確認したら更新してください)。
+公開URL: https://synclie-boundless-learning-system.kobae-lab.com/ (2026-10-19に公開。
+DB・StorageはSupabase、アプリだけがさくらVPS上のNext.js)。
+
+このVPS(Ubuntu、メモリ1GB)は他のアプリ(`synclie-share`、`tech-integration`)と同居している。
+そのため **ビルドはVPS上では行わず、手元のMacでビルドしてアップロードする**。
+ポートは3007、`synclie-bls.service`(systemd、`MemoryMax=450M`)で常駐、nginxがHTTPSを終端する。
 
 | ファイル | 内容 |
 | --- | --- |
-| `deploy/synclie.service` | systemdユニット(`/etc/systemd/system/`へ置く。127.0.0.1:3000で待ち受け) |
-| `deploy/nginx-synclie.conf` | nginxのリバースプロキシ+HTTPS設定(`YOUR_DOMAIN`を置換) |
-| `deploy/deploy.sh` | VPS上での更新(git取得→`npm ci`→build→再起動) |
+| `deploy/deploy.sh` | 手元で実行する更新スクリプト(ビルド→rsync→`npm ci --omit=dev`) |
+| `deploy/setup-vps.sh` | VPS上で1回だけ実行する初期設定(systemd・nginx・HTTPS証明書) |
+| `deploy/synclie-bls.service` | systemdユニット |
 
-初回の手順:
+アプリの置き場所は `/home/ubuntu/apps/synclie-bls`、本番の環境変数は同ディレクトリの
+`.env.local`(`NEXTAUTH_URL`/`AUTH_URL`は公開URL、`AUTH_TRUST_HOST=true`、`AUTH_SECRET`は
+開発用とは別の値)。
 
-1. VPSにNode.js 22以上・nginx・gitを入れ、専用ユーザー(例: `synclie`)で
-   リポジトリを `/opt/synclie` に配置する
-2. `/opt/synclie/.env.local` に `.env.example` の値を設定する。`NEXTAUTH_URL`・
-   `LTI_TOOL_BASE_URL` は公開URL(`https://...`)にし、`AUTH_TRUST_HOST=true` も入れる
-3. `deploy/synclie.service` を `/etc/systemd/system/` に置き、
-   `systemctl enable --now synclie` で常駐させる
-4. `deploy/nginx-synclie.conf` を配置し、certbotでLet's Encrypt証明書を発行してHTTPS化する
-5. DBマイグレーションはVPSではなく手元から `supabase db push` で適用する
-   (VPSにSupabase CLIの認証を置く必要はない)
+更新手順(コード変更後):
 
-更新時は VPS 上で `./deploy/deploy.sh` を実行します。
+```bash
+./deploy/deploy.sh                      # 手元で。ビルドしてVPSへ送る
+ssh -i ~/.ssh/kobae_lab_apps ubuntu@49.212.150.72
+sudo systemctl restart synclie-bls      # VPS上で(sudoのパスワードが要るため手動)
+```
+
+DBマイグレーションはVPSではなく手元から `supabase db push` で適用する。
 
 注意点:
 
+- **開発と本番が同じSupabaseを共有している**(プロジェクトを分けていない)。開発用のテスト
+  アカウントも本番から見えるため、公開して使う前に整理すること
 - **リバースプロキシ配下のAuth.js**: `AUTH_TRUST_HOST=true` が無いと `UntrustedHost` でログインできない。
-  また、サーバーアクションはOriginとHostの一致を検査するため、nginxで `Host` を転送すること
-  (ひな形は転送済み)
+  サーバーアクションはOriginとHostの一致も検査するため、nginxで `Host` を転送すること(設定済み)
 - **アップロード上限**: `next.config.ts` の `serverActions.bodySizeLimit` と nginx の
-  `client_max_body_size` は同じ値(現在25MB)に揃えること
-- **可用性**: VPSは単一サーバーのため、プロセス監視(`Restart=always`済み)・OSの更新・
-  バックアップは自前で行う
-- **Supabaseの無料枠**: プロジェクトが一時停止(INACTIVE)になっていると、アプリは動かない
+  `client_max_body_size` は同じ値(25MB)に揃えること
+- **長いドメイン名**: ドメイン名が長く、nginxの既定の `server_names_hash_bucket_size` に収まらないため、
+  `/etc/nginx/conf.d/server-names-hash.conf` で引き上げている(`setup-vps.sh`が設置)
+- **可用性**: 単一VPSのため、プロセス監視(`Restart=always`済み)・OSの更新・バックアップは自前で行う。
+  Supabaseプロジェクトが一時停止(INACTIVE)になるとアプリは動かない
 
 ## 技術スタック(段階1)
 
