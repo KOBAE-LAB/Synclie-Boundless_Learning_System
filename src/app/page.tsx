@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 
@@ -27,9 +28,12 @@ export default async function Home() {
         オンデマンド学習をインタラクティブに、独習を個別最適に。
         AI擬似メンバーとの協働・討論を通じて学ぶ、離島発・世界水準の学習体験を目指しています。
       </p>
-      <p className="text-sm text-ink-faint">
-        開発初期段階(段階0/1)。詳細は <code>CLAUDE.md</code> を参照。
-      </p>
+      <Link
+        href="/login"
+        className="mt-2 rounded-md bg-accent-fill px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-fill-hover"
+      >
+        ログインする
+      </Link>
     </div>
   );
 }
