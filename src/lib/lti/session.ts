@@ -21,19 +21,23 @@ export async function linkOrCreateLtiProfile(
 
   const { data: bySubject } = await admin
     .from("profiles")
-    .select("id, role")
+    .select("id, role, approval_status")
     .eq("lti_issuer", input.issuer)
     .eq("lti_subject", input.subject)
     .maybeSingle();
-  if (bySubject) return bySubject;
+  // 承認待ち・却下された教師(自己登録の承認制)は、LMS経由でも入れない。
+  if (bySubject) {
+    return bySubject.approval_status === "approved" ? { id: bySubject.id, role: bySubject.role } : null;
+  }
 
   if (input.email) {
     const { data: byEmail } = await admin
       .from("profiles")
-      .select("id, role, lti_issuer")
+      .select("id, role, approval_status, lti_issuer")
       .eq("email", input.email)
       .maybeSingle();
     if (byEmail && !byEmail.lti_issuer) {
+      if (byEmail.approval_status !== "approved") return null;
       const { error } = await admin
         .from("profiles")
         .update({ lti_issuer: input.issuer, lti_subject: input.subject })

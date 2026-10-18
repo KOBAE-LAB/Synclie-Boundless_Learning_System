@@ -19,11 +19,12 @@ cp .env.example .env.local  # 値を設定する
 Supabaseプロジェクトに `supabase/migrations/` 配下のSQLを順番に適用してください
 (Supabase CLIの `supabase db push`、またはSQL Editorに貼り付けて実行)。
 
-テスト用の教師アカウントを作成します(サインアップ画面はまだないため):
+最初の教師アカウント(管理者)を作成します。教師の自己登録は管理者の承認制のため、
+管理者(`--admin true`)が最低1人必要です:
 
 ```bash
 node --env-file=.env.local scripts/dev/create-user.mjs \
-  --email teacher@example.com --password test1234 --role teacher --name "テスト教師"
+  --email you@example.com --password "10文字以上の強いパスワード" --role teacher --name "管理者" --admin true
 ```
 
 ```bash

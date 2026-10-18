@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requireRole } from "@/lib/auth/session";
+import { isAdmin, requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { createCourseAction } from "./actions";
 
@@ -7,6 +7,15 @@ export default async function CoursesPage() {
   const { user } = await requireRole("teacher");
 
   const admin = createAdminClient();
+  const showAdminLink = await isAdmin(admin, user.id);
+  const { count: pendingTeacherCount } = showAdminLink
+    ? await admin
+        .from("profiles")
+        .select("id", { count: "exact", head: true })
+        .eq("role", "teacher")
+        .eq("approval_status", "pending")
+    : { count: 0 };
+
   const { data: courses } = await admin
     .from("courses")
     .select("id, title, subject, mode, created_at")
@@ -31,6 +40,11 @@ export default async function CoursesPage() {
         <Link href="/library" className="hover:underline">
           共有ライブラリ(F21)→
         </Link>
+        {showAdminLink && (
+          <Link href="/admin/teachers" className="hover:underline">
+            教師の承認(管理者){pendingTeacherCount ? `: ${pendingTeacherCount}件待ち` : ""}→
+          </Link>
+        )}
       </div>
 
       <form

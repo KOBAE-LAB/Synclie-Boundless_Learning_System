@@ -9,19 +9,20 @@ import { requireConsent } from "@/lib/consent";
 export default async function LearnCoursesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ not_enrolled?: string }>;
+  searchParams: Promise<{ not_enrolled?: string; requested?: string }>;
 }) {
   const { user } = await requireRole("student");
-  const { not_enrolled } = await searchParams;
+  const { not_enrolled, requested } = await searchParams;
 
   const admin = createAdminClient();
   await requireConsent(admin, user.id);
 
   const { data: enrollments } = await admin
     .from("course_enrollments")
-    .select("course_id")
+    .select("course_id, status")
     .eq("student_id", user.id);
-  const enrolledCourseIds = (enrollments ?? []).map((e) => e.course_id);
+  const enrolledCourseIds = (enrollments ?? []).filter((e) => e.status === "approved").map((e) => e.course_id);
+  const pendingCourseIds = (enrollments ?? []).filter((e) => e.status === "pending").map((e) => e.course_id);
 
   const { data: courses } =
     enrolledCourseIds.length > 0
@@ -30,6 +31,10 @@ export default async function LearnCoursesPage({
           .select("id, title, subject, mode")
           .in("id", enrolledCourseIds)
           .order("created_at", { ascending: false })
+      : { data: [] };
+  const { data: pendingCourses } =
+    pendingCourseIds.length > 0
+      ? await admin.from("courses").select("id, title").in("id", pendingCourseIds)
       : { data: [] };
 
   const MODE_LABELS: Record<string, string> = {
@@ -61,6 +66,25 @@ export default async function LearnCoursesPage({
           </Link>
           から参加してください。
         </p>
+      )}
+
+      {requested && (
+        <p className="mt-4 rounded-md border border-line bg-surface px-4 py-3 text-sm text-ink-muted">
+          参加を申請しました。担当の先生が承認すると、授業が下の一覧に表示されます。
+        </p>
+      )}
+
+      {(pendingCourses ?? []).length > 0 && (
+        <div className="mt-6">
+          <h2 className="text-xs font-medium text-ink-faint">承認待ちの授業</h2>
+          <ul className="mt-2 space-y-1">
+            {(pendingCourses ?? []).map((c) => (
+              <li key={c.id} className="text-sm text-ink-muted">
+                {c.title}(先生の承認を待っています)
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       <ul className="mt-8 space-y-2">

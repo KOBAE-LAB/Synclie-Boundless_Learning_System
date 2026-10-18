@@ -28,12 +28,20 @@ export default async function Home() {
         オンデマンド学習をインタラクティブに、独習を個別最適に。
         AI擬似メンバーとの協働・討論を通じて学ぶ、離島発・世界水準の学習体験を目指しています。
       </p>
-      <Link
-        href="/login"
-        className="mt-2 rounded-md bg-accent-fill px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-fill-hover"
-      >
-        ログインする
-      </Link>
+      <div className="mt-2 flex flex-wrap items-center justify-center gap-3">
+        <Link
+          href="/login"
+          className="rounded-md bg-accent-fill px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-fill-hover"
+        >
+          ログインする
+        </Link>
+        <Link
+          href="/signup"
+          className="rounded-md border border-line px-6 py-2.5 text-sm font-medium text-ink hover:bg-surface"
+        >
+          新規登録
+        </Link>
+      </div>
     </div>
   );
 }

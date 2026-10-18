@@ -21,6 +21,13 @@ export async function loginAction(
     });
   } catch (error) {
     if (error instanceof AuthError) {
+      const code = (error as { code?: string }).code;
+      if (code === "pending_approval") {
+        return { error: "このアカウントは管理者の承認待ちです。承認されるまでログインできません。" };
+      }
+      if (code === "rejected") {
+        return { error: "このアカウントの登録は承認されませんでした。" };
+      }
       return { error: "メールアドレスまたはパスワードが正しくありません。" };
     }
     // NextAuth はリダイレクト成功時に例外を投げて遷移させる実装のため、再送出する。

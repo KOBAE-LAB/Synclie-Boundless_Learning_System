@@ -12,6 +12,8 @@ import {
   updateAutoDiscussionSettingsAction,
   regenerateJoinCodeAction,
   removeEnrollmentAction,
+  approveEnrollmentAction,
+  registerStudentAction,
 } from "./actions";
 import { TEMPO_OPTIONS } from "@/lib/discussion-tempo";
 
@@ -63,13 +65,15 @@ export default async function CourseDetailPage({
   // F01拡張(受講登録): 参加登録している学習者の一覧(名前が無い場合はメールアドレスで表示)。
   const { data: enrollmentRows } = await admin
     .from("course_enrollments")
-    .select("student_id, created_at")
+    .select("student_id, status, created_at")
     .eq("course_id", courseId)
     .order("created_at", { ascending: true });
-  const enrolledStudentIds = (enrollmentRows ?? []).map((e) => e.student_id);
+  const enrolledStudentIds = (enrollmentRows ?? []).filter((e) => e.status === "approved").map((e) => e.student_id);
+  const pendingStudentIds = (enrollmentRows ?? []).filter((e) => e.status === "pending").map((e) => e.student_id);
+  const allEnrollmentStudentIds = (enrollmentRows ?? []).map((e) => e.student_id);
   const { data: enrolledProfiles } =
-    enrolledStudentIds.length > 0
-      ? await admin.from("profiles").select("id, display_name, email").in("id", enrolledStudentIds)
+    allEnrollmentStudentIds.length > 0
+      ? await admin.from("profiles").select("id, display_name, email").in("id", allEnrollmentStudentIds)
       : { data: [] };
   const profileById = new Map((enrolledProfiles ?? []).map((p) => [p.id, p]));
 
@@ -98,6 +102,7 @@ export default async function CourseDetailPage({
   const boundGenerateAllAction = generateAllPendingRagAction.bind(null, courseId);
   const boundUpdateAutoDiscussionAction = updateAutoDiscussionSettingsAction.bind(null, courseId);
   const boundRegenerateJoinCodeAction = regenerateJoinCodeAction.bind(null, courseId);
+  const boundRegisterStudentAction = registerStudentAction.bind(null, courseId);
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
@@ -163,8 +168,9 @@ export default async function CourseDetailPage({
       <div className="mt-8 rounded-lg border border-line p-5">
         <h2 className="text-sm font-medium text-ink">受講登録</h2>
         <p className="mt-1 text-sm text-ink-muted">
-          学習者にこの授業コードを伝えてください。学習者は「授業に参加する」画面でこのコードを
-          入力すると、この授業が一覧に表示されるようになります。
+          学習者にこの授業コードを伝えてください。学習者が「授業に参加する」画面でこのコードを
+          入力すると参加の申請になり、下の「承認待ち」であなたが承認すると、授業に入れるように
+          なります。コードを使わず、あなたが直接学習者を登録することもできます。
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
           <span className="rounded-md border border-line bg-surface-raised px-3 py-1.5 font-mono text-lg tracking-widest text-ink">
@@ -179,6 +185,42 @@ export default async function CourseDetailPage({
             </button>
           </form>
         </div>
+
+        {pendingStudentIds.length > 0 && (
+          <div className="mt-4 rounded-md border border-warn bg-warn-soft p-3">
+            <h3 className="text-xs font-medium text-warn">承認待ち({pendingStudentIds.length}人)</h3>
+            <ul className="mt-2 space-y-1">
+              {pendingStudentIds.map((studentId) => {
+                const profile = profileById.get(studentId);
+                const boundApproveAction = approveEnrollmentAction.bind(null, courseId, studentId);
+                const boundRejectAction = removeEnrollmentAction.bind(null, courseId, studentId);
+                return (
+                  <li
+                    key={studentId}
+                    className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm"
+                  >
+                    <span className="text-ink">{profile?.display_name || profile?.email || studentId}</span>
+                    <span className="flex items-center gap-2">
+                      <form action={boundApproveAction}>
+                        <button
+                          type="submit"
+                          className="rounded-md bg-accent-fill px-2.5 py-1 text-xs font-medium text-white hover:bg-accent-fill-hover"
+                        >
+                          承認する
+                        </button>
+                      </form>
+                      <form action={boundRejectAction}>
+                        <button type="submit" className="text-xs text-ink-faint hover:text-danger hover:underline">
+                          却下する
+                        </button>
+                      </form>
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
 
         <h3 className="mt-4 text-xs font-medium text-ink-faint">
           参加している学習者({enrolledStudentIds.length}人)
@@ -205,6 +247,50 @@ export default async function CourseDetailPage({
             <li className="text-sm text-ink-muted">まだ誰も参加していません。</li>
           )}
         </ul>
+
+        <form action={boundRegisterStudentAction} className="mt-5 space-y-2 border-t border-line pt-4">
+          <h3 className="text-xs font-medium text-ink-faint">学習者を直接登録する</h3>
+          <p className="text-xs text-ink-muted">
+            アカウントが無ければ、ここで決めた初期パスワードで作ります(本人に直接伝え、ログイン後に
+            「パスワード変更」で変えてもらってください)。既にアカウントがある場合は、パスワードは
+            変えずに参加登録だけ行います。
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <label className="sr-only" htmlFor="reg-name">お名前</label>
+            <input
+              id="reg-name"
+              name="name"
+              required
+              placeholder="お名前"
+              className="min-w-0 flex-1 rounded-md border border-line bg-surface-raised px-3 py-1.5 text-sm"
+            />
+            <label className="sr-only" htmlFor="reg-email">メールアドレス</label>
+            <input
+              id="reg-email"
+              name="email"
+              type="email"
+              required
+              placeholder="メールアドレス"
+              className="min-w-0 flex-1 rounded-md border border-line bg-surface-raised px-3 py-1.5 text-sm"
+            />
+            <label className="sr-only" htmlFor="reg-password">初期パスワード(10文字以上)</label>
+            <input
+              id="reg-password"
+              name="password"
+              type="text"
+              minLength={10}
+              autoComplete="off"
+              placeholder="初期パスワード(10文字以上)"
+              className="min-w-0 flex-1 rounded-md border border-line bg-surface-raised px-3 py-1.5 text-sm"
+            />
+          </div>
+          <SubmitButton
+            pendingText="登録中…"
+            className="rounded-md bg-accent-fill px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-fill-hover disabled:opacity-50"
+          >
+            登録する
+          </SubmitButton>
+        </form>
       </div>
 
       <div className="mt-8 rounded-lg border border-line p-5">

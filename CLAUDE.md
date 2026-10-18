@@ -224,6 +224,21 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
     F22用に、対応する環境変数(`AUTH_MICROSOFT_ENTRA_ID_ID` / `AUTH_GOOGLE_ID`)が
     設定されている時だけ「Microsoftでログイン」「Googleでログイン」ボタンを
     `page.tsx`(サーバーコンポーネント)が条件付きで表示する
+  - `src/app/signup/` — 自己登録(サインアップ)。「誰でも自由に登録できるとAI呼び出しの課金が
+    読めない」ため、承認制にしている。学習者(`signup/student/`)は教師が伝える**授業コード**
+    が必須で、登録しても`course_enrollments.status='pending'`の申請になり、教師が承認する
+    まで授業に入れずAIも呼べない。教師(`signup/teacher/`)は`profiles.approval_status='pending'`で
+    作られ、**管理者が承認するまでログインできない**(`src/auth.ts`の`authorize`が
+    `PendingApprovalError`/`RejectedError`を投げ、`login/actions.ts`が理由を表示する)。
+    エラーはURLの`?error=`で返し、入力内容はURLに載せない。入力チェックは
+    `src/lib/auth/signup-validation.ts`(パスワードは10文字以上。テストあり)
+  - `src/app/admin/teachers/` — 教師の自己登録の承認(`requireAdmin()`、管理者のみ)。管理者は
+    別ロールではなく教師アカウントに付く属性(`profiles.is_admin`)。最初の管理者は
+    `scripts/dev/create-user.mjs --role teacher --admin true`で作る。教師の授業一覧
+    (`courses/page.tsx`)に、管理者にだけ承認待ち件数つきのリンクを出す
+  - `src/app/account/password/` — ログイン中の本人がパスワードを変える(現在のパスワードが必須)。
+    教師が直接登録した学習者の初期パスワードを本人に変えてもらうために置いた。
+    ヘッダー(`layout.tsx`)に常にリンクがある。SSO/LTIのアカウントはパスワードを持たないため変更不可
   - `src/app/consent/` — F16(同意・データ管理)。学習者が同意していない/撤回済みの場合、
     `src/lib/consent.ts`の`requireConsent()`がここへリダイレクトする
     (`/learn`, `/learn/[courseId]`, `/learn/[courseId]/portfolio`から呼んでいる)。
@@ -256,14 +271,17 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
     指摘を受けて追加した。教師は`courses/[courseId]/page.tsx`の「受講登録」欄で
     授業コード(`courses.join_code`。新規作成時に自動生成、`0028_course_enrollments.sql`の
     列デフォルト式)を確認・再発行でき、参加している学習者の一覧から個別に参加登録を
-    外すこともできる。学習者は`learn/join/`でコードを入力して参加する
-    (`joinCourseByCodeAction`、コードは大文字小文字・空白を無視)。アクセス制御は
+    外すこともできる。学習者は`learn/join/`でコードを入力して**参加を申請**する
+    (`joinCourseByCodeAction`。`status='pending'`の申請になり、教師が`courses/[courseId]/page.tsx`の
+    「承認待ち」で承認(`approveEnrollmentAction`)して初めて授業に入れる。コードは大文字小文字・空白を無視)。
+    教師は学習者を直接登録することもできる(`registerStudentAction`。アカウントが無ければ教師が決めた
+    初期パスワードで作り、承認の手間なしにその場で`approved`になる)。アクセス制御は
     `src/lib/courses/enrollment.ts`の`requireEnrollment()`(ページ側、未登録なら
     `/learn?not_enrolled=1`へリダイレクト。`assertOwnsCourse()`と対になる生徒側のガード)と
-    `isEnrolled()`(`actions.ts`の`getOrCreateSession()`内、サーバーアクションを
+    `isEnrolled()`(承認済み`status='approved'`だけを参加扱いにする。`actions.ts`の`getOrCreateSession()`内、サーバーアクションを
     ページ経由せず直接叩かれた場合の防御)の二重チェックにしている。F17(LTI)経由の
     起動は、プラットフォーム側が履修者であることを既に保証しているとみなし、
-    未登録でもエラーにせず自動的に参加登録する。この機能を入れる前から対話していた
+    未登録でもエラーにせず自動的に参加登録(承認済み)する。この機能を入れる前から対話していた
     学習者(`learning_sessions`に既存行がある)は、マイグレーションで自動的に
     参加登録済み扱いにしてある(締め出さないため)。`[courseId]/page.tsx`が実際のチャット画面。
     学習者ごとに1つの進行中セッション(`learning_sessions`, `ended_at is null`)を
@@ -504,7 +522,16 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
   ため既定で`student`。教師アカウントへの昇格は今のところ手動)。IdPのテナントID
   (EntraIDの`tid`、Googleの`hd`)から`organizations`(F21で使っているテーブル)を
   自動的に判定・作成し、`profiles.organization_id`に割り当てる。
-  **実際のOAuthアプリ登録はまだ行っておらず、ブラウザでの実ログインは未検証**
+  自己登録の承認制(`signup/`)と整合させるため、(1)承認待ち・却下された教師はSSO/LTI経由でも
+  入れない、(2)既存アカウントとのメール統合は、IdPがメールを確認済みと保証する時
+  (Googleの`email_verified`)に限り、統合時に既存のパスワードも無効化する
+  (他人のメールで先に自己登録しておく乗っ取り=pre-hijackingの対策。Microsoft(Entra ID)の
+  emailクレームは確認済みの保証が無いため統合しない)。Microsoftは`AUTH_MICROSOFT_ENTRA_ID_ID`と
+  `..._ISSUER`の両方が揃った時だけ有効(IDだけだとAuth.jsの設定エラーで認証全体が壊れる)。
+  ログイン画面のボタンには各社公式のロゴ(`src/components/provider-logos.tsx`)を使い、
+  SSOで入れなかった理由は`?error=`で表示する。**Googleの実ログインは本番(さくらVPS)で設定済み
+  かどうかを`.env.local`で確認すること。Microsoft(長崎大)は未申請で、実ログインは未検証**
+  (旧メモ:実際のOAuthアプリ登録はまだ行っておらず、ブラウザでの実ログインは未検証)
   (Credentialsログインへの影響が無いことと、`next build`が通ることは確認済み)
 - `src/lib/lti/` — F17(LMS連携、LTI 1.3)。単一のLMSプラットフォームを前提にした
   最小構成(複数LMSに対応する場合は`config.ts`をDBテーブルに置き換えること)。
@@ -625,6 +652,9 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
     (参加コード、列デフォルト式で新規作成時に自動生成)と`course_enrollments`
     (course_id+student_idの組、unique制約)を追加。既存の`learning_sessions`から
     参加登録済み扱いのバックフィルも行う(詳細は8章の`learn/`の説明を参照)
+  - `0029_signup_approval.sql` — 自己登録の承認制。`profiles.approval_status`(`pending`/
+    `approved`/`rejected`、既定`approved`)・`profiles.is_admin`、`course_enrollments.status`
+    (`pending`/`approved`、既存の登録は承認済み扱い)を追加(詳細は8章の`signup/`の説明を参照)
 - `scripts/stage0/` — 段階0の使い捨てプロトタイプ(`debate_experiment.py`)。
   ペルソナ対話と論証評価の「質感」を、画面なしでローカル検証するためのCLIスクリプト。
   段階1のNext.js実装に置き換わる前提の使い捨てコード。
@@ -680,6 +710,10 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
 - 段階1のCredentials認証は自前のパスワードハッシュ(bcrypt)を`profiles`に保存する方式。
   段階2でSSO(F22)に移行する際、`password_hash`列はそのまま残しつつ、
   SSOプロバイダーのsubject idを別途キーとして使う設計にする(要件定義書6章・12章参照)。
+- **本番は自己登録を承認制にしている**(上記`signup/`)。開発と本番が同じSupabaseを共有しているため、
+  開発用に作った弱いパスワードのテストアカウントを残したまま公開しないこと(確認用の一時
+  アカウントは確認後にその場で削除する)。メール確認(メールアドレスの実在確認)の仕組みは
+  まだ無い(メール送信の基盤が無いため)。同じIPからの大量登録を抑えるレート制限も未実装
 - 受講登録(どの学習者がどの授業に属するか)は`course_enrollments`+授業コード
   (`courses.join_code`)で実装済み(詳細は8章の`src/app/learn/`の説明を参照)。
   ただしRLSポリシーはまだ無いため、このテーブルもアプリ側のガード
@@ -700,7 +734,9 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
   実際に呼ぶメソッド連鎖(`.from().select().eq().maybeSingle()`等)だけを実装した
   最小限の偽クライアントに差し替えてテストする方針(`src/lib/courses/ownership.test.ts`
   等を参照)。`next/navigation`の`redirect()`もテスト内でモックし、呼ばれたかどうかを
-  検証する。**「誰がどの授業・どの学習者データに触れるか」という権限境界に新しい分岐を
+  検証する。`requireAdmin`/`isAdmin`(`src/lib/auth/session.test.ts`)、`isEnrolled`が承認済みだけを参加扱いにすること、
+  サインアップの入力チェック(`signup-validation.test.ts`)も同じ方針でカバーしている。
+  **「誰がどの授業・どの学習者データに触れるか」という権限境界に新しい分岐を
   加えたら、ここにもテストを足すこと**(DBに触れない純粋なロジック、例えば
   `src/lib/persona-mention.ts`の名指し判定なども同様の対象)。網羅的なテストは目指さず、
   「書き忘れても`tsc`/ESLintでは気づけない」種類のバグ(権限チェックの抜け漏れ)を

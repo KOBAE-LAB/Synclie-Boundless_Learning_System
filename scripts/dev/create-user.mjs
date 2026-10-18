@@ -28,11 +28,11 @@ function parseArgs(argv) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const { email, password, role = "teacher", name = "" } = args;
+  const { email, password, role = "teacher", name = "", admin = "false" } = args;
 
   if (!email || !password) {
     console.error(
-      "使い方: node scripts/dev/create-user.mjs --email <email> --password <password> [--role teacher|student|guardian] [--name <表示名>]",
+      "使い方: node scripts/dev/create-user.mjs --email <email> --password <password> [--role teacher|student|guardian] [--name <表示名>] [--admin true]",
     );
     process.exit(1);
   }
@@ -59,7 +59,16 @@ async function main() {
   const { data, error } = await supabase
     .from("profiles")
     .upsert(
-      { id: crypto.randomUUID(), email, password_hash: passwordHash, role, display_name: name },
+      {
+        id: crypto.randomUUID(),
+        email,
+        password_hash: passwordHash,
+        role,
+        display_name: name,
+        // 管理者は教師アカウントの1つに付く属性(教師の自己登録の承認ができる)
+        is_admin: admin === "true" && role === "teacher",
+        approval_status: "approved",
+      },
       { onConflict: "email" },
     )
     .select("id, email, role, display_name")

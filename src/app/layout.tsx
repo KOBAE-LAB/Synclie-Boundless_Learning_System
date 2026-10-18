@@ -57,6 +57,9 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
                 {user.name ?? user.email ?? ""}
                 {user.role && ROLE_LABELS[user.role] ? `(${ROLE_LABELS[user.role]})` : ""}
               </span>
+              <Link href="/account/password" className="text-xs text-ink-muted hover:underline">
+                パスワード変更
+              </Link>
               <form action={logoutAction}>
                 <button
                   type="submit"

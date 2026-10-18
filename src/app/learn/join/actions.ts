@@ -5,7 +5,9 @@ import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 
 // F01拡張: 受講登録。教師が発行した授業コード(courses.join_code)を学習者が入力して
-// 参加登録(course_enrollments)する。コードは大文字小文字・前後の空白を気にせず受け付ける。
+// 参加を申請する(course_enrollments, status='pending')。教師が承認して初めて授業に入れる
+// (授業コードが漏れても、知らない人がそのまま入ってAIを使えないようにするため)。
+// コードは大文字小文字・前後の空白を気にせず受け付ける。
 export async function joinCourseByCodeAction(formData: FormData) {
   const { user } = await requireRole("student");
   const admin = createAdminClient();
@@ -24,12 +26,25 @@ export async function joinCourseByCodeAction(formData: FormData) {
     throw new Error("そのコードの授業が見つかりません。コードを確認してください。");
   }
 
-  const { error } = await admin
+  const { data: existing } = await admin
     .from("course_enrollments")
-    .upsert({ course_id: course.id, student_id: user.id }, { onConflict: "course_id,student_id" });
-  if (error) {
-    throw new Error(`参加登録に失敗しました: ${error.message}`);
+    .select("status")
+    .eq("course_id", course.id)
+    .eq("student_id", user.id)
+    .maybeSingle();
+
+  // 既に承認済みならそのまま授業へ。申請済み(承認待ち)ならそのまま一覧へ。
+  if (existing?.status === "approved") {
+    redirect(`/learn/${course.id}`);
+  }
+  if (!existing) {
+    const { error } = await admin
+      .from("course_enrollments")
+      .insert({ course_id: course.id, student_id: user.id, status: "pending" });
+    if (error) {
+      throw new Error(`参加の申請に失敗しました: ${error.message}`);
+    }
   }
 
-  redirect(`/learn/${course.id}`);
+  redirect("/learn?requested=1");
 }

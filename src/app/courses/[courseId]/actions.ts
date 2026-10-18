@@ -5,6 +5,8 @@ import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { generateMaterialRag } from "@/lib/rag/generate";
 import { assertOwnsCourse } from "@/lib/courses/ownership";
+import { hashPassword } from "@/lib/auth/password";
+import { normalizeEmail, validateSignupFields } from "@/lib/auth/signup-validation";
 
 const MATERIAL_KINDS = ["syllabus", "pdf", "word", "ppt", "text", "video_subtitle", "url"] as const;
 type MaterialKind = (typeof MATERIAL_KINDS)[number];
@@ -210,6 +212,83 @@ export async function removeEnrollmentAction(courseId: string, studentId: string
     .eq("student_id", studentId);
   if (error) {
     throw new Error(`参加登録の削除に失敗しました: ${error.message}`);
+  }
+
+  revalidatePath(`/courses/${courseId}`);
+}
+
+// F01拡張(受講登録・承認制): 学習者が授業コードで申請した参加(status='pending')を承認する。
+// 承認するまでその学習者は授業画面に入れず、AIも呼べない。
+export async function approveEnrollmentAction(courseId: string, studentId: string) {
+  const { user } = await requireRole("teacher");
+  const admin = createAdminClient();
+  await assertOwnsCourse(admin, courseId, user.id);
+
+  const { error } = await admin
+    .from("course_enrollments")
+    .update({ status: "approved" })
+    .eq("course_id", courseId)
+    .eq("student_id", studentId)
+    .eq("status", "pending");
+  if (error) {
+    throw new Error(`承認に失敗しました: ${error.message}`);
+  }
+
+  revalidatePath(`/courses/${courseId}`);
+}
+
+// F01拡張(受講登録): 教師が学習者を直接登録する(承認の手間なしにその場で参加扱いになる)。
+// 学習者のアカウントがまだ無ければ、教師が決めた初期パスワードで作る
+// (教師から本人へ直接伝え、本人がログイン後に「パスワード変更」で変えてもらう想定)。
+// 既に同じメールアドレスの学習者がいれば、パスワードには触れずに参加登録だけ行う。
+export async function registerStudentAction(courseId: string, formData: FormData) {
+  const { user } = await requireRole("teacher");
+  const admin = createAdminClient();
+  await assertOwnsCourse(admin, courseId, user.id);
+
+  const fields = {
+    name: String(formData.get("name") ?? ""),
+    email: normalizeEmail(String(formData.get("email") ?? "")),
+    password: String(formData.get("password") ?? ""),
+  };
+
+  const { data: existing } = await admin
+    .from("profiles")
+    .select("id, role")
+    .eq("email", fields.email)
+    .maybeSingle();
+
+  let studentId: string;
+  if (existing) {
+    if (existing.role !== "student") {
+      throw new Error("そのメールアドレスは学習者以外のアカウントに使われています。");
+    }
+    studentId = existing.id;
+  } else {
+    const problem = validateSignupFields(fields);
+    if (problem) throw new Error(problem);
+
+    studentId = crypto.randomUUID();
+    const { error } = await admin.from("profiles").insert({
+      id: studentId,
+      email: fields.email,
+      password_hash: await hashPassword(fields.password),
+      role: "student",
+      display_name: fields.name.trim(),
+    });
+    if (error) {
+      throw new Error(`学習者の登録に失敗しました: ${error.message}`);
+    }
+  }
+
+  const { error: enrollError } = await admin
+    .from("course_enrollments")
+    .upsert(
+      { course_id: courseId, student_id: studentId, status: "approved" },
+      { onConflict: "course_id,student_id" },
+    );
+  if (enrollError) {
+    throw new Error(`参加登録に失敗しました: ${enrollError.message}`);
   }
 
   revalidatePath(`/courses/${courseId}`);

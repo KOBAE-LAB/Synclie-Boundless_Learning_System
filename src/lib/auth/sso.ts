@@ -9,6 +9,13 @@
  * 役割(教師/生徒)の自動判定はできないため、新規作成時は既定でstudentにする
  * (教師アカウントは、既存の教師が別途DBで役割を上げる運用を想定。単一の管理者ロールが
  * まだ無いための暫定的な扱い。要件定義書12章の未解決課題とあわせて本番投入前に見直すこと)。
+ *
+ * 自己登録(signup/)を入れたため、次の2点を守っている:
+ *  - 承認待ち・却下された教師(profiles.approval_status)は、SSO経由でも入れない(null=拒否)
+ *  - メールアドレスでの既存アカウントとの統合は、IdPがそのメールアドレスを「確認済み」と
+ *    保証している時(emailVerified)に限る。自己登録は本人確認をしていないため、他人のメールで
+ *    先に登録しておけば、本人がSSOで入った時に乗っ取れてしまう(pre-hijacking)。統合する時は
+ *    念のため既存のパスワードも無効化し、以後はSSOだけで入るようにする
  */
 import { createAdminClient } from "@/lib/supabase/server";
 
@@ -20,6 +27,8 @@ interface LinkSsoProfileInput {
   email: string | null;
   displayName: string | null;
   tenantId: string | null;
+  // IdPが「このメールアドレスは本人のもの」と確認済みか(Googleの email_verified など)。
+  emailVerified: boolean;
 }
 
 export async function linkOrCreateSsoProfile(
@@ -29,22 +38,25 @@ export async function linkOrCreateSsoProfile(
 
   const { data: bySubject } = await admin
     .from("profiles")
-    .select("id, role")
+    .select("id, role, approval_status")
     .eq("sso_provider", input.provider)
     .eq("sso_subject", input.subject)
     .maybeSingle();
-  if (bySubject) return bySubject;
+  if (bySubject) {
+    return bySubject.approval_status === "approved" ? { id: bySubject.id, role: bySubject.role } : null;
+  }
 
-  if (input.email) {
+  if (input.email && input.emailVerified) {
     const { data: byEmail } = await admin
       .from("profiles")
-      .select("id, role, sso_provider, organization_id")
+      .select("id, role, approval_status, sso_provider, organization_id")
       .eq("email", input.email)
       .maybeSingle();
     if (byEmail && !byEmail.sso_provider) {
+      if (byEmail.approval_status !== "approved") return null;
       const { error } = await admin
         .from("profiles")
-        .update({ sso_provider: input.provider, sso_subject: input.subject })
+        .update({ sso_provider: input.provider, sso_subject: input.subject, password_hash: null })
         .eq("id", byEmail.id);
       if (error) return null;
 
@@ -69,10 +81,10 @@ export async function linkOrCreateSsoProfile(
       sso_subject: input.subject,
       organization_id: organizationId,
     })
-    .select("id, role")
+    .select("id, role, approval_status")
     .single();
-  if (error || !created) return null;
-  return created;
+  if (error || !created || created.approval_status !== "approved") return null;
+  return { id: created.id, role: created.role };
 }
 
 async function findOrCreateOrganizationByTenant(

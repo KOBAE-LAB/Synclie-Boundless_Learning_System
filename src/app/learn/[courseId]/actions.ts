@@ -51,14 +51,17 @@ async function getOrCreateSession(admin: AdminClient, courseId: string, studentI
 
   // F01拡張(受講登録): ページ側のrequireEnrollment()と同じ境界をサーバーアクション側にも
   // 置く(ページを経由しない直接呼び出しへの防御)。LTI経由の起動はLMS側が既に履修者で
-  // あることを保証しているとみなし、参加登録が無ければここで自動的に作る。
+  // あることを保証しているとみなし、承認済みの参加登録が無ければここで自動的に作る。
   if (!(await isEnrolled(admin, courseId, studentId))) {
     if (ltiResourceLinkId) {
       await admin
         .from("course_enrollments")
-        .upsert({ course_id: courseId, student_id: studentId }, { onConflict: "course_id,student_id" });
+        .upsert(
+          { course_id: courseId, student_id: studentId, status: "approved" },
+          { onConflict: "course_id,student_id" },
+        );
     } else {
-      throw new Error("この授業への参加登録がありません。授業コードで参加してから発言してください。");
+      throw new Error("この授業への参加登録がありません。授業コードで申請し、先生の承認を受けてから発言してください。");
     }
   }
 

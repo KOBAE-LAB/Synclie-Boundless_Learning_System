@@ -17,7 +17,7 @@
  * "lti" Credentialsプロバイダーへ渡してセッションを確立する
  * (src/lib/lti/handoff.ts参照。プラットフォームのid_tokenを直接ここへは渡さない)。
  */
-import NextAuth from "next-auth";
+import NextAuth, { CredentialsSignin } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id";
 import Google from "next-auth/providers/google";
@@ -31,6 +31,15 @@ const credentialsSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
 });
+
+// 教師の自己登録は管理者の承認が済むまでログインさせない(承認待ち・却下)。
+// パスワードが合っている人にだけ状態を伝えるため、照合の後で投げる。
+class PendingApprovalError extends CredentialsSignin {
+  code = "pending_approval";
+}
+class RejectedError extends CredentialsSignin {
+  code = "rejected";
+}
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
@@ -50,7 +59,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const admin = createAdminClient();
         const { data: profile, error } = await admin
           .from("profiles")
-          .select("id, email, display_name, role, password_hash")
+          .select("id, email, display_name, role, password_hash, approval_status")
           .eq("email", email)
           .maybeSingle();
 
@@ -58,6 +67,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         const valid = await verifyPassword(password, profile.password_hash);
         if (!valid) return null;
+
+        if (profile.approval_status === "pending") throw new PendingApprovalError();
+        if (profile.approval_status === "rejected") throw new RejectedError();
 
         return {
           id: profile.id,
@@ -69,7 +81,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
     // F22: Microsoft Entra ID。AUTH_MICROSOFT_ENTRA_ID_ISSUERで特定のテナントに限定できる
     // (未指定なら個人アカウントも含む共通(common)テナントで動く)。
-    ...(process.env.AUTH_MICROSOFT_ENTRA_ID_ID
+    // IDだけ設定してISSUERを忘れると、Auth.jsが設定エラーを出して認証全体(メールログインも含む)が
+    // 動かなくなるため、両方揃っている時だけ有効にする。
+    ...(process.env.AUTH_MICROSOFT_ENTRA_ID_ID && process.env.AUTH_MICROSOFT_ENTRA_ID_ISSUER
       ? [
           MicrosoftEntraID({
             clientId: process.env.AUTH_MICROSOFT_ENTRA_ID_ID,
@@ -110,6 +124,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   session: { strategy: "jwt" },
   pages: {
     signIn: "/login",
+    // SSOで入れなかった時(承認待ちの教師など)の理由も、ログイン画面に表示する。
+    error: "/login",
   },
   callbacks: {
     // F22: SSOでのサインイン時、profilesへの紐づけ・役割の決定をここで行い、
@@ -134,6 +150,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         email: user.email ?? null,
         displayName: user.name ?? null,
         tenantId,
+        // Googleは email_verified で確認済みかを返す。Microsoft(Entra ID)のemailクレームは
+        // 本人確認の保証が無い(nOAuthと呼ばれる既知の問題)ため、確認済みとは扱わない
+        // (既存アカウントとのメール統合はしない)。
+        emailVerified:
+          account.provider === "google" &&
+          (profile as { email_verified?: boolean } | undefined)?.email_verified === true,
       });
       if (!linked) return false;
 

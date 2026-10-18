@@ -14,26 +14,36 @@ const redirectMock = vi.mocked(redirect);
 
 type FakeAdmin = Parameters<typeof isEnrolled>[0];
 
-// admin.from("course_enrollments").select(...).eq("course_id", ...).eq("student_id", ...).maybeSingle()
-// だけを叩く、この2つの関数用の最小限の偽クライアント。
-function fakeAdmin(result: { data: unknown; error: unknown }): FakeAdmin {
-  return {
-    from: () => ({
-      select: () => ({
-        eq: () => ({
-          eq: () => ({
-            maybeSingle: async () => result,
-          }),
-        }),
-      }),
-    }),
-  } as unknown as FakeAdmin;
+// admin.from("course_enrollments").select(...).eq(...).eq(...).eq(...).maybeSingle() だけを叩く、
+// この2つの関数用の最小限の偽クライアント。eq() に渡された絞り込み条件も記録して、
+// 「承認済み(status='approved')だけを参加扱いにしている」ことを検証できるようにする。
+function fakeAdmin(
+  result: { data: unknown; error: unknown },
+  filters: Array<[string, unknown]> = [],
+): FakeAdmin {
+  const chain = {
+    eq: (column: string, value: unknown) => {
+      filters.push([column, value]);
+      return chain;
+    },
+    maybeSingle: async () => result,
+  };
+  return { from: () => ({ select: () => chain }) } as unknown as FakeAdmin;
 }
 
 describe("isEnrolled", () => {
   it("参加登録があればtrue", async () => {
     const admin = fakeAdmin({ data: { id: "enrollment-1" }, error: null });
     await expect(isEnrolled(admin, "course-1", "student-1")).resolves.toBe(true);
+  });
+
+  it("承認済み(status='approved')の登録だけを参加扱いにする(申請中は入れない)", async () => {
+    const filters: Array<[string, unknown]> = [];
+    const admin = fakeAdmin({ data: null, error: null }, filters);
+    await isEnrolled(admin, "course-1", "student-1");
+    expect(filters).toContainEqual(["status", "approved"]);
+    expect(filters).toContainEqual(["course_id", "course-1"]);
+    expect(filters).toContainEqual(["student_id", "student-1"]);
   });
 
   it("参加登録が無ければfalse", async () => {
