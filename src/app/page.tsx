@@ -42,6 +42,14 @@ export default async function Home() {
           新規登録
         </Link>
       </div>
+      <p className="mt-6 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-ink-faint">
+        <Link href="/privacy" className="hover:underline">
+          プライバシーポリシー
+        </Link>
+        <Link href="/terms" className="hover:underline">
+          利用規約
+        </Link>
+      </p>
     </div>
   );
 }

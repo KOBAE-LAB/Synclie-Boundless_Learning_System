@@ -105,6 +105,15 @@ export default async function LoginPage({
             新規登録
           </Link>
         </p>
+
+        <p className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-ink-faint">
+          <Link href="/privacy" className="hover:underline">
+            プライバシーポリシー
+          </Link>
+          <Link href="/terms" className="hover:underline">
+            利用規約
+          </Link>
+        </p>
       </div>
     </div>
   );
