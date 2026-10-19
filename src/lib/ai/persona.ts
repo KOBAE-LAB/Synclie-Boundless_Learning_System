@@ -16,6 +16,7 @@
 import { z } from "zod";
 import { zodTextFormat } from "openai/helpers/zod";
 import { openai, MODEL_PERSONA } from "./openai";
+import { extractPartialJsonString } from "./partial-json";
 
 export interface PersonaProfile {
   name: string;
@@ -92,4 +93,43 @@ export async function askPersona(
   });
 
   return response.output_parsed as PersonaReply;
+}
+
+/**
+ * askPersona()のストリーミング版。構造化出力({reply, conceded})のまま生成させ、
+ * 届いた分の返答本文(reply)を onReplyText に「ここまでの全文」として順次渡す
+ * (画面側は受け取った全文でそのまま置き換えればよい)。最終的な結果は askPersona() と同じ。
+ */
+export async function askPersonaStream(
+  persona: PersonaProfile,
+  history: ChatTurn[],
+  onReplyText: (replySoFar: string) => void,
+): Promise<PersonaReply> {
+  const stream = openai.responses.stream({
+    model: MODEL_PERSONA,
+    input: [
+      { role: "system", content: buildPersonaSystemPrompt(persona) },
+      ...history,
+    ],
+    text: { format: zodTextFormat(PersonaReplySchema, "persona_reply") },
+  });
+
+  let accumulated = "";
+  let lastSent = "";
+  stream.on("response.output_text.delta", (event) => {
+    accumulated += event.delta;
+    const partial = extractPartialJsonString(accumulated, "reply");
+    if (partial !== null && partial !== lastSent) {
+      lastSent = partial;
+      onReplyText(partial);
+    }
+  });
+
+  const finalResponse = await stream.finalResponse();
+  const parsed =
+    (finalResponse.output_parsed as PersonaReply | null | undefined) ??
+    PersonaReplySchema.parse(JSON.parse(finalResponse.output_text));
+  // 取りこぼしがあっても、最後に確定した本文を必ず画面に渡す。
+  if (parsed.reply !== lastSent) onReplyText(parsed.reply);
+  return parsed;
 }

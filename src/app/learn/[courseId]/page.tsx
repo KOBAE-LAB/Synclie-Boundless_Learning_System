@@ -6,9 +6,9 @@ import { requireConsent } from "@/lib/consent";
 import { requireEnrollment } from "@/lib/courses/enrollment";
 import { SubmitButton } from "@/components/submit-button";
 import { ThinkingIndicator } from "@/components/thinking-indicator";
+import { ChatComposer } from "@/components/chat-composer";
 import { AutoDiscussionTimer } from "@/components/auto-discussion-timer";
 import {
-  sendMessageAction,
   submitOutcomeAction,
   generateFeedbackAction,
   saveReflectionAction,
@@ -143,95 +143,157 @@ export default async function LearnCourseSessionPage({
   const { user } = await requireRole("student");
 
   const admin = createAdminClient();
-  await requireConsent(admin, user.id);
-  await requireEnrollment(admin, courseId, user.id);
 
-  const { data: course } = await admin
-    .from("courses")
-    .select(
-      "id, title, subject, mode, auto_discussion_tempo_seconds, auto_discussion_affects_evaluation",
-    )
-    .eq("id", courseId)
-    .maybeSingle();
+  // 画面の表示に必要なデータは、依存関係のあるものだけ順番に、あとは並行して取得する
+  // (以前は約15回の問い合わせを1つずつ待っていたため、発言のたびの画面更新が遅かった)。
+  //
+  // 第1段: 互いに独立なもの。権限の確認(同意→参加登録の順は保つ)と同時に取得する。
+  // 確認で弾かれた場合は redirect が投げられ、取得した内容は使われない。
+  const [
+    ,
+    { data: course },
+    { data: session },
+    { data: coursePersonaRows },
+    { data: avatarOptionRows },
+    { data: personalization },
+    { data: submissionRows },
+  ] = await Promise.all([
+    (async () => {
+      await requireConsent(admin, user.id);
+      await requireEnrollment(admin, courseId, user.id);
+    })(),
+    admin
+      .from("courses")
+      .select(
+        "id, title, subject, mode, auto_discussion_tempo_seconds, auto_discussion_affects_evaluation",
+      )
+      .eq("id", courseId)
+      .maybeSingle(),
+    admin
+      .from("learning_sessions")
+      .select("id, auto_discussion_tempo_seconds")
+      .eq("course_id", courseId)
+      .eq("student_id", user.id)
+      .is("ended_at", null)
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    // F25: この授業のペルソナ(使用中のものを対話の相手として画面上部に大きめのアバターで
+    // 常に見せる。発言ログ中のペルソナ(既にactiveでなくなった場合を含む)も名前・アバターの
+    // 解決に使うため、ステータスを問わず全部まとめて1回で引く。授業のペルソナは数件程度)。
+    admin.from("personas").select("id, name, avatar_id, status").eq("course_id", courseId),
+    // アバター候補は全授業共通で十数件しかないため、必要分を絞らず全部引く(往復を1回減らせる)。
+    admin.from("avatar_options").select("id, file_path"),
+    // F11: 教師が採用した個別最適化の提案のうち、探究テーマの提案だけは学習者にも見せる
+    // (促し方・難度の調整は対話生成側にだけ反映し、学習者には裏側の調整として見せない)。
+    admin
+      .from("personalization_suggestions")
+      .select("inquiry_theme_suggestion")
+      .eq("student_id", user.id)
+      .eq("course_id", courseId)
+      .eq("status", "accepted")
+      .maybeSingle(),
+    admin
+      .from("submissions")
+      .select("id, content, created_at, feedback_status, feedback_error, judgment_status, judgment_error")
+      .eq("course_id", courseId)
+      .eq("student_id", user.id)
+      .order("created_at", { ascending: false }),
+  ]);
 
   if (!course) {
     notFound();
   }
 
-  const { data: session } = await admin
-    .from("learning_sessions")
-    .select("id, auto_discussion_tempo_seconds")
-    .eq("course_id", courseId)
-    .eq("student_id", user.id)
-    .is("ended_at", null)
-    .order("started_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const submissions = (submissionRows ?? []) as SubmissionRow[];
+  const submissionIds = submissions.map((s) => s.id);
 
-  let turns: DialogueTurnRow[] = [];
+  // 第2段: 第1段の結果(セッション・提出物)が要るもの同士を並行して取得する。
+  const [
+    turnRows,
+    uploadRows,
+    audioUploadRows,
+    feedbackRows,
+    judgmentRows,
+    reflectionRows,
+  ] = await Promise.all([
+    session
+      ? admin
+          .from("dialogue_turns")
+          .select("id, speaker_type, persona_id, content, source_kind, auto_generated")
+          .eq("session_id", session.id)
+          .order("created_at", { ascending: true })
+          .then((r) => r.data)
+      : null,
+    // F12: まだ送信していない(確認・修正待ちの)手書きアップロードを表示する。
+    session
+      ? admin
+          .from("handwriting_uploads")
+          .select("id, recognized_text, status, error")
+          .eq("session_id", session.id)
+          .neq("status", "confirmed")
+          .order("created_at", { ascending: true })
+          .then((r) => r.data)
+      : null,
+    // F13: まだ送信していない(確認・修正待ちの)音声アップロードを表示する。
+    session
+      ? admin
+          .from("audio_uploads")
+          .select("id, transcribed_text, status, error")
+          .eq("session_id", session.id)
+          .neq("status", "confirmed")
+          .order("created_at", { ascending: true })
+          .then((r) => r.data)
+      : null,
+    submissionIds.length > 0
+      ? admin
+          .from("submission_feedback")
+          .select("id, submission_id, criteria_label, good_points, next_question, material_reference")
+          .in("submission_id", submissionIds)
+          .then((r) => r.data)
+      : null,
+    // F24: 討論のAIジャッジ。F20と同じ論証評価の枠組みを、議論全体を通して適用したもの。
+    submissionIds.length > 0
+      ? admin
+          .from("discussion_judgments")
+          .select("submission_id, logic_structure, evidence_quality, rebuttal_response, summary_comment")
+          .in("submission_id", submissionIds)
+          .then((r) => r.data)
+      : null,
+    submissionIds.length > 0
+      ? admin
+          .from("reflections")
+          .select("submission_id, what_learned, what_confused, next_goal, shared_with_teacher")
+          .in("submission_id", submissionIds)
+          .then((r) => r.data)
+      : null,
+  ]);
+
+  const turns = (turnRows ?? []) as DialogueTurnRow[];
+  const pendingHandwritingUploads = (uploadRows ?? []) as HandwritingUploadRow[];
+  const pendingAudioUploads = (audioUploadRows ?? []) as AudioUploadRow[];
+
+  const feedbackBySubmission = new Map<string, FeedbackRow[]>();
+  for (const row of (feedbackRows ?? []) as FeedbackRow[]) {
+    const list = feedbackBySubmission.get(row.submission_id) ?? [];
+    list.push(row);
+    feedbackBySubmission.set(row.submission_id, list);
+  }
+  const judgmentBySubmission = new Map<string, JudgmentRow>();
+  for (const row of (judgmentRows ?? []) as JudgmentRow[]) {
+    judgmentBySubmission.set(row.submission_id, row);
+  }
+  const reflectionBySubmission = new Map<string, ReflectionRow>();
+  for (const row of (reflectionRows ?? []) as ReflectionRow[]) {
+    reflectionBySubmission.set(row.submission_id, row);
+  }
+
   const personaNames = new Map<string, string>();
   const personaAvatarPaths = new Map<string, string>();
-  let pendingHandwritingUploads: HandwritingUploadRow[] = [];
-  let pendingAudioUploads: AudioUploadRow[] = [];
-
-  if (session) {
-    const { data: turnRows } = await admin
-      .from("dialogue_turns")
-      .select("id, speaker_type, persona_id, content, source_kind, auto_generated")
-      .eq("session_id", session.id)
-      .order("created_at", { ascending: true });
-    turns = (turnRows ?? []) as DialogueTurnRow[];
-
-    // F12: まだ送信していない(確認・修正待ちの)手書きアップロードを表示する。
-    const { data: uploadRows } = await admin
-      .from("handwriting_uploads")
-      .select("id, recognized_text, status, error")
-      .eq("session_id", session.id)
-      .neq("status", "confirmed")
-      .order("created_at", { ascending: true });
-    pendingHandwritingUploads = (uploadRows ?? []) as HandwritingUploadRow[];
-
-    // F13: まだ送信していない(確認・修正待ちの)音声アップロードを表示する。
-    const { data: audioUploadRows } = await admin
-      .from("audio_uploads")
-      .select("id, transcribed_text, status, error")
-      .eq("session_id", session.id)
-      .neq("status", "confirmed")
-      .order("created_at", { ascending: true });
-    pendingAudioUploads = (audioUploadRows ?? []) as AudioUploadRow[];
-  }
-
-  // F25: 「使用中」の擬似メンバーを、対話の相手として画面上部に大きめのアバターで
-  // 常に見せる(過去の発言に付く小さなアイコンだけでは「誰と話しているか」が弱いという
-  // フィードバックを受けて追加)。発言ログ中のペルソナ(既にactiveでなくなった場合を含む)も
-  // 名前・アバターの解決に使うため、両方のIDをまとめて1回で引く。
-  const { data: activePersonaRows } = await admin
-    .from("personas")
-    .select("id, name, avatar_id")
-    .eq("course_id", courseId)
-    .eq("status", "active");
-  const activePersonas = activePersonaRows ?? [];
+  const activePersonas = (coursePersonaRows ?? []).filter((p) => p.status === "active");
   const activePersonaCount = activePersonas.length;
-
-  const turnPersonaIds = [...new Set(turns.map((t) => t.persona_id).filter((id): id is string => !!id))];
-  const { data: turnPersonaRows } =
-    turnPersonaIds.length > 0
-      ? await admin.from("personas").select("id, name, avatar_id").in("id", turnPersonaIds)
-      : { data: [] };
-
-  const allKnownPersonas = [...activePersonas, ...(turnPersonaRows ?? [])];
-  const avatarIds = [...new Set(allKnownPersonas.map((p) => p.avatar_id).filter((id): id is string => !!id))];
-  const avatarPathById = new Map<string, string>();
-  if (avatarIds.length > 0) {
-    const { data: avatarOptions } = await admin
-      .from("avatar_options")
-      .select("id, file_path")
-      .in("id", avatarIds);
-    for (const option of avatarOptions ?? []) {
-      avatarPathById.set(option.id, option.file_path);
-    }
-  }
-  for (const persona of allKnownPersonas) {
+  const avatarPathById = new Map((avatarOptionRows ?? []).map((o) => [o.id, o.file_path]));
+  for (const persona of coursePersonaRows ?? []) {
     personaNames.set(persona.id, persona.name);
     if (persona.avatar_id) {
       const filePath = avatarPathById.get(persona.avatar_id);
@@ -256,68 +318,6 @@ export default async function LearnCourseSessionPage({
   }
   const autoContinueCapReached = autoContinueStreak >= AUTO_CONTINUE_CAP;
 
-  // F11: 教師が採用した個別最適化の提案のうち、探究テーマの提案だけは学習者にも見せる
-  // (促し方・難度の調整は対話生成側にだけ反映し、学習者には裏側の調整として見せない)。
-  const { data: personalization } = await admin
-    .from("personalization_suggestions")
-    .select("inquiry_theme_suggestion")
-    .eq("student_id", user.id)
-    .eq("course_id", courseId)
-    .eq("status", "accepted")
-    .maybeSingle();
-
-  const { data: submissionRows } = await admin
-    .from("submissions")
-    .select("id, content, created_at, feedback_status, feedback_error, judgment_status, judgment_error")
-    .eq("course_id", courseId)
-    .eq("student_id", user.id)
-    .order("created_at", { ascending: false });
-  const submissions = (submissionRows ?? []) as SubmissionRow[];
-
-  const feedbackBySubmission = new Map<string, FeedbackRow[]>();
-  const judgmentBySubmission = new Map<string, JudgmentRow>();
-  if (submissions.length > 0) {
-    const { data: feedbackRows } = await admin
-      .from("submission_feedback")
-      .select("id, submission_id, criteria_label, good_points, next_question, material_reference")
-      .in(
-        "submission_id",
-        submissions.map((s) => s.id),
-      );
-    for (const row of (feedbackRows ?? []) as FeedbackRow[]) {
-      const list = feedbackBySubmission.get(row.submission_id) ?? [];
-      list.push(row);
-      feedbackBySubmission.set(row.submission_id, list);
-    }
-
-    // F24: 討論のAIジャッジ。F20と同じ論証評価の枠組みを、議論全体を通して適用したもの。
-    const { data: judgmentRows } = await admin
-      .from("discussion_judgments")
-      .select("submission_id, logic_structure, evidence_quality, rebuttal_response, summary_comment")
-      .in(
-        "submission_id",
-        submissions.map((s) => s.id),
-      );
-    for (const row of (judgmentRows ?? []) as JudgmentRow[]) {
-      judgmentBySubmission.set(row.submission_id, row);
-    }
-  }
-
-  const reflectionBySubmission = new Map<string, ReflectionRow>();
-  if (submissions.length > 0) {
-    const { data: reflectionRows } = await admin
-      .from("reflections")
-      .select("submission_id, what_learned, what_confused, next_goal, shared_with_teacher")
-      .in(
-        "submission_id",
-        submissions.map((s) => s.id),
-      );
-    for (const row of (reflectionRows ?? []) as ReflectionRow[]) {
-      reflectionBySubmission.set(row.submission_id, row);
-    }
-  }
-
-  const boundSendAction = sendMessageAction.bind(null, courseId);
   const boundSubmitOutcomeAction = submitOutcomeAction.bind(null, courseId);
   const boundUploadHandwritingAction = uploadHandwritingAction.bind(null, courseId);
   const boundUploadAudioAction = uploadAudioAction.bind(null, courseId);
@@ -488,28 +488,11 @@ export default async function LearnCourseSessionPage({
         </div>
       )}
 
-      <form action={boundSendAction} className="mt-6">
-        <div className="flex gap-2">
-          <label htmlFor="chat-message" className="sr-only">
-            発言
-          </label>
-          <textarea
-            id="chat-message"
-            name="message"
-            required
-            rows={2}
-            placeholder="発言を入力"
-            className="flex-1 rounded-md border border-line px-3 py-2 text-sm bg-surface-raised"
-          />
-          <SubmitButton
-            pendingText="送信中…"
-            className="shrink-0 self-end rounded-md bg-accent-fill px-4 py-2 text-sm font-medium text-white hover:bg-accent-fill-hover disabled:opacity-50"
-          >
-            送信
-          </SubmitButton>
-        </div>
-        <ThinkingIndicator label="擬似メンバーが考えています" />
-      </form>
+      <ChatComposer
+        courseId={courseId}
+        turnCount={turns.length}
+        personaAvatars={Object.fromEntries(personaAvatarPaths)}
+      />
 
       <form action={boundUploadHandwritingAction} className="mt-3 flex flex-wrap items-center gap-2">
         <label className="text-xs text-ink-muted">

@@ -287,7 +287,7 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
     学習者(`learning_sessions`に既存行がある)は、マイグレーションで自動的に
     参加登録済み扱いにしてある(締め出さないため)。`[courseId]/page.tsx`が実際のチャット画面。
     学習者ごとに1つの進行中セッション(`learning_sessions`, `ended_at is null`)を
-    get-or-createし、発言のたびに`actions.ts`の`sendMessageAction`が
+    get-or-createし、発言のたびに`src/lib/learn/dialogue.ts`の`postStudentMessageAndRespond`が
     (1)学習者発言を保存 → (2)F04で`active`にした擬似メンバーの中から1体選ぶ
     (`pickRespondingPersona`。複数体いる場合、(a)学習者の発言で名指しされたペルソナが
     いればそれを優先し、(b)無くても直前の擬似メンバーの発言が別のペルソナを名指し
@@ -308,6 +308,25 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
     `PersonaProfile.otherParticipants`で他の使用中ペルソナの名前・立場も伝えるようにした
     (`persona.ts`の`buildPersonaSystemPrompt`と`COMMON_GUARDRAILS`に、学習者だけでなく
     他の擬似メンバーの発言にも根拠なく同調しない旨を追記)。
+    **応答速度の改善(2026-10)**: 「学習画面のレスポンスを上げたい」という要望を受け、まず実測した
+    (開発環境で、DB準備約1.6秒+論証評価AI約4.6秒+返答AI約2.3秒=約8.5秒。**大半はAIの待ち**)。
+    (1)テキスト発言の送信は、サーバーアクションをやめて**ストリーミングAPI**
+    (`app/api/learn/[courseId]/message/route.ts`、NDJSON)にした。処理の本体は
+    `src/lib/learn/dialogue.ts`に切り出し(`"use server"`ファイルはasync関数以外をexportできず、
+    APIからも呼ぶため)、手書き・音声の確定(サーバーアクション)も同じ関数を共用する。
+    返答は構造化出力`{reply, conceded}`のまま流し、`src/lib/ai/partial-json.ts`の
+    `extractPartialJsonString`で届いた分の`reply`だけを取り出して順次画面に渡す
+    (`askPersonaStream`)。(2)画面側は`src/components/chat-composer.tsx`(クライアントJSが必要な
+    4つ目の理由)が、送信した瞬間に自分の発言と「考えています」を出し、返答を流れるように
+    表示する(完了後に`router.refresh()`でサーバー描画のやり取りに切り替え、件数が増えた時点で
+    仮表示を消す)。APIは`Cache-Control: no-transform`と`X-Accel-Buffering: no`を返す
+    (Nextの圧縮・nginxのバッファが応答をためこむとストリーミングが効かないため)。
+    (3)独立なDB問い合わせは`Promise.all`で並行化(`dialogue.ts`と`learn/[courseId]/page.tsx`。
+    ページの再取得は約2〜3秒→約0.6秒)。**やらなかったこと**: AIの推論の深さ(reasoning effort)を
+    下げる案は、速くなるとは限らず、論証評価の判定(新しい根拠の有無)が変わってしまったため
+    採用しなかった(F20の計測の精度に直結するため)。**論証評価と返答を同時に実行する案**は、
+    評価結果をペルソナへの指示に使う設計(F20)を変えるため、実時間は約3〜5秒縮むが
+    採用していない(研究設計の判断が要る)。
     **「テンポ」設定(沈黙時の自動継続)**: 「自分の発言を待たずにAI同士が語るのも自然」
     という要望を受け、学習者がしばらく発言しない時、擬似メンバー同士で会話を自動的に
     続けられるようにした。ただし「無制限だと授業時間を消費してコストも際限なくなる」
@@ -482,6 +501,9 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
   アクション側の防御用)(テストは同ディレクトリの`enrollment.test.ts`)
 - `src/lib/consent.ts` — F16。`requireConsent()`: 同意していない/撤回済みの学習者を
   `/consent`へリダイレクトする(`learn/`配下の各ページから呼ぶ。テストは`consent.test.ts`)
+- `src/lib/learn/dialogue.ts` — F05の対話の中核(`postStudentMessageAndRespond`・
+  `getOrCreateSession`・`pickRespondingPersona`)。`learn/[courseId]/actions.ts`と、
+  ストリーミングAPI(`app/api/learn/[courseId]/message/route.ts`、テストあり)から共用する
 - `src/lib/persona-mention.ts` — F05。`isPersonaMentioned()`: 学習者・擬似メンバーの発言に
   特定のペルソナが名指しされているかを、正式名の末尾一致(3文字以上)で判定する
   (`learn/[courseId]/actions.ts`の`pickRespondingPersona`から使う純粋関数。
