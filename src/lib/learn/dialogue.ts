@@ -10,6 +10,8 @@ import { evaluateArgument } from "@/lib/ai/argument-evaluation";
 import { isEnrolled } from "@/lib/courses/enrollment";
 import { isPersonaMentioned } from "@/lib/persona-mention";
 import { buildCourseContext } from "@/lib/courses/settings";
+import { judgeDiscussionState } from "@/lib/ai/discussion-wrapup";
+import { getTimeStatus, shouldJudgeDiscussionState } from "@/lib/learn/session-end";
 
 export type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -35,7 +37,35 @@ export interface ActivePersonaRow {
   } | null;
 }
 
-export async function getOrCreateSession(admin: AdminClient, courseId: string, studentId: string) {
+export interface SessionRow {
+  id: string;
+  started_at: string;
+  ended_at: string | null;
+  close_suggested_at: string | null;
+  close_suggest_after_turn: number;
+}
+
+const SESSION_COLUMNS = "id, started_at, ended_at, close_suggested_at, close_suggest_after_turn";
+
+/** セッションのIDだけが要る呼び出し用。終了済みの議論への発言などは、既定では拒否する。 */
+export async function getOrCreateSession(
+  admin: AdminClient,
+  courseId: string,
+  studentId: string,
+  options: { allowEnded?: boolean } = {},
+): Promise<string> {
+  return (await getOrCreateSessionRow(admin, courseId, studentId, options)).id;
+}
+
+// 議論の「終わり」(0032): 直近のセッションが終了済みなら、新しい議論を勝手に始めず、
+// 既定ではエラーにする(終了後に発言できてしまうと、制限時間やまとめの意味がなくなるため)。
+// 成果の提出やテンポ設定の保存のように、終了後も必要な操作だけ allowEnded で通す。
+export async function getOrCreateSessionRow(
+  admin: AdminClient,
+  courseId: string,
+  studentId: string,
+  options: { allowEnded?: boolean } = {},
+): Promise<SessionRow> {
   // F17: 直前のLTIローンチ(/lti/continue)がこの授業向けのリソースリンクをCookieに
   // 残していれば、そのリソースリンク経由として記録する(成績連携(AGS)用)。
   const cookieStore = await cookies();
@@ -62,16 +92,20 @@ export async function getOrCreateSession(admin: AdminClient, courseId: string, s
     }
   }
 
-  const { data: existing } = await admin
+  const { data: latest } = await admin
     .from("learning_sessions")
-    .select("id")
+    .select(SESSION_COLUMNS)
     .eq("course_id", courseId)
     .eq("student_id", studentId)
-    .is("ended_at", null)
     .order("started_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (existing) return existing.id as string;
+  if (latest) {
+    if (latest.ended_at && !options.allowEnded) {
+      throw new Error("この議論は終了しました。議論のまとめを確認して、成果を提出しましょう。");
+    }
+    return latest as SessionRow;
+  }
 
   // F19: 授業(courses.mode)が独習モードなら、セッションもsolo_studyとして作る。
   const { data: course } = await admin.from("courses").select("mode").eq("id", courseId).maybeSingle();
@@ -80,12 +114,12 @@ export async function getOrCreateSession(admin: AdminClient, courseId: string, s
   const { data: created, error } = await admin
     .from("learning_sessions")
     .insert({ course_id: courseId, student_id: studentId, mode, lti_resource_link_id: ltiResourceLinkId })
-    .select("id")
+    .select(SESSION_COLUMNS)
     .single();
   if (error || !created) {
     throw new Error(`学習セッションの作成に失敗しました: ${error?.message ?? "不明なエラー"}`);
   }
-  return created.id as string;
+  return created as SessionRow;
 }
 
 // F04で「使用中」にした擬似メンバーの中から、次に発言する1人を選ぶ。
@@ -181,12 +215,27 @@ export async function postStudentMessageAndRespond(
   options: { onEvent?: (event: DialogueEvent) => void } = {},
 ) {
   // 授業の存在確認と、セッションの取得(参加登録の確認を含む)は互いに独立なので並行して行う。
-  const [{ data: course }, sessionId] = await Promise.all([
-    admin.from("courses").select("id, title, objective, learner_level, discussion_style").eq("id", courseId).maybeSingle(),
-    getOrCreateSession(admin, courseId, studentId),
+  const [{ data: course }, session] = await Promise.all([
+    admin
+      .from("courses")
+      .select("id, title, objective, learner_level, discussion_style, time_limit_minutes, time_limit_policy, ai_close_suggestion")
+      .eq("id", courseId)
+      .maybeSingle(),
+    getOrCreateSessionRow(admin, courseId, studentId),
   ]);
   if (!course) {
     throw new Error("授業が見つかりません。");
+  }
+  const sessionId = session.id;
+
+  // 制限時間(教師の設定が「超過したら発言を止める」の時だけ、ここで止める)。
+  const timeStatus = getTimeStatus({
+    startedAt: session.started_at,
+    limitMinutes: course.time_limit_minutes,
+    policy: course.time_limit_policy,
+  });
+  if (timeStatus.blocksInput) {
+    throw new Error("制限時間を過ぎました。「まとめに進む」を押して、議論のまとめを確認しましょう。");
   }
 
   // 学習者の発言の保存と、誰が返答するかの選択も互いに独立(選択は発言の本文だけを使う)。
@@ -220,7 +269,8 @@ export async function postStudentMessageAndRespond(
 
   // 資料検索(埋め込みAPI+DB)、直近の履歴、個別最適化の提案は互いに独立なので並行して取得する
   // (以前は1つずつ待っていたため、その分だけ返答が遅れていた)。
-  const [materialChunks, { data: recentTurns }, { data: personalization }] = await Promise.all([
+  const [materialChunks, { data: recentTurns }, { data: personalization }, { count: studentTurnCount }] =
+    await Promise.all([
     searchMaterialChunks(courseId, message),
     admin
       .from("dialogue_turns")
@@ -238,6 +288,12 @@ export async function postStudentMessageAndRespond(
       .eq("course_id", courseId)
       .eq("status", "accepted")
       .maybeSingle(),
+    // 議論の状態をAIに判定させるかを決めるための、これまでの学習者の発言数
+    admin
+      .from("dialogue_turns")
+      .select("id", { count: "exact", head: true })
+      .eq("session_id", sessionId)
+      .eq("speaker_type", "student"),
   ]);
   const materialText =
     materialChunks.length > 0
@@ -275,10 +331,49 @@ export async function postStudentMessageAndRespond(
     rebuttalResponse: number;
     summaryComment: string;
   } | null = null;
+  const transcriptText = history
+    .map((turn) => `${turn.role === "user" ? "学習者" : "擬似メンバー"}: ${turn.content}`)
+    .join("\n");
+
+  // 議論の「終わり」の提案(0032)。返答を待たせないよう、論証評価・返答の生成と並行して
+  // 実行する(最後に待つが、通常は返答より先に終わっている)。AIが議論を止めることはせず、
+  // 「まとめましょう」という提案を記録するだけ。判定は一定の発言数ごとにしか行わない(費用)。
+  const closeSuggestionTask = (async () => {
+    if (session.close_suggested_at) return;
+    const suggest = async (reason: string) => {
+      await admin
+        .from("learning_sessions")
+        .update({ close_suggested_at: new Date().toISOString(), close_suggestion_reason: reason })
+        .eq("id", sessionId)
+        .is("ended_at", null);
+    };
+    // 制限時間を過ぎていれば、AIを呼ばずに提案する。
+    if (timeStatus.isOver) {
+      await suggest("制限時間になりました。ここで議論をまとめましょう。");
+      return;
+    }
+    if (
+      !shouldJudgeDiscussionState({
+        studentTurnCount: studentTurnCount ?? 0,
+        suggestAfterTurn: session.close_suggest_after_turn,
+        aiCloseSuggestionEnabled: course.ai_close_suggestion !== false,
+        alreadySuggested: false,
+        ended: false,
+      })
+    ) {
+      return;
+    }
+    try {
+      const judgment = await judgeDiscussionState(transcriptText, course.objective);
+      if (judgment.state !== "continue") {
+        await suggest(judgment.reason || "議論がひと区切りついたようです。");
+      }
+    } catch {
+      // 判定の失敗は、対話を止めない(付加的な機能のため)。
+    }
+  })();
+
   try {
-    const transcriptText = history
-      .map((turn) => `${turn.role === "user" ? "学習者" : "擬似メンバー"}: ${turn.content}`)
-      .join("\n");
     const evaluation = await evaluateArgument(materialText, transcriptText);
     hasNewEvidence = evaluation.新規の根拠や具体例を含むか;
     argumentScores = {
@@ -352,6 +447,8 @@ export async function postStudentMessageAndRespond(
   if (personaTurnError) {
     throw new Error(`擬似メンバーの発言保存に失敗しました: ${personaTurnError.message}`);
   }
+
+  await closeSuggestionTask;
 
   // F20: 「根拠なく意見が寄った度合い」を記録する。新しい根拠が無い(hasNewEvidence=false)のに
   // ペルソナが譲歩した(conceded=true)場合を unwarranted_conformity として記録する。

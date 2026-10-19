@@ -10,6 +10,7 @@ import { judgeDiscussion } from "@/lib/ai/argument-evaluation";
 import { recognizeHandwriting } from "@/lib/ai/handwriting";
 import { transcribeAudio } from "@/lib/ai/audio";
 import { AUTO_CONTINUE_CAP } from "@/lib/discussion-tempo";
+import { COOLDOWN_AFTER_DISMISS_TURNS } from "@/lib/learn/session-end";
 import { buildCourseContext } from "@/lib/courses/settings";
 import {
   HISTORY_LIMIT,
@@ -144,7 +145,7 @@ export async function updateSessionTempoAction(courseId: string, formData: FormD
   const { user } = await requireRole("student");
   const admin = createAdminClient();
 
-  const sessionId = await getOrCreateSession(admin, courseId, user.id);
+  const sessionId = await getOrCreateSession(admin, courseId, user.id, { allowEnded: true });
   const raw = String(formData.get("tempoSeconds") ?? "").trim();
   const parsed = raw === "" ? null : Number(raw);
   const value = parsed !== null && Number.isFinite(parsed) && parsed > 0 ? parsed : null;
@@ -156,6 +157,41 @@ export async function updateSessionTempoAction(courseId: string, formData: FormD
   if (error) {
     throw new Error(`テンポ設定の保存に失敗しました: ${error.message}`);
   }
+
+  revalidatePath(`/learn/${courseId}`);
+}
+
+// 議論の「終わり」: AIが「そろそろまとめましょう」と提案したが、「もう少し続ける」を選んだ時。
+// 提案を取り下げ、あと数発言は再提案しない(続ける意思を尊重し、何度も促さないため)。
+export async function dismissCloseSuggestionAction(courseId: string) {
+  const { user } = await requireRole("student");
+  const admin = createAdminClient();
+
+  const { data: session } = await admin
+    .from("learning_sessions")
+    .select("id")
+    .eq("course_id", courseId)
+    .eq("student_id", user.id)
+    .is("ended_at", null)
+    .order("started_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!session) return;
+
+  const { count } = await admin
+    .from("dialogue_turns")
+    .select("id", { count: "exact", head: true })
+    .eq("session_id", session.id)
+    .eq("speaker_type", "student");
+
+  await admin
+    .from("learning_sessions")
+    .update({
+      close_suggested_at: null,
+      close_suggestion_reason: null,
+      close_suggest_after_turn: (count ?? 0) + COOLDOWN_AFTER_DISMISS_TURNS,
+    })
+    .eq("id", session.id);
 
   revalidatePath(`/learn/${courseId}`);
 }
@@ -405,7 +441,7 @@ export async function submitOutcomeAction(courseId: string, formData: FormData) 
     throw new Error("授業が見つかりません。");
   }
 
-  const sessionId = await getOrCreateSession(admin, courseId, user.id);
+  const sessionId = await getOrCreateSession(admin, courseId, user.id, { allowEnded: true });
 
   const { error } = await admin.from("submissions").insert({
     course_id: courseId,

@@ -340,6 +340,29 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
     採用しなかった(F20の計測の精度に直結するため)。**論証評価と返答を同時に実行する案**は、
     評価結果をペルソナへの指示に使う設計(F20)を変えるため、実時間は約3〜5秒縮むが
     採用していない(研究設計の判断が要る)。
+    **議論の「終わり」(2026-10)**: 「学習の終わりが設定しにくい。AIが判断して議論を中断させたり、
+    制限時間を設定したりすることが必要」という指摘を受けて追加した。それまで学習セッションには
+    終了の仕組みが無く(`learning_sessions.ended_at`は誰も設定していなかった)、議論は際限なく続いた。
+    (1)**制限時間**(`courses.time_limit_minutes`、最初の発言から数える)。教師が授業設定で、
+    超過したら「続けられる(超過は記録)」(soft)か「発言を止めてまとめへ」(hard)かを選び、
+    「超過を評価の参考にする」(`time_limit_affects_evaluation`。学習者の画面に表示するだけで、
+    AIが点数を変えるわけではない。テンポ設定と同じ考え方)も選べる。学習者の画面には
+    `src/components/session-controls.tsx`が残り時間をカウントダウン表示する(サーバーが数えた
+    経過時間を基準にし、端末の時計のずれに影響されない。クライアントJSが必要な5つ目の理由)。
+    止める判断は画面ではなく、サーバー(`dialogue.ts`)が毎回行う。(2)**AIによる「まとめ」の提案**
+    (`src/lib/ai/discussion-wrapup.ts`の`judgeDiscussionState`: 続ける/収束/堂々めぐり/脱線)。
+    **AIが議論を止めることはせず、提案にとどめる**(学習者が「まとめに進む」か「もう少し続ける」を選ぶ)。
+    AI呼び出しの費用を抑えるため、4発言目から2発言おきにしか判定せず(`session-end.ts`)、
+    返答・論証評価と**並行**して実行するので返答を待たせない。制限時間を過ぎた場合はAIを呼ばずに
+    提案する。教師は`ai_close_suggestion`で無効にできる。(3)**終了とまとめ**
+    (`src/lib/learn/close.ts`の`closeDiscussion`、`app/api/learn/[courseId]/close/route.ts`):
+    「まとめに進む」か、hardの時間切れで自動的に、AIが議論の要点・次に考える問いをまとめて
+    `closing_summary`に保存し、`ended_at`/`end_reason`(time_limit/ai_suggested/student。
+    **クライアントの申告は信用せず、サーバーが事実から決める**)を記録する。終了した議論には
+    発言できず(手書き・音声も)、成果の提出(F06)・テンポ設定の保存だけが引き続きできる
+    (`getOrCreateSession`の`allowEnded`)。終了後は新しい議論を勝手に始めない。
+    **「学習者が自分で議論を終える」ボタンと、教師による手動終了は、今回は入れていない**
+    (意図的に対象外にした。必要になれば`end_reason='student'`の枠は用意してある)。
     **「テンポ」設定(沈黙時の自動継続)**: 「自分の発言を待たずにAI同士が語るのも自然」
     という要望を受け、学習者がしばらく発言しない時、擬似メンバー同士で会話を自動的に
     続けられるようにした。ただし「無制限だと授業時間を消費してコストも際限なくなる」
@@ -706,6 +729,9 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
     (参加コード、列デフォルト式で新規作成時に自動生成)と`course_enrollments`
     (course_id+student_idの組、unique制約)を追加。既存の`learning_sessions`から
     参加登録済み扱いのバックフィルも行う(詳細は8章の`learn/`の説明を参照)
+  - `0032_session_end.sql` — 議論の「終わり」。`courses.time_limit_minutes`/`time_limit_policy`/
+    `time_limit_affects_evaluation`/`ai_close_suggestion`、`learning_sessions.end_reason`/
+    `closing_summary`/`close_suggested_at`/`close_suggestion_reason`/`close_suggest_after_turn`
   - `0031_course_settings.sql` — 授業設定の拡張。`courses.objective`(ねらい・議題)/
     `learner_level`(校種・学年)/`discussion_style`(討論の型)/`ai_member_count`(AIメンバーの目標人数)
   - `0030_test_student.sql` — 管理者の「学習者として表示」用。`profiles.test_owner_id`

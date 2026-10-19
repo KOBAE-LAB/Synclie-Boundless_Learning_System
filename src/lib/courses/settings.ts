@@ -39,6 +39,14 @@ export const DISCUSSION_STYLES = {
 
 export type DiscussionStyle = keyof typeof DISCUSSION_STYLES;
 
+// 議論の終わり(制限時間)。最初の発言からの経過で数える。
+export const TIME_LIMIT_OPTIONS = [10, 15, 20, 30, 45, 60, 90, 120] as const;
+export const TIME_LIMIT_POLICIES = {
+  soft: "超過しても続けられる(超過した時間は記録する)",
+  hard: "超過したら発言を止めて、まとめに進む",
+} as const;
+export type TimeLimitPolicyKey = keyof typeof TIME_LIMIT_POLICIES;
+
 export function isDiscussionStyle(value: unknown): value is DiscussionStyle {
   return typeof value === "string" && value in DISCUSSION_STYLES;
 }
@@ -51,6 +59,10 @@ export interface CourseSettings {
   learner_level?: string | null;
   discussion_style?: string | null;
   ai_member_count?: number | null;
+  time_limit_minutes?: number | null;
+  time_limit_policy?: string | null;
+  time_limit_affects_evaluation?: boolean | null;
+  ai_close_suggestion?: boolean | null;
 }
 
 const MAX_OBJECTIVE_LENGTH = 1000;
@@ -61,20 +73,36 @@ export function parseCourseSettingsInput(input: {
   learnerLevel: string;
   discussionStyle: string;
   aiMemberCount: string;
+  // 議論の終わり(省略すると、未設定=制限なし・超過しても続けられる・評価に影響しない・AIが提案する)
+  timeLimitMinutes?: string;
+  timeLimitPolicy?: string;
+  timeLimitAffectsEvaluation?: boolean;
+  aiCloseSuggestion?: boolean;
 }): {
   objective: string | null;
   learner_level: string | null;
   discussion_style: DiscussionStyle | null;
   ai_member_count: number | null;
+  time_limit_minutes: number | null;
+  time_limit_policy: TimeLimitPolicyKey;
+  time_limit_affects_evaluation: boolean;
+  ai_close_suggestion: boolean;
 } {
   const objective = input.objective.trim().slice(0, MAX_OBJECTIVE_LENGTH);
   const level = input.learnerLevel.trim();
   const count = Number.parseInt(input.aiMemberCount, 10);
+  const limit = Number.parseInt(input.timeLimitMinutes ?? "", 10);
   return {
     objective: objective || null,
     learner_level: (LEARNER_LEVELS as readonly string[]).includes(level) ? level : null,
     discussion_style: isDiscussionStyle(input.discussionStyle) ? input.discussionStyle : null,
     ai_member_count: Number.isInteger(count) && count >= 1 && count <= 5 ? count : null,
+    time_limit_minutes: (TIME_LIMIT_OPTIONS as readonly number[]).includes(limit) ? limit : null,
+    time_limit_policy: input.timeLimitPolicy === "hard" ? "hard" : "soft",
+    // 制限時間が無い授業で、評価への影響だけが立つことは無い
+    time_limit_affects_evaluation:
+      (TIME_LIMIT_OPTIONS as readonly number[]).includes(limit) && input.timeLimitAffectsEvaluation === true,
+    ai_close_suggestion: input.aiCloseSuggestion ?? true,
   };
 }
 

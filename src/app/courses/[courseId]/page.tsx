@@ -18,7 +18,12 @@ import {
   registerStudentAction,
 } from "./actions";
 import { TEMPO_OPTIONS } from "@/lib/discussion-tempo";
-import { DISCUSSION_STYLES, LEARNER_LEVELS } from "@/lib/courses/settings";
+import {
+  DISCUSSION_STYLES,
+  LEARNER_LEVELS,
+  TIME_LIMIT_OPTIONS,
+  TIME_LIMIT_POLICIES,
+} from "@/lib/courses/settings";
 
 const KIND_LABELS: Record<string, string> = {
   syllabus: "シラバス",
@@ -56,7 +61,7 @@ export default async function CourseDetailPage({
   const { data: course } = await admin
     .from("courses")
     .select(
-      "id, title, subject, owner_teacher_id, join_code, auto_discussion_tempo_seconds, auto_discussion_affects_evaluation, objective, learner_level, discussion_style, ai_member_count",
+      "id, title, subject, owner_teacher_id, join_code, auto_discussion_tempo_seconds, auto_discussion_affects_evaluation, objective, learner_level, discussion_style, ai_member_count, time_limit_minutes, time_limit_policy, time_limit_affects_evaluation, ai_close_suggestion",
     )
     .eq("id", courseId)
     .maybeSingle();
@@ -259,6 +264,74 @@ export default async function CourseDetailPage({
               ))}
             </select>
           </div>
+        </div>
+
+        <div className="space-y-3 border-t border-line pt-4">
+          <h3 className="text-xs font-medium text-ink-faint">議論の終わり</h3>
+          <div className="flex flex-wrap gap-4">
+            <div className="min-w-[10rem] space-y-1">
+              <label htmlFor="course-time-limit" className="text-sm font-medium text-ink">
+                制限時間
+              </label>
+              <select
+                id="course-time-limit"
+                name="timeLimitMinutes"
+                defaultValue={course.time_limit_minutes?.toString() ?? ""}
+                className="w-full rounded-md border border-line bg-surface-raised px-3 py-2 text-sm"
+              >
+                <option value="">制限なし</option>
+                {TIME_LIMIT_OPTIONS.map((m) => (
+                  <option key={m} value={m}>
+                    {m}分
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="min-w-[14rem] flex-1 space-y-1">
+              <label htmlFor="course-time-policy" className="text-sm font-medium text-ink">
+                時間を過ぎたとき
+              </label>
+              <select
+                id="course-time-policy"
+                name="timeLimitPolicy"
+                defaultValue={course.time_limit_policy ?? "soft"}
+                className="w-full rounded-md border border-line bg-surface-raised px-3 py-2 text-sm"
+              >
+                {Object.entries(TIME_LIMIT_POLICIES).map(([key, label]) => (
+                  <option key={key} value={key}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <p className="text-xs text-ink-muted">
+            制限時間は、学習者の最初の発言から数えます(学習者の画面に残り時間が出ます)。
+          </p>
+          <label className="flex items-start gap-2 text-sm text-ink-muted">
+            <input
+              type="checkbox"
+              name="timeLimitAffectsEvaluation"
+              defaultChecked={course.time_limit_affects_evaluation}
+              className="mt-1"
+            />
+            <span>
+              時間の超過を、評価の参考にする(学習者の画面には「評価の参考にされます」と表示されます。
+              AIが点数を変えるわけではなく、先生が振り返るときの目印です)
+            </span>
+          </label>
+          <label className="flex items-start gap-2 text-sm text-ink-muted">
+            <input
+              type="checkbox"
+              name="aiCloseSuggestion"
+              defaultChecked={course.ai_close_suggestion}
+              className="mt-1"
+            />
+            <span>
+              AIが議論の状態(結論が出た・堂々めぐり・脱線)を見て、「そろそろまとめましょう」と提案する
+              (AIが勝手に止めることはありません。判定は数発言ごとに1回AIを呼びます)
+            </span>
+          </label>
         </div>
 
         <SubmitButton

@@ -8,6 +8,8 @@ import { SubmitButton } from "@/components/submit-button";
 import { ThinkingIndicator } from "@/components/thinking-indicator";
 import { ChatComposer } from "@/components/chat-composer";
 import { AutoDiscussionTimer } from "@/components/auto-discussion-timer";
+import { SessionControls } from "@/components/session-controls";
+import { getTimeStatus } from "@/lib/learn/session-end";
 import {
   submitOutcomeAction,
   generateFeedbackAction,
@@ -20,6 +22,7 @@ import {
   discardAudioAction,
   judgeDiscussionAction,
   autoContinueDiscussionAction,
+  dismissCloseSuggestionAction,
   updateSessionTempoAction,
 } from "./actions";
 import { AUTO_CONTINUE_CAP, TEMPO_OPTIONS } from "@/lib/discussion-tempo";
@@ -165,16 +168,18 @@ export default async function LearnCourseSessionPage({
     admin
       .from("courses")
       .select(
-        "id, title, subject, mode, auto_discussion_tempo_seconds, auto_discussion_affects_evaluation",
+        "id, title, subject, mode, auto_discussion_tempo_seconds, auto_discussion_affects_evaluation, time_limit_minutes, time_limit_policy, time_limit_affects_evaluation",
       )
       .eq("id", courseId)
       .maybeSingle(),
     admin
       .from("learning_sessions")
-      .select("id, auto_discussion_tempo_seconds")
+      .select(
+        "id, started_at, ended_at, end_reason, closing_summary, close_suggested_at, close_suggestion_reason, auto_discussion_tempo_seconds",
+      )
       .eq("course_id", courseId)
       .eq("student_id", user.id)
-      .is("ended_at", null)
+      // 終了した議論も取得する(終わった後も、やり取りとまとめを見られるように)
       .order("started_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
@@ -323,6 +328,29 @@ export default async function LearnCourseSessionPage({
   const boundUploadAudioAction = uploadAudioAction.bind(null, courseId);
   const boundUpdateSessionTempoAction = updateSessionTempoAction.bind(null, courseId);
   const boundAutoContinueAction = autoContinueDiscussionAction.bind(null, courseId);
+  const boundDismissCloseAction = dismissCloseSuggestionAction.bind(null, courseId);
+
+  // 議論の「終わり」: 終了済みか、制限時間はどうか。画面上の表示用で、発言を止める判断自体は
+  // サーバー(lib/learn/dialogue.ts)が毎回行う。
+  const ended = !!session?.ended_at;
+  const closingSummary = (session?.closing_summary ?? null) as {
+    summary?: string;
+    keyPoints?: string[];
+    nextQuestions?: string[];
+  } | null;
+  const timeStatus = session
+    ? getTimeStatus({
+        startedAt: session.started_at,
+        limitMinutes: course.time_limit_minutes,
+        policy: course.time_limit_policy,
+      })
+    : null;
+  const inputLocked = ended || (timeStatus?.blocksInput ?? false);
+  const END_REASON_LABELS: Record<string, string> = {
+    time_limit: "制限時間になったため",
+    ai_suggested: "AIの提案に応じて",
+    student: "自分で終えたため",
+  };
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
@@ -339,6 +367,56 @@ export default async function LearnCourseSessionPage({
       >
         ポートフォリオを見る(F08)→
       </Link>
+
+      <SessionControls
+        courseId={courseId}
+        elapsedMsAtRender={timeStatus ? timeStatus.elapsedMs : null}
+        limitMinutes={course.time_limit_minutes}
+        policy={course.time_limit_policy ?? "soft"}
+        affectsEvaluation={course.time_limit_affects_evaluation === true}
+        ended={ended}
+        suggestionReason={!ended && session?.close_suggested_at ? (session.close_suggestion_reason ?? "議論がひと区切りついたようです。") : null}
+        dismissAction={boundDismissCloseAction}
+      />
+
+      {ended && (
+        <div className="mt-4 rounded-lg border border-accent p-5" id="discussion-summary">
+          <h2 className="text-sm font-medium text-ink">議論のまとめ(AI)</h2>
+          <p className="mt-1 text-xs text-ink-faint">
+            この議論は終了しました({END_REASON_LABELS[session?.end_reason ?? ""] ?? "終了"})。
+            このまとめはAIによるもので、最終的な評価ではありません。
+          </p>
+          {closingSummary?.summary && (
+            <p className="mt-3 whitespace-pre-wrap text-sm text-ink">{closingSummary.summary}</p>
+          )}
+          {closingSummary?.keyPoints && closingSummary.keyPoints.length > 0 && (
+            <>
+              <h3 className="mt-4 text-xs font-medium text-ink-faint">議論で出た大事な点</h3>
+              <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-ink">
+                {closingSummary.keyPoints.map((point, i) => (
+                  <li key={i}>{point}</li>
+                ))}
+              </ul>
+            </>
+          )}
+          {closingSummary?.nextQuestions && closingSummary.nextQuestions.length > 0 && (
+            <>
+              <h3 className="mt-4 text-xs font-medium text-ink-faint">次に考えてみよう</h3>
+              <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-ink">
+                {closingSummary.nextQuestions.map((q, i) => (
+                  <li key={i}>{q}</li>
+                ))}
+              </ul>
+            </>
+          )}
+          <a
+            href="#submit-outcome"
+            className="mt-4 inline-block rounded-md bg-accent-fill px-4 py-2 text-sm font-medium text-white hover:bg-accent-fill-hover"
+          >
+            成果を提出する →
+          </a>
+        </div>
+      )}
 
       <details className="mt-3 rounded-md border border-line px-4 py-3 text-sm">
         <summary className="cursor-pointer font-medium text-ink">
@@ -382,7 +460,7 @@ export default async function LearnCourseSessionPage({
         </form>
       </details>
 
-      {effectiveTempoSeconds > 0 && (
+      {effectiveTempoSeconds > 0 && !ended && (
         <AutoDiscussionTimer
           tempoSeconds={effectiveTempoSeconds}
           turnCount={turns.length}
@@ -488,12 +566,23 @@ export default async function LearnCourseSessionPage({
         </div>
       )}
 
-      <ChatComposer
-        courseId={courseId}
-        turnCount={turns.length}
-        personaAvatars={Object.fromEntries(personaAvatarPaths)}
-      />
+      {inputLocked ? (
+        <p className="mt-6 rounded-md border border-line bg-surface px-4 py-3 text-sm text-ink-muted">
+          {ended
+            ? "この議論は終了しました。上の「議論のまとめ」を確認して、成果を提出しましょう。"
+            : "制限時間を過ぎました。議論のまとめを作っています…"}
+        </p>
+      ) : (
+        <ChatComposer
+          courseId={courseId}
+          turnCount={turns.length}
+          personaAvatars={Object.fromEntries(personaAvatarPaths)}
+        />
+      )}
 
+      {/* 議論が終わった後は、手書き・音声での発言も受け付けない(終了後は、まとめと成果の提出だけ) */}
+      {!inputLocked && (
+        <>
       <form action={boundUploadHandwritingAction} className="mt-3 flex flex-wrap items-center gap-2">
         <label className="text-xs text-ink-muted">
           手書きで発言する(F12):
@@ -669,6 +758,8 @@ export default async function LearnCourseSessionPage({
           })}
         </ul>
       )}
+        </>
+      )}
 
       <h2 className="mt-8 text-xs font-medium text-ink-faint">これまでのやり取り</h2>
       <div className="mt-2 space-y-4">
@@ -722,7 +813,7 @@ export default async function LearnCourseSessionPage({
         )}
       </div>
 
-      <div className="mt-12 border-t border-line pt-8">
+      <div className="mt-12 border-t border-line pt-8" id="submit-outcome">
         <h2 className="text-sm font-medium text-ink">
           成果を提出する(F06)
         </h2>

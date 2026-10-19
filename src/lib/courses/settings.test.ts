@@ -5,7 +5,7 @@ describe("parseCourseSettingsInput", () => {
   const base = { objective: "", learnerLevel: "", discussionStyle: "", aiMemberCount: "" };
 
   it("空欄はすべてnull(設定なし)", () => {
-    expect(parseCourseSettingsInput(base)).toEqual({
+    expect(parseCourseSettingsInput(base)).toMatchObject({
       objective: null,
       learner_level: null,
       discussion_style: null,
@@ -21,7 +21,7 @@ describe("parseCourseSettingsInput", () => {
         discussionStyle: "opposing",
         aiMemberCount: "3",
       }),
-    ).toEqual({
+    ).toMatchObject({
       objective: "水の循環を説明しあう",
       learner_level: "中学校",
       discussion_style: "opposing",
@@ -39,6 +39,40 @@ describe("parseCourseSettingsInput", () => {
     expect(parsed).toMatchObject({ learner_level: null, discussion_style: null, ai_member_count: null });
     expect(parseCourseSettingsInput({ ...base, aiMemberCount: "abc" }).ai_member_count).toBeNull();
     expect(parseCourseSettingsInput({ ...base, aiMemberCount: "0" }).ai_member_count).toBeNull();
+  });
+
+  it("議論の終わりの設定: 既定は、制限なし・超過しても続けられる・評価に影響しない・AIが提案する", () => {
+    expect(parseCourseSettingsInput(base)).toMatchObject({
+      time_limit_minutes: null,
+      time_limit_policy: "soft",
+      time_limit_affects_evaluation: false,
+      ai_close_suggestion: true,
+    });
+  });
+
+  it("制限時間は、用意した選択肢の値だけを保存する(不正な値は制限なしにする)", () => {
+    const parse = (timeLimitMinutes: string) => parseCourseSettingsInput({ ...base, timeLimitMinutes }).time_limit_minutes;
+    expect(parse("30")).toBe(30);
+    expect(parse("7")).toBeNull();
+    expect(parse("-5")).toBeNull();
+    expect(parse("abc")).toBeNull();
+  });
+
+  it("超過の扱いはhardだけを受け付け、評価への影響は制限時間がある時だけ有効にする", () => {
+    expect(parseCourseSettingsInput({ ...base, timeLimitMinutes: "20", timeLimitPolicy: "hard" }).time_limit_policy).toBe("hard");
+    expect(parseCourseSettingsInput({ ...base, timeLimitMinutes: "20", timeLimitPolicy: "x" }).time_limit_policy).toBe("soft");
+    expect(
+      parseCourseSettingsInput({ ...base, timeLimitMinutes: "20", timeLimitAffectsEvaluation: true })
+        .time_limit_affects_evaluation,
+    ).toBe(true);
+    expect(
+      parseCourseSettingsInput({ ...base, timeLimitMinutes: "", timeLimitAffectsEvaluation: true })
+        .time_limit_affects_evaluation,
+    ).toBe(false);
+  });
+
+  it("AIによるまとめの提案は、明示的にオフにした時だけオフ", () => {
+    expect(parseCourseSettingsInput({ ...base, aiCloseSuggestion: false }).ai_close_suggestion).toBe(false);
   });
 
   it("ねらいが極端に長くても、上限で切る", () => {

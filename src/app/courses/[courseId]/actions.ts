@@ -175,6 +175,10 @@ export async function updateCourseSettingsAction(courseId: string, formData: For
     learnerLevel: String(formData.get("learnerLevel") ?? ""),
     discussionStyle: String(formData.get("discussionStyle") ?? ""),
     aiMemberCount: String(formData.get("aiMemberCount") ?? ""),
+    timeLimitMinutes: String(formData.get("timeLimitMinutes") ?? ""),
+    timeLimitPolicy: String(formData.get("timeLimitPolicy") ?? ""),
+    timeLimitAffectsEvaluation: formData.get("timeLimitAffectsEvaluation") === "on",
+    aiCloseSuggestion: formData.get("aiCloseSuggestion") === "on",
   });
 
   const { error } = await admin.from("courses").update(settings).eq("id", courseId);
