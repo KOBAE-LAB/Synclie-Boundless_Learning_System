@@ -154,7 +154,7 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
   公開URLは https://synclie-boundless-learning-system.kobae-lab.com/ 。同じVPSで他のアプリ
   (`synclie-share`:3006、`tech-integration`:3005)が動いており、メモリも1GBしかないため、
   **ビルドはVPS上でなく手元で行う**(`deploy/deploy.sh`)。手順と注意点はREADME.mdの
-  「さくらVPSへのデプロイ」を参照。開発と本番で同じSupabaseを共有している点にも注意。
+  「さくらVPSへのデプロイ」を参照。Supabaseは開発用と本番用に分けてある点にも注意(下記「認証まわりの注意」とREADME参照)。
   将来Vercel等へ移す可能性は残すが、現時点でVercel固有の設定・機能には依存させないこと
 - **LLM**: OpenAI(Responses API)。マルチモーダル対応・構造化出力の成熟度・コストを理由に選定
   (Anthropic/Googleとの比較検討の結果)。モデル名は変わりやすいため、
@@ -712,9 +712,10 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
 - 段階1のCredentials認証は自前のパスワードハッシュ(bcrypt)を`profiles`に保存する方式。
   段階2でSSO(F22)に移行する際、`password_hash`列はそのまま残しつつ、
   SSOプロバイダーのsubject idを別途キーとして使う設計にする(要件定義書6章・12章参照)。
-- **本番は自己登録を承認制にしている**(上記`signup/`)。開発と本番が同じSupabaseを共有しているため、
-  開発用に作った弱いパスワードのテストアカウントを残したまま公開しないこと(確認用の一時
-  アカウントは確認後にその場で削除する)。メール確認(メールアドレスの実在確認)の仕組みは
+- **本番は自己登録を承認制にしている**(上記`signup/`)。Supabaseは2026-10-20に開発用と本番用に分離した
+  (開発: `rcirkcyrqsaapxzkvhqa`=手元の`.env.local`とCLIのリンク先、本番: `xdbkbbvrnmuhsjpmueev`=VPS)。
+  開発用のテストアカウントは開発DBに作ること(本番のDBに弱いパスワードのアカウントを作らない)。
+  本番へのマイグレーションは、`supabase link`を本番に向け直して`db push`し、終わったら開発へ戻す。メール確認(メールアドレスの実在確認)の仕組みは
   まだ無い(メール送信の基盤が無いため)。同じIPからの大量登録を抑えるレート制限も未実装
 - 受講登録(どの学習者がどの授業に属するか)は`course_enrollments`+授業コード
   (`courses.join_code`)で実装済み(詳細は8章の`src/app/learn/`の説明を参照)。

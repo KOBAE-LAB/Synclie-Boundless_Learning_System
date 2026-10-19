@@ -64,8 +64,12 @@ DBマイグレーションはVPSではなく手元から `supabase db push` で�
 
 注意点:
 
-- **開発と本番が同じSupabaseを共有している**(プロジェクトを分けていない)。開発用のテスト
-  アカウントも本番から見えるため、公開して使う前に整理すること
+- **Supabaseは開発用と本番用に分けている**(2026-10-20に分離)。本番は「【KOBAE-LAB】Synclie -
+  Boundless Learning System」(VPSの`.env.local`が指す)、開発は「【KOBAE-LAB】Synclie - BLS (dev)」
+  (手元の`.env.local`が指す)。手元の`supabase link`は**開発側**に向けてあり、`supabase db push`は
+  既定で開発に適用される。**本番へのマイグレーション適用は、動作確認後に意識して行うこと**
+  (`supabase link --project-ref xdbkbbvrnmuhsjpmueev`で本番にリンクし直して`db push`、
+  終わったら開発に戻す。本番のDBパスワードはSupabaseのダッシュボードで確認する)
 - **リバースプロキシ配下のAuth.js**: `AUTH_TRUST_HOST=true` が無いと `UntrustedHost` でログインできない。
   サーバーアクションはOriginとHostの一致も検査するため、nginxで `Host` を転送すること(設定済み)
 - **アップロード上限**: `next.config.ts` の `serverActions.bodySizeLimit` と nginx の
