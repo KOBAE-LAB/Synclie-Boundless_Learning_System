@@ -10,6 +10,7 @@ import { judgeDiscussion } from "@/lib/ai/argument-evaluation";
 import { recognizeHandwriting } from "@/lib/ai/handwriting";
 import { transcribeAudio } from "@/lib/ai/audio";
 import { AUTO_CONTINUE_CAP } from "@/lib/discussion-tempo";
+import { buildCourseContext } from "@/lib/courses/settings";
 import {
   HISTORY_LIMIT,
   getOrCreateSession,
@@ -40,7 +41,7 @@ export async function autoContinueDiscussionAction(courseId: string) {
 
   const { data: course } = await admin
     .from("courses")
-    .select("auto_discussion_tempo_seconds")
+    .select("auto_discussion_tempo_seconds, title, objective, learner_level, discussion_style")
     .eq("id", courseId)
     .maybeSingle();
   if (!course) return;
@@ -115,6 +116,7 @@ export async function autoContinueDiscussionAction(courseId: string) {
       "学習者からの新しい発言はまだ無い。少し沈黙が続いたため、あなたから会話を継続する番になった。" +
       "他の参加者の発言があればそれに応答・反論してよいし、学習者に短く問いかけてもよい。",
     otherParticipants,
+    courseContext: buildCourseContext(course),
   };
 
   let replyText: string;

@@ -1,0 +1,98 @@
+// 授業設定(ねらい・校種学年・討論の型・AIメンバー人数)の定義と、AIに渡す文脈の組み立て。
+// DBに触れない純粋な関数だけを置く(テストしやすく、"use server"ファイルからも使えるように)。
+
+export const LEARNER_LEVELS = [
+  "小学校 低学年",
+  "小学校 中学年",
+  "小学校 高学年",
+  "中学校",
+  "高等学校",
+  "大学・大学院",
+  "社会人・企業研修",
+  "その他・混在",
+] as const;
+
+export const DISCUSSION_STYLES = {
+  opposing: {
+    label: "対立型(異なる立場から議論する)",
+    // 擬似メンバーへの指示。どの型でも「根拠なく同調しない」原則(要件定義書2章)は変えない。
+    guidance:
+      "この授業は対立型の討論です。学習者と異なる立場から、根拠や具体例を求めて問い返してください。",
+    recommendation:
+      "メンバー同士・学習者との間で立場が分かれるように、互いに対立する立場を含めてください(全員が同じ意見にならないこと)。",
+  },
+  collaborative: {
+    label: "協調型(一緒に結論をつくる)",
+    guidance:
+      "この授業は協調型の討論です。学習者と一緒に考えを整理し、結論を作る姿勢で関わってください。ただし、根拠のない主張に安易に同調してはいけません。",
+    recommendation:
+      "メンバーは同じ目標を共有しつつ、着目する観点や得意な視点が異なるようにしてください(視点を補い合う関係)。",
+  },
+  teaching: {
+    label: "教え合い型(分からない仲間に説明する)",
+    guidance:
+      "この授業は教え合い型です。あなたは学習内容がまだよく分かっていない仲間として、学習者に説明を求め、分からない点を素直に質問してください。",
+    recommendation:
+      "メンバーは、つまずく点(誤解しやすい点)がそれぞれ異なる『まだ分かっていない仲間』にしてください。",
+  },
+} as const;
+
+export type DiscussionStyle = keyof typeof DISCUSSION_STYLES;
+
+export function isDiscussionStyle(value: unknown): value is DiscussionStyle {
+  return typeof value === "string" && value in DISCUSSION_STYLES;
+}
+
+export interface CourseSettings {
+  title?: string | null;
+  subject?: string | null;
+  mode?: string | null;
+  objective?: string | null;
+  learner_level?: string | null;
+  discussion_style?: string | null;
+  ai_member_count?: number | null;
+}
+
+const MAX_OBJECTIVE_LENGTH = 1000;
+
+/** フォームの入力を、保存してよい形に整える(不正な値は null にする)。 */
+export function parseCourseSettingsInput(input: {
+  objective: string;
+  learnerLevel: string;
+  discussionStyle: string;
+  aiMemberCount: string;
+}): {
+  objective: string | null;
+  learner_level: string | null;
+  discussion_style: DiscussionStyle | null;
+  ai_member_count: number | null;
+} {
+  const objective = input.objective.trim().slice(0, MAX_OBJECTIVE_LENGTH);
+  const level = input.learnerLevel.trim();
+  const count = Number.parseInt(input.aiMemberCount, 10);
+  return {
+    objective: objective || null,
+    learner_level: (LEARNER_LEVELS as readonly string[]).includes(level) ? level : null,
+    discussion_style: isDiscussionStyle(input.discussionStyle) ? input.discussionStyle : null,
+    ai_member_count: Number.isInteger(count) && count >= 1 && count <= 5 ? count : null,
+  };
+}
+
+/**
+ * 擬似メンバーのシステムプロンプトに入れる「この授業の文脈」。設定が何も無ければ undefined。
+ * 同調禁止などの共通ガードレール(persona.ts の COMMON_GUARDRAILS)は、これで上書きしない。
+ */
+export function buildCourseContext(course: CourseSettings): string | undefined {
+  const lines: string[] = [];
+  if (course.title) lines.push(`- 授業名: ${course.title}`);
+  if (course.objective) lines.push(`- 授業のねらい・議題: ${course.objective}`);
+  if (course.learner_level) {
+    lines.push(
+      `- 学習者: ${course.learner_level}(この学習者に合った言葉づかい・難しさで話すこと)`,
+    );
+  }
+  if (isDiscussionStyle(course.discussion_style)) {
+    lines.push(`- 討論の型: ${DISCUSSION_STYLES[course.discussion_style].guidance}`);
+  }
+  return lines.length > 0 ? lines.join("\n") : undefined;
+}

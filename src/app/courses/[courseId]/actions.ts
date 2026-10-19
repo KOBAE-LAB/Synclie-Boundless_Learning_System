@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { requireAdmin, requireRole, VIEW_AS_COOKIE } from "@/lib/auth/session";
 import { ensureTestStudentEnrolled } from "@/lib/auth/view-as";
+import { parseCourseSettingsInput } from "@/lib/courses/settings";
 import { createAdminClient } from "@/lib/supabase/server";
 import { generateMaterialRag } from "@/lib/rag/generate";
 import { assertOwnsCourse } from "@/lib/courses/ownership";
@@ -162,6 +163,29 @@ export async function unshareMaterialAction(courseId: string, materialId: string
 // 自動継続するかどうかの既定値(0=オフ)と、この設定を評価の参考にするかどうかを
 // 教師が決める。学習者は自分の授業画面でテンポの既定値だけ自分用に上書きできるが、
 // 「評価の参考にするか」は教師のこの決定がそのまま学習者側に表示される(学習者は変更不可)。
+// 授業設定(ねらい・学習者の校種学年・討論の型・AIメンバーの目標人数)。擬似メンバーの発言と、
+// AIによるペルソナ推薦の手がかりになる。不正な値は保存せず、未設定として扱う。
+export async function updateCourseSettingsAction(courseId: string, formData: FormData) {
+  const { user } = await requireRole("teacher");
+  const admin = createAdminClient();
+  await assertOwnsCourse(admin, courseId, user.id);
+
+  const settings = parseCourseSettingsInput({
+    objective: String(formData.get("objective") ?? ""),
+    learnerLevel: String(formData.get("learnerLevel") ?? ""),
+    discussionStyle: String(formData.get("discussionStyle") ?? ""),
+    aiMemberCount: String(formData.get("aiMemberCount") ?? ""),
+  });
+
+  const { error } = await admin.from("courses").update(settings).eq("id", courseId);
+  if (error) {
+    throw new Error(`授業設定の保存に失敗しました: ${error.message}`);
+  }
+
+  revalidatePath(`/courses/${courseId}`);
+  revalidatePath(`/courses/${courseId}/personas`);
+}
+
 export async function updateAutoDiscussionSettingsAction(courseId: string, formData: FormData) {
   const { user } = await requireRole("teacher");
   const admin = createAdminClient();

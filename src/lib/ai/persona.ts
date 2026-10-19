@@ -34,6 +34,9 @@ export interface PersonaProfile {
   // 会話履歴上は他メンバーの発言もrole:"assistant"になり自分の発言と区別できないため、
   // 「誰が他にいて何を主張しているか」を明示しないと反論が機能しない。
   otherParticipants?: string;
+  // 授業設定(ねらい・学習者の校種学年・討論の型)から組み立てた、この授業の文脈
+  // (src/lib/courses/settings.ts の buildCourseContext)。未設定なら省略。
+  courseContext?: string;
 }
 
 export const COMMON_GUARDRAILS = `
@@ -57,6 +60,7 @@ export function buildPersonaSystemPrompt(persona: PersonaProfile): string {
 - 役割: ${persona.role}
 - 口調: ${persona.tone}
 
+${persona.courseContext ? `\n# この授業について\n${persona.courseContext}\n` : ""}
 # 知識源(次の資料の範囲でのみ発言する)
 ${persona.materialText}
 

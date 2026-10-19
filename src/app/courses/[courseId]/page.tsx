@@ -10,6 +10,7 @@ import {
   shareMaterialAction,
   unshareMaterialAction,
   updateAutoDiscussionSettingsAction,
+  updateCourseSettingsAction,
   regenerateJoinCodeAction,
   startStudentViewAction,
   removeEnrollmentAction,
@@ -17,6 +18,7 @@ import {
   registerStudentAction,
 } from "./actions";
 import { TEMPO_OPTIONS } from "@/lib/discussion-tempo";
+import { DISCUSSION_STYLES, LEARNER_LEVELS } from "@/lib/courses/settings";
 
 const KIND_LABELS: Record<string, string> = {
   syllabus: "シラバス",
@@ -54,7 +56,7 @@ export default async function CourseDetailPage({
   const { data: course } = await admin
     .from("courses")
     .select(
-      "id, title, subject, owner_teacher_id, join_code, auto_discussion_tempo_seconds, auto_discussion_affects_evaluation",
+      "id, title, subject, owner_teacher_id, join_code, auto_discussion_tempo_seconds, auto_discussion_affects_evaluation, objective, learner_level, discussion_style, ai_member_count",
     )
     .eq("id", courseId)
     .maybeSingle();
@@ -104,6 +106,7 @@ export default async function CourseDetailPage({
   const boundUpdateAutoDiscussionAction = updateAutoDiscussionSettingsAction.bind(null, courseId);
   const boundRegenerateJoinCodeAction = regenerateJoinCodeAction.bind(null, courseId);
   const boundRegisterStudentAction = registerStudentAction.bind(null, courseId);
+  const boundUpdateCourseSettingsAction = updateCourseSettingsAction.bind(null, courseId);
   const boundStartStudentViewAction = startStudentViewAction.bind(null, courseId);
   const canViewAsStudent = await isAdmin(admin, user.id);
 
@@ -174,6 +177,97 @@ export default async function CourseDetailPage({
         </Link>
         を開くと擬似メンバーと議論できる
       </p>
+
+      <form action={boundUpdateCourseSettingsAction} className="mt-8 space-y-4 rounded-lg border border-line p-5">
+        <div>
+          <h2 className="text-sm font-medium text-ink">授業の設定</h2>
+          <p className="mt-1 text-sm text-ink-muted">
+            ここで設定した内容は、AI擬似メンバーの発言と、ペルソナ設定の「AIにペルソナ案を作ってもらう」の
+            両方に反映されます。特に「授業のねらい・議題」を書くと、議論が授業の目的からそれにくくなります。
+          </p>
+        </div>
+
+        <div className="space-y-1">
+          <label htmlFor="course-objective" className="text-sm font-medium text-ink">
+            授業のねらい・議題
+          </label>
+          <textarea
+            id="course-objective"
+            name="objective"
+            rows={3}
+            maxLength={1000}
+            defaultValue={course.objective ?? ""}
+            placeholder="例: 光の強さと光合成の速さの関係を、資料のグラフを根拠に説明しあう"
+            className="w-full rounded-md border border-line bg-surface-raised px-3 py-2 text-sm"
+          />
+        </div>
+
+        <div className="flex flex-wrap gap-4">
+          <div className="min-w-[10rem] flex-1 space-y-1">
+            <label htmlFor="course-level" className="text-sm font-medium text-ink">
+              学習者の校種・学年
+            </label>
+            <select
+              id="course-level"
+              name="learnerLevel"
+              defaultValue={course.learner_level ?? ""}
+              className="w-full rounded-md border border-line bg-surface-raised px-3 py-2 text-sm"
+            >
+              <option value="">指定しない</option>
+              {LEARNER_LEVELS.map((level) => (
+                <option key={level} value={level}>
+                  {level}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="min-w-[10rem] flex-1 space-y-1">
+            <label htmlFor="course-style" className="text-sm font-medium text-ink">
+              討論の型
+            </label>
+            <select
+              id="course-style"
+              name="discussionStyle"
+              defaultValue={course.discussion_style ?? ""}
+              className="w-full rounded-md border border-line bg-surface-raised px-3 py-2 text-sm"
+            >
+              <option value="">指定しない</option>
+              {Object.entries(DISCUSSION_STYLES).map(([key, style]) => (
+                <option key={key} value={key}>
+                  {style.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="w-32 space-y-1">
+            <label htmlFor="course-ai-count" className="text-sm font-medium text-ink">
+              AIメンバーの人数
+            </label>
+            <select
+              id="course-ai-count"
+              name="aiMemberCount"
+              defaultValue={course.ai_member_count?.toString() ?? ""}
+              className="w-full rounded-md border border-line bg-surface-raised px-3 py-2 text-sm"
+            >
+              <option value="">指定しない</option>
+              {[1, 2, 3, 4, 5].map((n) => (
+                <option key={n} value={n}>
+                  {n}人
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <SubmitButton
+          pendingText="保存中…"
+          className="rounded-md bg-accent-fill px-4 py-2 text-sm font-medium text-white hover:bg-accent-fill-hover disabled:opacity-50"
+        >
+          設定を保存
+        </SubmitButton>
+      </form>
 
       <div className="mt-8 rounded-lg border border-line p-5">
         <h2 className="text-sm font-medium text-ink">受講登録</h2>

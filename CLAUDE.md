@@ -426,7 +426,24 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
       (要件定義書7章)ため、各行から`students/#{studentId}`(F09/F11の判断)や
       `conformity/`(F20の詳細)へ直接リンクする(students/の各`<li>`に
       `id={studentId}`を付与し、アンカーで深リンクできるようにした)
+    - **授業設定の拡張**(`courses/[courseId]/page.tsx`の「授業の設定」、`updateCourseSettingsAction`):
+      「授業のねらい・議題」「学習者の校種・学年」「討論の型(対立型/協調型/教え合い型)」
+      「AIメンバーの目標人数」(`courses.objective`/`learner_level`/`discussion_style`/
+      `ai_member_count`、`0031_course_settings.sql`)。それまで授業に議題を入力する欄が無く、
+      擬似メンバーは資料以外に何の授業かを知る手がかりが無かったため追加した。定義と、AIに渡す
+      文脈の組み立ては`src/lib/courses/settings.ts`(純粋関数、テストあり)。**擬似メンバーの発言**
+      (`persona.ts`の`courseContext`→システムプロンプトの「この授業について」)と、
+      **AIによるペルソナ推薦**の両方に反映する。討論の型を協調型にしても、「根拠なく同調しない」
+      共通ガードレールは変えない。「メンバー数」は**AI擬似メンバーの人数**の意味(学習者同士が
+      同じ部屋で話す仕組みは無い。人間のグループ分けは別開発になるため今回は対象外)で、
+      ペルソナ設定画面に、使用中の人数との差を表示する
     - `[courseId]/personas/` — F03(ペルソナ設定)+F04(教師による擬似メンバー設定)。
+      **「AIにペルソナ案を作ってもらう」**(`recommendPersonaDraftsAction`、
+      `src/lib/ai/persona-recommend.ts`): 授業設定と登録済み資料の抜粋から、互いに補い合う案を
+      まとめて(または、人数1+ヒントで1体ずつ)作り、`tier='rag_initial', status='draft'`の
+      **下書き**として保存する(教師が確認・修正して承認→使用中にする既存のF04の流れに乗せる。
+      AIは使い始めない)。名前に「〜派の」のような接頭辞を付けない(利用者の明示の要望。
+      `cleanPersonaName`でも取り除く)。授業あたり最大10体、1回最大5人分。
       段階1では教師設定型(`tier='teacher_defined'`)のみを教師が作成・編集・削除する。
       プロフィール/立場と目標/行動ルールを入力するフォームは`persona-form.tsx`を作成・編集で共用。
       知識源(授業RAG)は`course_id`で暗黙に決まるため入力フォームには含めない。
@@ -689,6 +706,8 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
     (参加コード、列デフォルト式で新規作成時に自動生成)と`course_enrollments`
     (course_id+student_idの組、unique制約)を追加。既存の`learning_sessions`から
     参加登録済み扱いのバックフィルも行う(詳細は8章の`learn/`の説明を参照)
+  - `0031_course_settings.sql` — 授業設定の拡張。`courses.objective`(ねらい・議題)/
+    `learner_level`(校種・学年)/`discussion_style`(討論の型)/`ai_member_count`(AIメンバーの目標人数)
   - `0030_test_student.sql` — 管理者の「学習者として表示」用。`profiles.test_owner_id`
     (その管理者専用のテスト学習者、1人につき1つ)を追加(詳細は8章の`signup/`の近くの説明を参照)
   - `0029_signup_approval.sql` — 自己登録の承認制。`profiles.approval_status`(`pending`/

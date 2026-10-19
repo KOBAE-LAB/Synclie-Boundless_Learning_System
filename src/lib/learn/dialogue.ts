@@ -9,6 +9,7 @@ import { askPersona, askPersonaStream, type PersonaProfile, type ChatTurn } from
 import { evaluateArgument } from "@/lib/ai/argument-evaluation";
 import { isEnrolled } from "@/lib/courses/enrollment";
 import { isPersonaMentioned } from "@/lib/persona-mention";
+import { buildCourseContext } from "@/lib/courses/settings";
 
 export type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -181,7 +182,7 @@ export async function postStudentMessageAndRespond(
 ) {
   // 授業の存在確認と、セッションの取得(参加登録の確認を含む)は互いに独立なので並行して行う。
   const [{ data: course }, sessionId] = await Promise.all([
-    admin.from("courses").select("id").eq("id", courseId).maybeSingle(),
+    admin.from("courses").select("id, title, objective, learner_level, discussion_style").eq("id", courseId).maybeSingle(),
     getOrCreateSession(admin, courseId, studentId),
   ]);
   if (!course) {
@@ -325,6 +326,7 @@ export async function postStudentMessageAndRespond(
     behaviorNotes: buildBehaviorNotes(persona.behavior_rules),
     turnGuidance: guidanceLines.length > 0 ? guidanceLines.join("\n") : undefined,
     otherParticipants,
+    courseContext: buildCourseContext(course),
   };
 
   let replyText: string;

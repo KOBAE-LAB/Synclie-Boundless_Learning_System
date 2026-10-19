@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { assertOwnsCourse } from "@/lib/courses/ownership";
 import { generateEvolvedRoles } from "@/lib/ai/evolved-persona";
 import { recommendPersonaAvatar, type AvatarOption } from "@/lib/ai/persona-avatar";
+import { recommendPersonaDrafts, MAX_RECOMMEND_COUNT } from "@/lib/ai/persona-recommend";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -380,6 +381,85 @@ async function buildCourseActivityLog(
   }
 
   return { log: lines.join("\n"), studentCount: studentIds.size };
+}
+
+// AIによるペルソナ案の推薦。授業設定(ねらい・校種学年・討論の型)と登録済みの資料の抜粋から、
+// 互いに補い合う案をまとめて作り、**下書き(status='draft')**として保存する。教師が確認・修正して
+// 承認・有効化する既存のF04の流れに乗せる(AIが一方的に使い始めることはしない)。
+// 「人数分をまとめて」も「1体ずつ追加(ヒント付き)」も、同じ処理で、人数とヒントが違うだけ。
+const MAX_PERSONAS_PER_COURSE = 10; // 呼び出しのたびに増え続けないための上限
+
+export async function recommendPersonaDraftsAction(courseId: string, formData: FormData) {
+  const { user } = await requireRole("teacher");
+  const admin = createAdminClient();
+  await assertOwnsCourse(admin, courseId, user.id);
+
+  const requested = Number.parseInt(String(formData.get("count") ?? "1"), 10);
+  const count = Number.isInteger(requested) ? Math.min(Math.max(requested, 1), MAX_RECOMMEND_COUNT) : 1;
+  const hint = String(formData.get("hint") ?? "").trim().slice(0, 200);
+
+  const [{ data: course }, { data: existingRows }, { data: chunkRows }] = await Promise.all([
+    admin
+      .from("courses")
+      .select("title, subject, mode, objective, learner_level, discussion_style")
+      .eq("id", courseId)
+      .maybeSingle(),
+    admin.from("personas").select("name, profile, stance").eq("course_id", courseId),
+    admin
+      .from("material_chunks")
+      .select("content")
+      .eq("course_id", courseId)
+      .order("material_id", { ascending: true })
+      .order("chunk_index", { ascending: true })
+      .limit(12),
+  ]);
+  if (!course) throw new Error("授業が見つかりません。");
+
+  const existing = existingRows ?? [];
+  if (existing.length + count > MAX_PERSONAS_PER_COURSE) {
+    throw new Error(
+      `この授業のペルソナは最大${MAX_PERSONAS_PER_COURSE}体までです(現在${existing.length}体)。不要なものを削除してから、もう一度お試しください。`,
+    );
+  }
+
+  const drafts = await recommendPersonaDrafts({
+    course,
+    materialText: (chunkRows ?? []).map((c) => c.content).join("\n\n"),
+    count,
+    existing: existing.map((p) => ({
+      name: p.name,
+      role: (p.profile as { role?: string } | null)?.role ?? "",
+      position: (p.stance as { position?: string } | null)?.position ?? "",
+    })),
+    hint: hint || undefined,
+  });
+
+  const { error } = await admin.from("personas").insert(
+    drafts.map((d) => ({
+      course_id: courseId,
+      name: d.name,
+      tier: "rag_initial",
+      status: "draft",
+      profile: {
+        role: d.role,
+        developmentalStage: d.developmentalStage,
+        existingKnowledge: d.existingKnowledge,
+        tone: d.tone,
+      },
+      stance: { position: d.stancePosition, goal: d.stanceGoal },
+      behavior_rules: {
+        speakingFrequency: d.speakingFrequency,
+        teachingDegree: d.teachingDegree,
+        interventionCondition: d.interventionCondition,
+      },
+      origin_note: `AI推薦(授業設定と資料から生成): ${d.rationale}`,
+    })),
+  );
+  if (error) {
+    throw new Error(`ペルソナ案の保存に失敗しました: ${error.message}`);
+  }
+
+  revalidatePath(`/courses/${courseId}/personas`);
 }
 
 export async function generateEvolvedPersonasAction(courseId: string) {

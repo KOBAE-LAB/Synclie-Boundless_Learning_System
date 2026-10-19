@@ -10,6 +10,7 @@ import {
   activatePersonaAction,
   deactivatePersonaAction,
   generateEvolvedPersonasAction,
+  recommendPersonaDraftsAction,
   recommendPersonaAvatarAction,
   setPersonaAvatarAction,
   sharePersonaAction,
@@ -81,7 +82,7 @@ export default async function PersonasPage({
   const admin = createAdminClient();
   const { data: course } = await admin
     .from("courses")
-    .select("id, title, owner_teacher_id")
+    .select("id, title, owner_teacher_id, objective, learner_level, discussion_style, ai_member_count")
     .eq("id", courseId)
     .maybeSingle();
 
@@ -113,6 +114,11 @@ export default async function PersonasPage({
   const activeCount = rows.filter((p) => p.status === "active").length;
   const boundCreateAction = createPersonaAction.bind(null, courseId);
   const boundGenerateEvolvedAction = generateEvolvedPersonasAction.bind(null, courseId);
+  const boundRecommendDraftsAction = recommendPersonaDraftsAction.bind(null, courseId);
+  const targetCount = course.ai_member_count as number | null;
+  // 目標人数に対して、あと何人分の案を作ればよいか(使用中・承認済み・下書きをすべて数える)
+  const remainingToTarget = targetCount ? Math.max(targetCount - rows.length, 0) : null;
+  const defaultRecommendCount = Math.min(Math.max(remainingToTarget ?? 2, 1), 5);
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
@@ -133,7 +139,80 @@ export default async function PersonasPage({
         この授業で使用中のペルソナ: <span className="font-medium">{activeCount}体</span>
       </p>
 
+      {targetCount !== null && (
+        <p
+          className={`mt-1 text-sm ${activeCount === targetCount ? "text-ink-muted" : "text-warn"}`}
+        >
+          授業設定のAIメンバー目標: {targetCount}人
+          {activeCount === targetCount
+            ? "(使用中の人数と一致しています)"
+            : activeCount < targetCount
+              ? `(あと${targetCount - activeCount}人を「使用中」にすると、目標に届きます)`
+              : `(使用中が目標より${activeCount - targetCount}人多くなっています)`}
+        </p>
+      )}
+
       <div className="mt-8 rounded-lg border border-line p-5">
+        <h2 className="text-sm font-medium text-ink">AIにペルソナ案を作ってもらう</h2>
+        <p className="mt-1 text-sm text-ink-muted">
+          授業設定(ねらい・学習者の校種学年・討論の型)と、登録済みの資料をもとに、互いに補い合う
+          擬似メンバーの案を作ります。作られた案は<strong>下書き</strong>として下の一覧に並ぶので、
+          内容を確認・修正し、承認→「使用中」にして初めて授業で使われます(AIが勝手に使い始めることは
+          ありません)。
+        </p>
+        {!course.objective && (
+          <p className="mt-2 rounded-md border border-warn bg-warn-soft px-3 py-2 text-sm text-warn">
+            授業のねらい・議題が未入力です。入力すると、案が授業の目的に沿ったものになります。
+            <Link href={`/courses/${courseId}`} className="ml-1 underline">
+              授業の設定へ
+            </Link>
+          </p>
+        )}
+        <form action={boundRecommendDraftsAction} className="mt-3 space-y-3">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="space-y-1">
+              <label htmlFor="recommend-count" className="text-xs font-medium text-ink-muted">
+                作る人数
+              </label>
+              <select
+                id="recommend-count"
+                name="count"
+                defaultValue={defaultRecommendCount}
+                className="rounded-md border border-line bg-surface-raised px-3 py-1.5 text-sm"
+              >
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <option key={n} value={n}>
+                    {n}人分
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="min-w-[14rem] flex-1 space-y-1">
+              <label htmlFor="recommend-hint" className="text-xs font-medium text-ink-muted">
+                ヒント(任意。例: 反対意見の中学生、慎重な先輩)
+              </label>
+              <input
+                id="recommend-hint"
+                name="hint"
+                maxLength={200}
+                className="w-full rounded-md border border-line bg-surface-raised px-3 py-1.5 text-sm"
+              />
+            </div>
+          </div>
+          <SubmitButton
+            pendingText="案を作っています…"
+            className="rounded-md bg-accent-fill px-4 py-2 text-sm font-medium text-white hover:bg-accent-fill-hover disabled:opacity-50"
+          >
+            ペルソナ案を作る
+          </SubmitButton>
+          <p className="text-xs text-ink-faint">
+            AI呼び出しを1回行います(数秒〜十数秒かかります)。人数を1にして、ヒントを書くと、
+            1体ずつ追加できます。
+          </p>
+        </form>
+      </div>
+
+      <div className="mt-6 rounded-lg border border-line p-5">
         <h2 className="mb-4 text-sm font-medium text-ink">
           新しいペルソナを作成
         </h2>
