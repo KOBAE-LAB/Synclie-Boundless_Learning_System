@@ -24,6 +24,7 @@ import {
   TIME_LIMIT_OPTIONS,
   TIME_LIMIT_POLICIES,
 } from "@/lib/courses/settings";
+import { LIVELINESS } from "@/lib/ai/persona-scene";
 
 const KIND_LABELS: Record<string, string> = {
   syllabus: "シラバス",
@@ -61,7 +62,7 @@ export default async function CourseDetailPage({
   const { data: course } = await admin
     .from("courses")
     .select(
-      "id, title, subject, owner_teacher_id, join_code, auto_discussion_tempo_seconds, auto_discussion_affects_evaluation, objective, learner_level, discussion_style, ai_member_count, time_limit_minutes, time_limit_policy, time_limit_affects_evaluation, ai_close_suggestion",
+      "id, title, subject, owner_teacher_id, join_code, auto_discussion_tempo_seconds, auto_discussion_affects_evaluation, objective, learner_level, discussion_style, ai_member_count, discussion_liveliness, time_limit_minutes, time_limit_policy, time_limit_affects_evaluation, ai_close_suggestion",
     )
     .eq("id", courseId)
     .maybeSingle();
@@ -264,6 +265,29 @@ export default async function CourseDetailPage({
               ))}
             </select>
           </div>
+        </div>
+
+        <div className="space-y-1 border-t border-line pt-4">
+          <label htmlFor="course-liveliness" className="text-sm font-medium text-ink">
+            擬似メンバーの発言の活発さ
+          </label>
+          <select
+            id="course-liveliness"
+            name="discussionLiveliness"
+            defaultValue={course.discussion_liveliness ?? "normal"}
+            className="w-full max-w-xs rounded-md border border-line bg-surface-raised px-3 py-2 text-sm"
+          >
+            {Object.entries(LIVELINESS).map(([key, v]) => (
+              <option key={key} value={key}>
+                {v.label}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-ink-muted">
+            学習者の発言のあと、擬似メンバーが続けて何発言まで話してよいかの上限です(擬似メンバーが2人以上いる
+            授業のとき)。誰が話すかは、各メンバーの性格・視点・発言頻度・介入の条件から、AIが場面ごとに
+            決めます。メンバー同士で議論することもあり、最後は学習者に話を返します。
+          </p>
         </div>
 
         <div className="space-y-3 border-t border-line pt-4">

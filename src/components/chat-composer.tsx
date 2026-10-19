@@ -18,9 +18,13 @@ import { useRouter } from "next/navigation";
 
 type Phase = "idle" | "sending" | "refreshing";
 
+// 擬似メンバーが複数いる授業の「場面」の、1発言(話者が確定したもの)
+type LiveMessage = { personaId: string; name: string; text: string };
+
 type StreamEvent =
   | { type: "persona"; id: string; name: string }
   | { type: "reply"; text: string }
+  | { type: "scene"; messages: LiveMessage[] }
   | { type: "done" }
   | { type: "error"; message: string };
 
@@ -51,6 +55,7 @@ export function ChatComposer({
   const [sentMessage, setSentMessage] = useState<string | null>(null);
   const [persona, setPersona] = useState<{ id: string; name: string } | null>(null);
   const [reply, setReply] = useState("");
+  const [scene, setScene] = useState<LiveMessage[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   function clearLive() {
@@ -58,6 +63,7 @@ export function ChatComposer({
     setSentMessage(null);
     setPersona(null);
     setReply("");
+    setScene([]);
   }
 
   // サーバーの描画に新しい発言が含まれたら、仮表示を消す。
@@ -84,6 +90,7 @@ export function ChatComposer({
     setSentMessage(message);
     setPersona(null);
     setReply("");
+    setScene([]);
     setPhase("sending");
     if (textarea) textarea.value = "";
 
@@ -121,6 +128,7 @@ export function ChatComposer({
           const event = JSON.parse(line) as StreamEvent;
           if (event.type === "persona") setPersona({ id: event.id, name: event.name });
           else if (event.type === "reply") setReply(event.text);
+          else if (event.type === "scene") setScene(event.messages);
           else if (event.type === "error") streamError = event.message;
         }
       }
@@ -138,7 +146,13 @@ export function ChatComposer({
   }
 
   const busy = phase !== "idle" || !hydrated;
-  const avatarPath = persona ? personaAvatars[persona.id] : undefined;
+  // 画面に出す擬似メンバーの発言。複数人の場面ならそのまま、1人の授業なら1つにそろえる。
+  const bubbles: LiveMessage[] =
+    scene.length > 0
+      ? scene
+      : reply !== ""
+        ? [{ personaId: persona?.id ?? "", name: persona?.name ?? "擬似メンバー", text: reply }]
+        : [];
 
   return (
     <div className="mt-6">
@@ -193,7 +207,7 @@ export function ChatComposer({
             </div>
           </div>
 
-          {phase === "sending" && reply === "" && (
+          {phase === "sending" && bubbles.length === 0 && (
             <p className="flex items-center gap-1.5 text-xs text-ink-muted" role="status">
               {persona ? `${persona.name}が考えています` : "擬似メンバーが考えています"}
               <span className="flex items-center gap-0.5" aria-hidden="true">
@@ -204,28 +218,37 @@ export function ChatComposer({
             </p>
           )}
 
-          {reply !== "" && (
-            <div className="flex items-end gap-2">
-              {avatarPath ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={avatarPath} alt="" width={40} height={40} className="h-10 w-10 shrink-0 rounded-full" />
-              ) : (
-                <span
-                  aria-hidden="true"
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-surface text-xs text-ink-faint"
-                >
-                  ?
-                </span>
-              )}
-              <div className="max-w-[75%]">
-                <p className="mb-1 text-xs font-medium text-ink-muted">
-                  {persona?.name ?? "擬似メンバー"}(AI)
-                </p>
-                <div className="inline-block rounded-lg bg-surface px-4 py-2 text-left text-sm text-ink">
-                  <p className="whitespace-pre-wrap">{reply}</p>
+          {bubbles.map((bubble, index) => {
+            const avatarPath = personaAvatars[bubble.personaId];
+            return (
+              <div key={index} className="flex items-end gap-2">
+                {avatarPath ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={avatarPath} alt="" width={40} height={40} className="h-10 w-10 shrink-0 rounded-full" />
+                ) : (
+                  <span
+                    aria-hidden="true"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-surface text-xs text-ink-faint"
+                  >
+                    ?
+                  </span>
+                )}
+                <div className="max-w-[75%]">
+                  <p className="mb-1 text-xs font-medium text-ink-muted">{bubble.name}(AI)</p>
+                  <div className="inline-block rounded-lg bg-surface px-4 py-2 text-left text-sm text-ink">
+                    <p className="whitespace-pre-wrap">{bubble.text}</p>
+                  </div>
                 </div>
               </div>
-            </div>
+            );
+          })}
+
+          {phase === "sending" && bubbles.length > 0 && (
+            <span className="flex items-center gap-0.5 pl-12 text-ink-faint" aria-hidden="true">
+              <span className="thinking-dot h-1 w-1 rounded-full bg-current" />
+              <span className="thinking-dot h-1 w-1 rounded-full bg-current" />
+              <span className="thinking-dot h-1 w-1 rounded-full bg-current" />
+            </span>
           )}
         </div>
       )}

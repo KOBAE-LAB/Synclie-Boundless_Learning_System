@@ -12,9 +12,11 @@ import { transcribeAudio } from "@/lib/ai/audio";
 import { AUTO_CONTINUE_CAP } from "@/lib/discussion-tempo";
 import { COOLDOWN_AFTER_DISMISS_TURNS } from "@/lib/learn/session-end";
 import { buildCourseContext } from "@/lib/courses/settings";
+import { askScene } from "@/lib/ai/persona-scene";
 import {
   HISTORY_LIMIT,
   getOrCreateSession,
+  toScenePersona,
   pickRespondingPersona,
   buildBehaviorNotes,
   postStudentMessageAndRespond,
@@ -120,21 +122,51 @@ export async function autoContinueDiscussionAction(courseId: string) {
     courseContext: buildCourseContext(course),
   };
 
-  let replyText: string;
+  // 擬似メンバーが2人以上いる授業では、沈黙時の継続も、メンバー同士が自然にやり取りする
+  // 短い場面(最大2発言、最後は学習者への問いかけ)にする。1人なら従来どおり1発言。
+  let replies: string[] = [];
+  const personaIdsToSave: string[] = [];
   try {
-    const result = await askPersona(personaProfile, history);
-    replyText = result.reply;
+    if (others.length > 0) {
+      const members = [persona, ...others];
+      const messages = await askScene(
+        {
+          personas: members.map(toScenePersona),
+          courseContext: buildCourseContext(course),
+          materialText,
+          turnGuidance:
+            "学習者からの新しい発言はまだ無い。少し沈黙が続いたため、擬似メンバーのほうから会話を続ける。" +
+            "直前の発言に応答・反論してよいし、学習者に短く問いかけてもよい。",
+          maxMessages: 2,
+          calledOut: [],
+          silence: true,
+        },
+        history,
+        toScenePersona(persona),
+      );
+      for (const m of messages) {
+        replies.push(m.reply);
+        personaIdsToSave.push(m.personaId);
+      }
+    } else {
+      const result = await askPersona(personaProfile, history);
+      replies = [result.reply];
+      personaIdsToSave.push(persona.id);
+    }
   } catch {
     return; // 自動継続は失敗しても対話は止めない(学習者の操作起点ではないため)
   }
 
-  await admin.from("dialogue_turns").insert({
-    session_id: session.id,
-    speaker_type: "persona",
-    persona_id: persona.id,
-    content: replyText,
-    auto_generated: true,
-  });
+  // 1つずつ順に保存する(同じ瞬間の時刻になって、並び順が崩れないように)。
+  for (const [i, text] of replies.entries()) {
+    await admin.from("dialogue_turns").insert({
+      session_id: session.id,
+      speaker_type: "persona",
+      persona_id: personaIdsToSave[i],
+      content: text,
+      auto_generated: true,
+    });
+  }
 
   revalidatePath(`/learn/${courseId}`);
 }

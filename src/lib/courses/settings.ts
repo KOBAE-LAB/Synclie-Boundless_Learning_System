@@ -59,6 +59,7 @@ export interface CourseSettings {
   learner_level?: string | null;
   discussion_style?: string | null;
   ai_member_count?: number | null;
+  discussion_liveliness?: string | null;
   time_limit_minutes?: number | null;
   time_limit_policy?: string | null;
   time_limit_affects_evaluation?: boolean | null;
@@ -73,6 +74,8 @@ export function parseCourseSettingsInput(input: {
   learnerLevel: string;
   discussionStyle: string;
   aiMemberCount: string;
+  // 擬似メンバーの発言の活発さ(省略=普通)
+  discussionLiveliness?: string;
   // 議論の終わり(省略すると、未設定=制限なし・超過しても続けられる・評価に影響しない・AIが提案する)
   timeLimitMinutes?: string;
   timeLimitPolicy?: string;
@@ -83,6 +86,7 @@ export function parseCourseSettingsInput(input: {
   learner_level: string | null;
   discussion_style: DiscussionStyle | null;
   ai_member_count: number | null;
+  discussion_liveliness: "quiet" | "normal" | "lively";
   time_limit_minutes: number | null;
   time_limit_policy: TimeLimitPolicyKey;
   time_limit_affects_evaluation: boolean;
@@ -97,6 +101,8 @@ export function parseCourseSettingsInput(input: {
     learner_level: (LEARNER_LEVELS as readonly string[]).includes(level) ? level : null,
     discussion_style: isDiscussionStyle(input.discussionStyle) ? input.discussionStyle : null,
     ai_member_count: Number.isInteger(count) && count >= 1 && count <= 5 ? count : null,
+    discussion_liveliness:
+      input.discussionLiveliness === "quiet" || input.discussionLiveliness === "lively" ? input.discussionLiveliness : "normal",
     time_limit_minutes: (TIME_LIMIT_OPTIONS as readonly number[]).includes(limit) ? limit : null,
     time_limit_policy: input.timeLimitPolicy === "hard" ? "hard" : "soft",
     // 制限時間が無い授業で、評価への影響だけが立つことは無い

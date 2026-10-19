@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractPartialJsonString } from "./partial-json";
+import { extractPartialJsonString, extractPartialSceneMessages } from "./partial-json";
 
 describe("extractPartialJsonString", () => {
   it("キーがまだ届いていなければnull", () => {
@@ -38,5 +38,55 @@ describe("extractPartialJsonString", () => {
       prev = cur;
     }
     expect(prev).toBe("こんにちは\nお元気ですか");
+  });
+});
+
+describe("extractPartialSceneMessages", () => {
+  const full =
+    '{"messages":[{"speaker":"コウタ","reply":"うーん、{根拠}は?","conceded":false},{"speaker":"ナナ","reply":"私は\\"違う\\"と思う","conceded":false}]}';
+
+  it("messagesがまだ届いていなければ空", () => {
+    expect(extractPartialSceneMessages("")).toEqual([]);
+    expect(extractPartialSceneMessages('{"mess')).toEqual([]);
+    expect(extractPartialSceneMessages('{"messages":[')).toEqual([]);
+  });
+
+  it("最初のメッセージの途中: 話者はまだ確定せず、返答は届いた分だけ", () => {
+    expect(extractPartialSceneMessages('{"messages":[{"speaker":"コウ')).toEqual([
+      { speaker: null, reply: "", complete: false },
+    ]);
+    expect(extractPartialSceneMessages('{"messages":[{"speaker":"コウタ","reply":"うーん')).toEqual([
+      { speaker: "コウタ", reply: "うーん", complete: false },
+    ]);
+  });
+
+  it("全部届くと、メッセージごとの話者・返答・完了が取れる(文字列中の括弧・引用符も壊れない)", () => {
+    expect(extractPartialSceneMessages(full)).toEqual([
+      { speaker: "コウタ", reply: "うーん、{根拠}は?", complete: true },
+      { speaker: "ナナ", reply: '私は"違う"と思う', complete: true },
+    ]);
+  });
+
+  it("2つ目の途中: 1つ目は完了、2つ目は届いた分だけ", () => {
+    const cut = full.slice(0, full.indexOf("私は") + 3);
+    const result = extractPartialSceneMessages(cut);
+    expect(result).toHaveLength(2);
+    expect(result[0].complete).toBe(true);
+    expect(result[1]).toMatchObject({ speaker: "ナナ", complete: false });
+    expect(result[1].reply.startsWith("私は")).toBe(true);
+  });
+
+  it("どの位置で切っても、既に確定したメッセージの内容が後退・変化しない", () => {
+    let prev: ReturnType<typeof extractPartialSceneMessages> = [];
+    for (let n = 1; n <= full.length; n++) {
+      const cur = extractPartialSceneMessages(full.slice(0, n));
+      expect(cur.length).toBeGreaterThanOrEqual(prev.length);
+      prev.forEach((m, k) => {
+        if (m.complete) expect(cur[k]).toEqual(m);
+        else expect(cur[k].reply.startsWith(m.reply)).toBe(true);
+      });
+      prev = cur;
+    }
+    expect(prev).toHaveLength(2);
   });
 });

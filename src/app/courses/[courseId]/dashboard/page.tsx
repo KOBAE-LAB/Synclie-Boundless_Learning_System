@@ -111,7 +111,12 @@ export default async function CourseDashboardPage({
       .select("dialogue_turn_id, logic_structure, evidence_quality, rebuttal_response")
       .in("dialogue_turn_id", turnIds);
     const scoreSum = new Map<string, number>();
+    // 擬似メンバーが複数話した発言には、メンバーごとに評価の行があり(F20の同調の記録のため)、
+    // 点数は同じ値が重複する。平均点は、学習者の発言ごとに1回だけ数える。
+    const countedTurns = new Set<string>();
     for (const evaluation of evaluations ?? []) {
+      if (countedTurns.has(evaluation.dialogue_turn_id)) continue;
+      countedTurns.add(evaluation.dialogue_turn_id);
       const studentId = turnStudentByTurnId.get(evaluation.dialogue_turn_id);
       if (!studentId) continue;
       const stat = stats.get(studentId);

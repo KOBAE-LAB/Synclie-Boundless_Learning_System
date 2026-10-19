@@ -71,6 +71,15 @@ describe("parseCourseSettingsInput", () => {
     ).toBe(false);
   });
 
+  it("発言の活発さは、quiet/livelyだけを受け付け、それ以外は普通", () => {
+    const parse = (v?: string) => parseCourseSettingsInput({ ...base, discussionLiveliness: v }).discussion_liveliness;
+    expect(parse("quiet")).toBe("quiet");
+    expect(parse("lively")).toBe("lively");
+    expect(parse("normal")).toBe("normal");
+    expect(parse("wild")).toBe("normal");
+    expect(parse()).toBe("normal");
+  });
+
   it("AIによるまとめの提案は、明示的にオフにした時だけオフ", () => {
     expect(parseCourseSettingsInput({ ...base, aiCloseSuggestion: false }).ai_close_suggestion).toBe(false);
   });

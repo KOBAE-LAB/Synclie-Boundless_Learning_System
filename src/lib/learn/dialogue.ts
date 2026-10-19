@@ -6,6 +6,7 @@ import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/server";
 import { searchMaterialChunks } from "@/lib/rag/search";
 import { askPersona, askPersonaStream, type PersonaProfile, type ChatTurn } from "@/lib/ai/persona";
+import { askScene, maxMessagesFor, type ScenePersona } from "@/lib/ai/persona-scene";
 import { evaluateArgument } from "@/lib/ai/argument-evaluation";
 import { isEnrolled } from "@/lib/courses/enrollment";
 import { isPersonaMentioned } from "@/lib/persona-mention";
@@ -199,12 +200,29 @@ export function buildBehaviorNotes(rules: ActivePersonaRow["behavior_rules"]): s
 // F05/F12/F13共通: 学習者の発言(テキスト、または手書き・音声の確定分)を保存し、
 // 授業RAG(F02)から関連資料を検索したうえで、使用中のペルソナ(F04)に1回だけ発言させる。
 // sourceはF12(手書き)/F13(音声)用: 確定した発言がどの入力手段由来かを記録する。
+/** 使用中のペルソナの行を、場面の生成(persona-scene.ts)に渡す形にする。 */
+export function toScenePersona(p: ActivePersonaRow): ScenePersona {
+  return {
+    id: p.id,
+    name: p.name,
+    role: p.profile?.role ?? "",
+    tone: p.profile?.tone ?? "",
+    position: p.stance?.position ?? "",
+    goal: p.stance?.goal ?? "",
+    speakingFrequency: p.behavior_rules?.speakingFrequency ?? "普通",
+    teachingDegree: p.behavior_rules?.teachingDegree ?? "問い返すのみ",
+    interventionCondition: p.behavior_rules?.interventionCondition ?? "",
+  };
+}
+
 // 返答をストリーミングで画面に見せたい時(app/api/learn/[courseId]/message/route.ts)に、
 // 処理の途中経過を受け取るための通知。渡さなければ(手書き・音声の確定など)従来どおり、
 // 全部できてから返る。
 export type DialogueEvent =
   | { type: "persona"; id: string; name: string } // 誰が返答するか決まった
-  | { type: "reply"; text: string }; // 返答本文のここまでの全文
+  | { type: "reply"; text: string } // 返答本文のここまでの全文(擬似メンバーが1人の授業)
+  // 擬似メンバーが複数いる授業の「場面」: 話者が確定したメッセージの、ここまでの全部
+  | { type: "scene"; messages: Array<{ personaId: string; name: string; text: string }> };
 
 export async function postStudentMessageAndRespond(
   admin: AdminClient,
@@ -218,7 +236,7 @@ export async function postStudentMessageAndRespond(
   const [{ data: course }, session] = await Promise.all([
     admin
       .from("courses")
-      .select("id, title, objective, learner_level, discussion_style, time_limit_minutes, time_limit_policy, ai_close_suggestion")
+      .select("id, title, objective, learner_level, discussion_style, time_limit_minutes, time_limit_policy, ai_close_suggestion, discussion_liveliness")
       .eq("id", courseId)
       .maybeSingle(),
     getOrCreateSessionRow(admin, courseId, studentId),
@@ -424,47 +442,80 @@ export async function postStudentMessageAndRespond(
     courseContext: buildCourseContext(course),
   };
 
-  let replyText: string;
-  let conceded: boolean | null = null;
+  // 返答: 擬似メンバーが1人なら従来どおり1人が答える。2人以上いる授業では、各メンバーの
+  // 性格・視点・発言頻度から、AIが「誰が口を出すのが自然か」を場面ごとに決め、お互いに
+  // 反応しながら続けて話す(AI同士の議論もある。最後は学習者に話を返す)。
+  interface Reply {
+    personaId: string;
+    text: string;
+    conceded: boolean | null;
+  }
+  const replies: Reply[] = [];
+  const onEvent = options.onEvent;
+  const activeMembers = [persona, ...others];
+
   try {
-    const onEvent = options.onEvent;
-    const result = onEvent
-      ? await askPersonaStream(personaProfile, history, (text) => onEvent({ type: "reply", text }))
-      : await askPersona(personaProfile, history);
-    replyText = result.reply;
-    conceded = result.conceded;
+    if (activeMembers.length >= 2) {
+      const sceneMessages = await askScene(
+        {
+          personas: activeMembers.map(toScenePersona),
+          courseContext: buildCourseContext(course),
+          materialText,
+          turnGuidance: guidanceLines.length > 0 ? guidanceLines.join("\n") : undefined,
+          maxMessages: maxMessagesFor(course.discussion_liveliness),
+          calledOut: activeMembers.filter((p) => isPersonaMentioned(p.name, message)).map((p) => p.name),
+        },
+        history,
+        toScenePersona(persona),
+        onEvent ? (messages) => onEvent({ type: "scene", messages }) : undefined,
+      );
+      for (const m of sceneMessages) replies.push({ personaId: m.personaId, text: m.reply, conceded: m.conceded });
+    } else {
+      const result = onEvent
+        ? await askPersonaStream(personaProfile, history, (text) => onEvent({ type: "reply", text }))
+        : await askPersona(personaProfile, history);
+      replies.push({ personaId: persona.id, text: result.reply, conceded: result.conceded });
+    }
   } catch (err) {
     const detail = err instanceof Error ? err.message : "不明なエラー";
     throw new Error(`擬似メンバーの発言生成に失敗しました: ${detail}`);
   }
+  if (replies.length === 0) {
+    throw new Error("擬似メンバーの発言を生成できませんでした。もう一度お試しください。");
+  }
 
-  const { error: personaTurnError } = await admin.from("dialogue_turns").insert({
-    session_id: sessionId,
-    speaker_type: "persona",
-    persona_id: persona.id,
-    content: replyText,
-  });
-  if (personaTurnError) {
-    throw new Error(`擬似メンバーの発言保存に失敗しました: ${personaTurnError.message}`);
+  // 発言は順番に1つずつ保存する(同じ瞬間の時刻になって、並び順が崩れないように)。
+  // F20: 「根拠なく意見が寄った度合い」を、発言した擬似メンバーごとに記録する。新しい根拠が無い
+  // (hasNewEvidence=false)のにその人が譲歩した(conceded=true)場合を unwarranted_conformity とする。
+  // 論証評価の点数は学習者の発言に対するもので、どのメンバーの行にも同じ値が入る
+  // (集計側は、学習者の発言ごとに1回だけ数える)。
+  for (const reply of replies) {
+    const { error: personaTurnError } = await admin.from("dialogue_turns").insert({
+      session_id: sessionId,
+      speaker_type: "persona",
+      persona_id: reply.personaId,
+      content: reply.text,
+    });
+    if (personaTurnError) {
+      throw new Error(`擬似メンバーの発言保存に失敗しました: ${personaTurnError.message}`);
+    }
+
+    if (argumentScores !== null && hasNewEvidence !== null && reply.conceded !== null) {
+      await admin.from("argument_evaluations").insert({
+        dialogue_turn_id: studentTurn.id,
+        persona_id: reply.personaId,
+        logic_structure: argumentScores.logicStructure,
+        evidence_quality: argumentScores.evidenceQuality,
+        rebuttal_response: argumentScores.rebuttalResponse,
+        has_new_evidence: hasNewEvidence,
+        summary_comment: argumentScores.summaryComment,
+        persona_conceded: reply.conceded,
+        unwarranted_conformity: reply.conceded && !hasNewEvidence,
+      });
+    }
   }
 
   await closeSuggestionTask;
-
-  // F20: 「根拠なく意見が寄った度合い」を記録する。新しい根拠が無い(hasNewEvidence=false)のに
-  // ペルソナが譲歩した(conceded=true)場合を unwarranted_conformity として記録する。
-  if (argumentScores !== null && hasNewEvidence !== null && conceded !== null) {
-    await admin.from("argument_evaluations").insert({
-      dialogue_turn_id: studentTurn.id,
-      persona_id: persona.id,
-      logic_structure: argumentScores.logicStructure,
-      evidence_quality: argumentScores.evidenceQuality,
-      rebuttal_response: argumentScores.rebuttalResponse,
-      has_new_evidence: hasNewEvidence,
-      summary_comment: argumentScores.summaryComment,
-      persona_conceded: conceded,
-      unwarranted_conformity: conceded && !hasNewEvidence,
-    });
-  }
 
   revalidatePath(`/learn/${courseId}`);
 }

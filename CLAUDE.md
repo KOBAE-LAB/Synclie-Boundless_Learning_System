@@ -340,6 +340,23 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
     採用しなかった(F20の計測の精度に直結するため)。**論証評価と返答を同時に実行する案**は、
     評価結果をペルソナへの指示に使う設計(F20)を変えるため、実時間は約3〜5秒縮むが
     採用していない(研究設計の判断が要る)。
+    **擬似メンバーの発話順(2026-10)**: 「必ずAIが1人話したあとに自分が入力するのは不自然。
+    性格や視点から、その人が口を出すのが自然な時に口を出してほしい。AI同士の議論もあってよい」
+    という要望を受け、擬似メンバーが2人以上いる授業では、学習者の発言1回につき必ず1人、という
+    仕組みをやめた。`src/lib/ai/persona-scene.ts`の`askScene`が、**全メンバーの設定(立場・目標・口調・
+    発言頻度・介入の条件)を一度に渡して、短い「場面」(1〜最大4発言)を1回の呼び出しで作らせる**。
+    誰が・何人話すかはAIが決める(自分の視点に関わらない話題では黙ってよい、名前を呼ばれた人は
+    必ず最初に答える、メンバー同士で名前を呼んで議論してよい、最後は必ず学習者に話を返す、
+    既に出た内容を繰り返さない)。上限は授業設定の「擬似メンバーの発言の活発さ」
+    (`courses.discussion_liveliness`: 控えめ2/普通3/活発4発言、`0033`)。ペルソナの設定項目の
+    「発言頻度」「介入の条件」が、初めて実際に発言の判断に効く(それまではプロンプトに入るだけだった)。
+    擬似メンバーが1人の授業は従来どおり1人(`askPersonaStream`)。画面には、話者が確定した発言から
+    順に流れる(`components/chat-composer.tsx`、イベント`scene`、`partial-json.ts`の
+    `extractPartialSceneMessages`)。沈黙時の自動継続(テンポ)も、2人以上なら最大2発言の場面にする
+    (直前の発言を言い換えて繰り返さない指示付き)。**F20は保つ**: 論証評価は学習者の発言ごとに
+    1回・独立に行い、「根拠なく同調したか」は**発言した擬似メンバーごと**に`argument_evaluations`へ
+    1行ずつ記録する(点数は同じ値が重複するため、`courses/[courseId]/dashboard/page.tsx`の平均点は
+    学習者の発言ごとに1回だけ数える)。「根拠が無ければ立場を変えない」原則は全員に適用する。
     **議論の「終わり」(2026-10)**: 「学習の終わりが設定しにくい。AIが判断して議論を中断させたり、
     制限時間を設定したりすることが必要」という指摘を受けて追加した。それまで学習セッションには
     終了の仕組みが無く(`learning_sessions.ended_at`は誰も設定していなかった)、議論は際限なく続いた。
@@ -729,6 +746,7 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
     (参加コード、列デフォルト式で新規作成時に自動生成)と`course_enrollments`
     (course_id+student_idの組、unique制約)を追加。既存の`learning_sessions`から
     参加登録済み扱いのバックフィルも行う(詳細は8章の`learn/`の説明を参照)
+  - `0033_discussion_liveliness.sql` — 擬似メンバーの発言の活発さ(`courses.discussion_liveliness`)
   - `0032_session_end.sql` — 議論の「終わり」。`courses.time_limit_minutes`/`time_limit_policy`/
     `time_limit_affects_evaluation`/`ai_close_suggestion`、`learning_sessions.end_reason`/
     `closing_summary`/`close_suggested_at`/`close_suggestion_reason`/`close_suggest_after_turn`
