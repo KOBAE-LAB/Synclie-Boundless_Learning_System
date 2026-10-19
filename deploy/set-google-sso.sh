@@ -11,8 +11,15 @@ read -r -p "Google クライアントID: " GOOGLE_ID
 read -r -s -p "Google クライアントシークレット(入力は表示されません): " GOOGLE_SECRET
 echo
 
-if [ -z "$GOOGLE_ID" ] || [ -z "$GOOGLE_SECRET" ]; then
-  echo "どちらも入力してください。" >&2
+# 取り違え(メールアドレスやパスワードを入れてしまう等)を防ぐための形式チェック。
+# Google Cloud Console の「OAuth クライアント」に表示される値は次の形をしている。
+if ! [[ "$GOOGLE_ID" =~ ^[0-9]+-[a-z0-9]+\.apps\.googleusercontent\.com$ ]]; then
+  echo "クライアントIDの形式が違います(例: 123456789012-abcdef.apps.googleusercontent.com)。" >&2
+  echo "Google Cloud Console の「認証情報」で作ったOAuthクライアントの値を入れてください。" >&2
+  exit 1
+fi
+if ! [[ "$GOOGLE_SECRET" =~ ^GOCSPX- ]]; then
+  echo "クライアントシークレットは「GOCSPX-」で始まる値です。違う値(パスワード等)は入れないでください。" >&2
   exit 1
 fi
 

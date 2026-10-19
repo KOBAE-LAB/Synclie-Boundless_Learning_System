@@ -71,9 +71,11 @@
 - **F22 SSO対応**(必須/段階2): Microsoft Entra ID / Google Workspace for Education。
   生徒のSSO subject idは、進級後もポートフォリオを引き継ぐための永続キーとして使う。
   低学年向けにはQRコード・絵柄パスワード等の代替ログイン手段が必要(要件定義書12章の未解決課題)。
-  コード側は実装済みだが、実際のOAuthアプリ登録(Azure Portal / Google Cloud Console、
-  人手が必要)はまだ行っていないため、ブラウザでの実ログインは未検証。詳細は
-  `src/auth.ts`・`src/lib/auth/sso.ts`の説明を参照
+  **Googleは本番(さくらVPS)で登録・実ログインまで確認済み**(2026-10-19、管理者アカウントが
+  Googleに統合された)。**Microsoft Entra ID(長崎大)は未申請で、実ログインは未検証**
+  (申請が済んだら`AUTH_MICROSOFT_ENTRA_ID_ID`/`_SECRET`/`_ISSUER`を本番の`.env.local`に設定する)。
+  本番の設定値は`deploy/set-google-sso.sh`で書き込む(シークレットを画面・履歴・チャットに
+  残さないため)。詳細は`src/auth.ts`・`src/lib/auth/sso.ts`の説明を参照
 - **F23 生徒ダッシュボード**(必須/段階2): 学習状況確認 + 学習計画。実装済み。
   詳細は8章の`src/app/learn/dashboard/`の説明を参照
 - **F24 討論のAIジャッジ・評価**(必須/段階2): 論理構成/根拠の質/反論への応答で評価。
@@ -529,10 +531,10 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
   emailクレームは確認済みの保証が無いため統合しない)。Microsoftは`AUTH_MICROSOFT_ENTRA_ID_ID`と
   `..._ISSUER`の両方が揃った時だけ有効(IDだけだとAuth.jsの設定エラーで認証全体が壊れる)。
   ログイン画面のボタンには各社公式のロゴ(`src/components/provider-logos.tsx`)を使い、
-  SSOで入れなかった理由は`?error=`で表示する。**Googleの実ログインは本番(さくらVPS)で設定済み
-  かどうかを`.env.local`で確認すること。Microsoft(長崎大)は未申請で、実ログインは未検証**
-  (旧メモ:実際のOAuthアプリ登録はまだ行っておらず、ブラウザでの実ログインは未検証)
-  (Credentialsログインへの影響が無いことと、`next build`が通ることは確認済み)
+  SSOで入れなかった理由は`?error=`で表示する。
+  Googleでメール統合された既存アカウントはパスワードが無効になり、以後Googleだけで入る
+  (本番の管理者`kobae.lab@gmail.com`が該当。Googleが使えなくなった時に備え、必要なら
+  `scripts/dev/create-user.mjs`でパスワードを再設定できる)
 - `src/lib/lti/` — F17(LMS連携、LTI 1.3)。単一のLMSプラットフォームを前提にした
   最小構成(複数LMSに対応する場合は`config.ts`をDBテーブルに置き換えること)。
   対応する環境変数(`LTI_PLATFORM_*` / `LTI_TOOL_*`)が揃っていない限り、
