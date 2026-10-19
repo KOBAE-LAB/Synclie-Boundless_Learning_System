@@ -1,4 +1,4 @@
-import { auth } from "@/auth";
+import { getEffectiveStudent } from "@/lib/auth/session";
 import { hasConsent } from "@/lib/consent";
 import { createAdminClient } from "@/lib/supabase/server";
 import { postStudentMessageAndRespond, type DialogueEvent } from "@/lib/learn/dialogue";
@@ -18,9 +18,9 @@ function json(status: number, body: Record<string, unknown>) {
 export async function POST(request: Request, { params }: { params: Promise<{ courseId: string }> }) {
   const { courseId } = await params;
 
-  const session = await auth();
-  const user = session?.user as { id?: string; role?: string } | undefined;
-  if (!user?.id || user.role !== "student") {
+  // 学習者本人、または「学習者として表示」中の管理者(テスト学習者)だけが使える。
+  const user = await getEffectiveStudent();
+  if (!user) {
     return json(401, { error: "ログインしてください。" });
   }
 

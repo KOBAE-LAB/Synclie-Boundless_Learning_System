@@ -318,6 +318,10 @@ async function buildCourseActivityLog(
     .select("student_id")
     .is("withdrawn_at", null);
   const consentedIds = new Set((consented ?? []).map((c) => c.student_id));
+  // 管理者の動作確認用のテスト学習者(「学習者として表示」)のデータは、実際の学習者由来の
+  // コーパスに混ぜない。
+  const { data: testStudents } = await admin.from("profiles").select("id").not("test_owner_id", "is", null);
+  for (const t of testStudents ?? []) consentedIds.delete(t.id);
 
   const studentIds = new Set<string>();
   const lines: string[] = [];

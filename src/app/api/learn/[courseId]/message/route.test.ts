@@ -2,17 +2,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // 発言送信API(ストリーミング)の権限境界と、イベントの流れを検証する。
 // 認証・同意・DB・AI(postStudentMessageAndRespond)は、いずれも実物には繋がず偽装する。
-vi.mock("@/auth", () => ({ auth: vi.fn() }));
+vi.mock("@/lib/auth/session", () => ({ getEffectiveStudent: vi.fn() }));
 vi.mock("@/lib/consent", () => ({ hasConsent: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({ createAdminClient: vi.fn(() => ({})) }));
 vi.mock("@/lib/learn/dialogue", () => ({ postStudentMessageAndRespond: vi.fn() }));
 
-const { auth } = await import("@/auth");
+const { getEffectiveStudent } = await import("@/lib/auth/session");
 const { hasConsent } = await import("@/lib/consent");
 const { postStudentMessageAndRespond } = await import("@/lib/learn/dialogue");
 const { POST } = await import("./route");
 
-const authMock = auth as unknown as ReturnType<typeof vi.fn>;
+const authMock = vi.mocked(getEffectiveStudent);
 const hasConsentMock = vi.mocked(hasConsent);
 const respondMock = vi.mocked(postStudentMessageAndRespond);
 
@@ -37,7 +37,7 @@ beforeEach(() => {
   authMock.mockReset();
   hasConsentMock.mockReset();
   respondMock.mockReset();
-  authMock.mockResolvedValue({ user: { id: "student-1", role: "student" } });
+  authMock.mockResolvedValue({ id: "student-1", role: "student" });
   hasConsentMock.mockResolvedValue(true);
 });
 
@@ -49,8 +49,8 @@ describe("POST /api/learn/[courseId]/message", () => {
     expect(respondMock).not.toHaveBeenCalled();
   });
 
-  it("学習者以外(教師)は401", async () => {
-    authMock.mockResolvedValue({ user: { id: "teacher-1", role: "teacher" } });
+  it("学習者として扱えない人(教師など。getEffectiveStudentがnull)は401", async () => {
+    authMock.mockResolvedValue(null);
     const response = await POST(request({ message: "こんにちは" }), params);
     expect(response.status).toBe(401);
     expect(respondMock).not.toHaveBeenCalled();

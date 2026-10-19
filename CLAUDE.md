@@ -238,6 +238,19 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
     別ロールではなく教師アカウントに付く属性(`profiles.is_admin`)。最初の管理者は
     `scripts/dev/create-user.mjs --role teacher --admin true`で作る。教師の授業一覧
     (`courses/page.tsx`)に、管理者にだけ承認待ち件数つきのリンクを出す
+  - **管理者の「学習者として表示」(動作確認用)**: 管理者(教師アカウント)は`/learn`に入れず、
+    学習者の画面を自分で確かめられなかったため追加した。授業の管理画面(`courses/[courseId]/`)の
+    ボタンから`startStudentViewAction`(管理者かつ授業の所有者のみ)で、管理者ごとに専用の
+    「テスト学習者」(`profiles.test_owner_id`、パスワード・メール無し=直接ログイン不可。
+    `src/lib/auth/view-as.ts`)をその授業の受講者(承認済み)にし、切り替え中の印の
+    Cookie(`synclie_view_as`、httpOnly、8時間)を付ける。`requireRole("student")`と
+    `getEffectiveStudent()`(`src/lib/auth/session.ts`)が、**Cookieを信用せず、毎回
+    本人が管理者であることをDBで確かめた上で**テスト学習者として扱う(管理者以外が
+    Cookieを偽装しても無効。テストあり)。切り替え中は全ページ上部にバナーを出し、
+    「管理者に戻る」(`app/view-as-actions.ts`)かログアウトで終わる。発言・提出はテスト学習者の
+    データとして記録され、F10(学習進化型ペルソナ)のコーパスには含めない。
+    学習者のAPI(`app/api/learn/[courseId]/message/route.ts`)も同じ`getEffectiveStudent()`を使う。
+    一般の教師には使わせていない(他人として画面を見られる機能のため、管理者だけ)
   - `src/app/account/password/` — ログイン中の本人がパスワードを変える(現在のパスワードが必須)。
     教師が直接登録した学習者の初期パスワードを本人に変えてもらうために置いた。
     ヘッダー(`layout.tsx`)に常にリンクがある。SSO/LTIのアカウントはパスワードを持たないため変更不可
@@ -676,6 +689,8 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
     (参加コード、列デフォルト式で新規作成時に自動生成)と`course_enrollments`
     (course_id+student_idの組、unique制約)を追加。既存の`learning_sessions`から
     参加登録済み扱いのバックフィルも行う(詳細は8章の`learn/`の説明を参照)
+  - `0030_test_student.sql` — 管理者の「学習者として表示」用。`profiles.test_owner_id`
+    (その管理者専用のテスト学習者、1人につき1つ)を追加(詳細は8章の`signup/`の近くの説明を参照)
   - `0029_signup_approval.sql` — 自己登録の承認制。`profiles.approval_status`(`pending`/
     `approved`/`rejected`、既定`approved`)・`profiles.is_admin`、`course_enrollments.status`
     (`pending`/`approved`、既存の登録は承認済み扱い)を追加(詳細は8章の`signup/`の説明を参照)

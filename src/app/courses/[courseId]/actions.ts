@@ -1,7 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireRole } from "@/lib/auth/session";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { requireAdmin, requireRole, VIEW_AS_COOKIE } from "@/lib/auth/session";
+import { ensureTestStudentEnrolled } from "@/lib/auth/view-as";
 import { createAdminClient } from "@/lib/supabase/server";
 import { generateMaterialRag } from "@/lib/rag/generate";
 import { assertOwnsCourse } from "@/lib/courses/ownership";
@@ -215,6 +218,26 @@ export async function removeEnrollmentAction(courseId: string, studentId: string
   }
 
   revalidatePath(`/courses/${courseId}`);
+}
+
+// 管理者だけの動作確認機能: 自分の授業を「学習者として」開く。専用のテスト学習者
+// (src/lib/auth/view-as.ts)をこの授業の受講者にし、切り替え中の印のCookieを付けて、
+// 学習者の画面へ移る。管理者でなければ、授業の所有者でなければ、何も起きない。
+export async function startStudentViewAction(courseId: string) {
+  const { user } = await requireAdmin();
+  const admin = createAdminClient();
+  await assertOwnsCourse(admin, courseId, user.id);
+  await ensureTestStudentEnrolled(admin, user.id, courseId);
+
+  const cookieStore = await cookies();
+  cookieStore.set(VIEW_AS_COOKIE, "student", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 60 * 60 * 8, // 8時間で自動的に終わる
+  });
+  redirect(`/learn/${courseId}`);
 }
 
 // F01拡張(受講登録・承認制): 学習者が授業コードで申請した参加(status='pending')を承認する。

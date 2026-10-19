@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireRole } from "@/lib/auth/session";
+import { isAdmin, requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { SubmitButton } from "@/components/submit-button";
 import {
@@ -11,6 +11,7 @@ import {
   unshareMaterialAction,
   updateAutoDiscussionSettingsAction,
   regenerateJoinCodeAction,
+  startStudentViewAction,
   removeEnrollmentAction,
   approveEnrollmentAction,
   registerStudentAction,
@@ -103,6 +104,8 @@ export default async function CourseDetailPage({
   const boundUpdateAutoDiscussionAction = updateAutoDiscussionSettingsAction.bind(null, courseId);
   const boundRegenerateJoinCodeAction = regenerateJoinCodeAction.bind(null, courseId);
   const boundRegisterStudentAction = registerStudentAction.bind(null, courseId);
+  const boundStartStudentViewAction = startStudentViewAction.bind(null, courseId);
+  const canViewAsStudent = await isAdmin(admin, user.id);
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
@@ -123,6 +126,13 @@ export default async function CourseDetailPage({
         ペルソナ設定(F03/F04)→
       </Link>
       <br />
+      {canViewAsStudent && (
+        <form action={boundStartStudentViewAction} className="mt-1">
+          <button type="submit" className="text-sm text-ink-muted hover:underline">
+            学習者として表示(動作確認・管理者のみ)→
+          </button>
+        </form>
+      )}
       <Link
         href={`/courses/${courseId}/criteria`}
         className="mt-1 inline-block text-sm text-ink-muted hover:underline"

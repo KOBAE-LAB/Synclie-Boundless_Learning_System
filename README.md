@@ -62,6 +62,19 @@ sudo systemctl restart synclie-bls      # VPS上で(sudoのパスワードが要
 
 DBマイグレーションはVPSではなく手元から `supabase db push` で適用する。
 
+**本番ビルドに必要な `.env.production.local`(git管理外)**: `NEXT_PUBLIC_*`(SupabaseのURL・
+anonキー)はビルド時にコードへ埋め込まれる。手元の`.env.local`は開発用のSupabaseを指しているため、
+本番のビルドは、**本番を指す値を書いた`.env.production.local`**で上書きする(Next.jsは
+`next build`時にこのファイルを`.env.local`より優先して読む)。`deploy/deploy.sh`は、このファイルが
+無ければビルドを始めず、ビルド結果に本番のURLが入っていなければ送信を中止する
+(これを忘れて開発用のURL+本番の鍵という組み合わせで本番に出し、すべてのDB操作が
+「Invalid API key」で失敗した事故が、2026-10-20に実際に起きた)。内容は次の2行:
+
+```
+NEXT_PUBLIC_SUPABASE_URL=https://<本番のproject-ref>.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<本番のanonキー>
+```
+
 注意点:
 
 - **Supabaseは開発用と本番用に分けている**(2026-10-20に分離)。本番は「【KOBAE-LAB】Synclie -

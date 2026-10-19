@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 
 /**
@@ -37,6 +37,13 @@ export function ChatComposer({
   personaAvatars: Record<string, string>;
 }) {
   const router = useRouter();
+  // ページの読み込み(ハイドレーション)が終わるまでは送信させない。終わる前にフォームが
+  // 普通に送信されると、発言の内容がURL(?message=...)に載って履歴やログに残ってしまうため。
+  const hydrated = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const baseCount = useRef(turnCount);
 
@@ -130,12 +137,13 @@ export function ChatComposer({
     }
   }
 
-  const busy = phase !== "idle";
+  const busy = phase !== "idle" || !hydrated;
   const avatarPath = persona ? personaAvatars[persona.id] : undefined;
 
   return (
     <div className="mt-6">
       <form
+        method="post"
         onSubmit={(event) => {
           event.preventDefault();
           void send();
@@ -166,7 +174,7 @@ export function ChatComposer({
             aria-busy={busy}
             className="shrink-0 self-end rounded-md bg-accent-fill px-4 py-2 text-sm font-medium text-white hover:bg-accent-fill-hover disabled:opacity-50"
           >
-            {busy ? "送信中…" : "送信"}
+            {phase !== "idle" ? "送信中…" : "送信"}
           </button>
         </div>
       </form>

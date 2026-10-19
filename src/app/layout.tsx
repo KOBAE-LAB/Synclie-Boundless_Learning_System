@@ -4,6 +4,8 @@ import Link from "next/link";
 import "./globals.css";
 import { auth } from "@/auth";
 import { logoutAction } from "./logout-action";
+import { stopStudentViewAction } from "./view-as-actions";
+import { isViewingAsStudent } from "@/lib/auth/session";
 
 // 日本語UIが中心のため、ビルド時にGoogle Fontsを取得する next/font/google ではなく
 // OSの標準フォント(日本語グリフを含む)を使う。オフライン/プロキシ環境でもビルドが安定する。
@@ -39,10 +41,28 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   const user = session?.user as
     | { name?: string | null; email?: string | null; role?: string }
     | undefined;
+  // 管理者が「学習者として表示」(動作確認)中かどうか。中は、全ページの上部に常に表示する。
+  const viewingAsStudent = user?.role === "teacher" ? await isViewingAsStudent() : false;
 
   return (
     <html lang="ja" className="h-full antialiased">
       <body className="min-h-full flex flex-col font-sans">
+        {viewingAsStudent && (
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-warn bg-warn-soft px-4 py-2 text-sm text-warn">
+            <span>
+              <strong>学習者として表示中</strong>(テスト学習者としての動作確認です。ここでの発言・提出は、
+              あなた自身のデータとは別に記録されます)
+            </span>
+            <form action={stopStudentViewAction}>
+              <button
+                type="submit"
+                className="rounded-md border border-warn px-2.5 py-1 text-xs font-medium hover:bg-surface"
+              >
+                管理者に戻る
+              </button>
+            </form>
+          </div>
+        )}
         {user && (
           <header className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-2">
             <Link
