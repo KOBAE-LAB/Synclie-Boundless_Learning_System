@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { assertOwnsSeries, fiscalYearOfDate } from "@/lib/courses/series";
+import { copyCriteriaBetweenLessons, copyPersonasBetweenLessons } from "@/lib/courses/lesson-copy";
 import { carryOverSeries, deleteSeriesIfEmpty, forceDeleteSeries } from "@/lib/courses/series-admin";
 import { hashPassword } from "@/lib/auth/password";
 import { normalizeEmail, validateSignupFields } from "@/lib/auth/signup-validation";
@@ -41,6 +42,8 @@ export async function createLessonAction(seriesId: string, formData: FormData) {
   const lessonNo = Math.max(0, ...(existing ?? []).map((c) => c.lesson_no)) + 1;
 
   const { data: series } = await admin.from("course_series").select("subject").eq("id", seriesId).maybeSingle();
+  // 前の回(いちばん大きい回)の擬似メンバー・評価の観点を引き継ぐ(既定でオン。初回は何もしない)。
+  const previous = [...(existing ?? [])].sort((a, b) => b.lesson_no - a.lesson_no)[0];
   const { data, error } = await admin
     .from("courses")
     .insert({
@@ -55,6 +58,19 @@ export async function createLessonAction(seriesId: string, formData: FormData) {
     .single();
   if (error) {
     throw new Error(`授業回の作成に失敗しました: ${error.message}`);
+  }
+
+  if (formData.get("inherit") === "on" && previous) {
+    const { data: prevCourse } = await admin
+      .from("courses")
+      .select("id")
+      .eq("series_id", seriesId)
+      .eq("lesson_no", previous.lesson_no)
+      .maybeSingle();
+    if (prevCourse) {
+      await copyPersonasBetweenLessons(admin, prevCourse.id, data.id);
+      await copyCriteriaBetweenLessons(admin, prevCourse.id, data.id);
+    }
   }
 
   revalidatePath(`/series/${seriesId}`);

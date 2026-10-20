@@ -154,6 +154,12 @@ export default async function SeriesPage({ params }: { params: Promise<{ seriesI
               <option value="group">グループワーク(対立するペルソナと議論)</option>
               <option value="solo_study">独習(「まだ分からない仲間」役のペルソナに説明する)</option>
             </select>
+            {lessonCount > 0 && (
+              <label className="flex items-start gap-2 text-sm text-ink-muted">
+                <input type="checkbox" name="inherit" defaultChecked className="mt-1" />
+                <span>前の回の擬似メンバーと評価の観点を引き継ぐ(同じメンバーで続けられます)</span>
+              </label>
+            )}
             <SubmitButton pendingText="作成中…" className="rounded-md bg-accent-fill px-4 py-2 text-sm font-medium text-white hover:bg-accent-fill-hover disabled:opacity-50">
               作成する
             </SubmitButton>

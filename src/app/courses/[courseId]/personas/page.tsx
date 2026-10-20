@@ -19,7 +19,9 @@ import {
 } from "./actions";
 import { PersonaForm } from "./persona-form";
 import { assignPersonaTones, toneClass } from "@/lib/persona-tones";
-import { loadLessonCrumbs } from "@/lib/courses/series";
+import { loadLessonCrumbs, loadSiblingLessons } from "@/lib/courses/series";
+import { LessonCopyForm } from "@/components/lesson-copy-form";
+import { copyPersonasFromLessonAction } from "../lesson-copy-actions";
 import { Breadcrumbs, BackLink } from "@/components/breadcrumbs";
 
 type AvatarStatus = "pending" | "done" | "failed";
@@ -77,10 +79,13 @@ const STATUS_STYLES: Record<PersonaStatus, string> = {
 
 export default async function PersonasPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ courseId: string }>;
+  searchParams: Promise<{ copied?: string; skipped?: string }>;
 }) {
   const { courseId } = await params;
+  const { copied: copiedParam, skipped: skippedParam } = await searchParams;
   const { user } = await requireRole("teacher");
 
   const admin = createAdminClient();
@@ -120,6 +125,7 @@ export default async function PersonasPage({
   const personaTones = assignPersonaTones(
     [...rows].sort((a, b) => (a.created_at ?? "").localeCompare(b.created_at ?? "")).map((p) => p.id),
   );
+  const siblingLessons = await loadSiblingLessons(admin, courseId);
   const boundCreateAction = createPersonaAction.bind(null, courseId);
   const boundGenerateEvolvedAction = generateEvolvedPersonasAction.bind(null, courseId);
   const boundRecommendDraftsAction = recommendPersonaDraftsAction.bind(null, courseId);
@@ -153,6 +159,15 @@ export default async function PersonasPage({
               : `(使用中が目標より${activeCount - targetCount}人多くなっています)`}
         </p>
       )}
+
+      <LessonCopyForm
+        lessons={siblingLessons}
+        action={copyPersonasFromLessonAction.bind(null, courseId)}
+        title="前の回から擬似メンバーを複製する"
+        description="同じシリーズの別の授業回の擬似メンバーを、この回にそのまま複製します(状態・アバターも同じ。同じ名前がある場合は複製しません)。"
+        copied={copiedParam}
+        skipped={skippedParam}
+      />
 
       <div className="mt-8 rounded-lg border border-line p-5">
         <h2 className="text-sm font-medium text-ink">AIにペルソナ案を作ってもらう</h2>

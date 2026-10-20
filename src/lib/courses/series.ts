@@ -103,3 +103,25 @@ export async function isLessonArchived(admin: AdminClient, courseId: string): Pr
 }
 
 export const ARCHIVED_MESSAGE = "この授業シリーズは終了しています(記録の閲覧のみ)。新しい発言や提出はできません。";
+
+export interface SiblingLessons {
+  siblings: { id: string; lessonNo: number; title: string }[];
+  /** 既定の複製元: この回より前で、いちばん新しい回(無ければ、いちばん近い別の回) */
+  defaultFromId: string | null;
+}
+
+/** 同じシリーズの、ほかの授業回(複製元の候補)。 */
+export async function loadSiblingLessons(admin: AdminClient, courseId: string): Promise<SiblingLessons> {
+  const { data: current } = await admin.from("courses").select("series_id, lesson_no").eq("id", courseId).maybeSingle();
+  if (!current) return { siblings: [], defaultFromId: null };
+  const { data } = await admin
+    .from("courses")
+    .select("id, lesson_no, title")
+    .eq("series_id", current.series_id)
+    .neq("id", courseId)
+    .order("lesson_no", { ascending: true });
+  const siblings = (data ?? []).map((c) => ({ id: c.id, lessonNo: c.lesson_no, title: c.title }));
+  const earlier = siblings.filter((s) => s.lessonNo < current.lesson_no);
+  const defaultFromId = (earlier[earlier.length - 1] ?? siblings[0])?.id ?? null;
+  return { siblings, defaultFromId };
+}

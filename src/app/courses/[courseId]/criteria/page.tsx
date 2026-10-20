@@ -3,7 +3,9 @@ import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { createCriterionAction, deleteCriterionAction } from "./actions";
-import { loadLessonCrumbs } from "@/lib/courses/series";
+import { loadLessonCrumbs, loadSiblingLessons } from "@/lib/courses/series";
+import { LessonCopyForm } from "@/components/lesson-copy-form";
+import { copyCriteriaFromLessonAction } from "../lesson-copy-actions";
 import { Breadcrumbs, BackLink } from "@/components/breadcrumbs";
 
 interface CriterionRow {
@@ -14,10 +16,13 @@ interface CriterionRow {
 
 export default async function EvaluationCriteriaPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ courseId: string }>;
+  searchParams: Promise<{ copied?: string; skipped?: string }>;
 }) {
   const { courseId } = await params;
+  const { copied: copiedParam, skipped: skippedParam } = await searchParams;
   const { user } = await requireRole("teacher");
 
   const admin = createAdminClient();
@@ -37,6 +42,7 @@ export default async function EvaluationCriteriaPage({
     .eq("course_id", courseId)
     .order("position", { ascending: true });
 
+  const siblingLessons = await loadSiblingLessons(admin, courseId);
   const boundCreateAction = createCriterionAction.bind(null, courseId);
 
   return (
@@ -49,6 +55,15 @@ export default async function EvaluationCriteriaPage({
         学習者の提出物に対するAIフィードバックの観点を設定する。
         例: 根拠の明確さ、多面的な見方、資料の活用。点数ではなく、観点ごとの助言を返す。
       </p>
+
+      <LessonCopyForm
+        lessons={siblingLessons}
+        action={copyCriteriaFromLessonAction.bind(null, courseId)}
+        title="前の回から評価の観点を複製する"
+        description="同じシリーズの別の授業回の観点を、この回に複製します(同じ名前の観点がある場合は複製しません)。"
+        copied={copiedParam}
+        skipped={skippedParam}
+      />
 
       <div className="mt-8 rounded-lg border border-line p-5">
         <h2 className="mb-4 text-sm font-medium text-ink">
