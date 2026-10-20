@@ -12,6 +12,7 @@ const stat = (studentId: string, over: Partial<StudentStat> = {}): StudentStat =
   axisAvg: { logic: 2, evidence: 1.5, rebuttal: 2.5 },
   strengths: null,
   challenges: "根拠が弱い",
+  stepsDone: 0,
   ...over,
 });
 

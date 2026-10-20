@@ -11,6 +11,7 @@ import { evaluateArgument } from "@/lib/ai/argument-evaluation";
 import { isEnrolled } from "@/lib/courses/enrollment";
 import { isPersonaMentioned } from "@/lib/persona-mention";
 import { buildCourseContext, reasoningEffortFor } from "@/lib/courses/settings";
+import { assertDiscussionAllowed, hasLaterOutput, stepContextFor, withStepContext } from "@/lib/flow/load";
 import { judgeDiscussionState } from "@/lib/ai/discussion-wrapup";
 import { THINKING_DEPTH_GUIDANCE, normalizeThinkingDepth } from "@/lib/persona-traits";
 import { getTimeStatus, shouldJudgeDiscussionState } from "@/lib/learn/session-end";
@@ -251,6 +252,12 @@ export async function postStudentMessageAndRespond(
   }
   const sessionId = session.id;
 
+  // 学習の流れ(インプット/アウトプット)。順番を強制する授業では、インプットの間は議論に入れない。
+  const flow = await assertDiscussionAllowed(admin, courseId, studentId);
+  const stepContext = stepContextFor(flow);
+  // この先にアウトプットが残っているうちは、AIが「まとめましょう」と議論の終了を急がない(時間切れは別)。
+  const moreOutputsAhead = hasLaterOutput(flow.steps, flow.doneIds);
+
   // 制限時間(教師の設定が「超過したら発言を止める」の時だけ、ここで止める)。
   const timeStatus = getTimeStatus({
     startedAt: session.started_at,
@@ -379,7 +386,7 @@ export async function postStudentMessageAndRespond(
       !shouldJudgeDiscussionState({
         studentTurnCount: studentTurnCount ?? 0,
         suggestAfterTurn: session.close_suggest_after_turn,
-        aiCloseSuggestionEnabled: course.ai_close_suggestion !== false,
+        aiCloseSuggestionEnabled: course.ai_close_suggestion !== false && !moreOutputsAhead,
         alreadySuggested: false,
         ended: false,
       })
@@ -444,7 +451,7 @@ export async function postStudentMessageAndRespond(
     behaviorNotes: buildBehaviorNotes(persona.behavior_rules),
     turnGuidance: guidanceLines.length > 0 ? guidanceLines.join("\n") : undefined,
     otherParticipants,
-    courseContext: buildCourseContext(course),
+    courseContext: withStepContext(buildCourseContext(course), stepContext),
   };
 
   // 返答: 擬似メンバーが1人なら従来どおり1人が答える。2人以上いる授業では、各メンバーの
@@ -465,7 +472,7 @@ export async function postStudentMessageAndRespond(
       const sceneMessages = await askScene(
         {
           personas: activeMembers.map(toScenePersona),
-          courseContext: buildCourseContext(course),
+          courseContext: withStepContext(buildCourseContext(course), stepContext),
           materialText,
           turnGuidance: guidanceLines.length > 0 ? guidanceLines.join("\n") : undefined,
           maxMessages: maxMessagesFor(course.discussion_liveliness),

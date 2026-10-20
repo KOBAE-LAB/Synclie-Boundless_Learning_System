@@ -13,6 +13,8 @@ export interface StudentStat {
   axisAvg: { logic: number; evidence: number; rebuttal: number } | null;
   strengths: string | null;
   challenges: string | null;
+  /** 学習の流れ(ステップ)を終えた数。ステップが無い授業では 0 */
+  stepsDone: number;
 }
 
 export interface CourseStats {
@@ -20,6 +22,8 @@ export interface CourseStats {
   names: Map<string, string>;
   /** この授業の学習者の発言(dialogue_turns)のid。擬似メンバーの挙動の集計に使う */
   turnIds: string[];
+  /** この授業のステップ数(0なら学習の流れは未設定) */
+  stepsTotal: number;
 }
 
 /**
@@ -47,6 +51,7 @@ export async function loadCourseStats(admin: AdminClient, courseId: string): Pro
       axisAvg: null,
       strengths: null,
       challenges: null,
+      stepsDone: 0,
     });
   }
   const bumpLastActivity = (studentId: string, at: string) => {
@@ -134,6 +139,21 @@ export async function loadCourseStats(admin: AdminClient, courseId: string): Pro
     }
   }
 
+  // 学習の流れ(インプット/アウトプット)の進み具合。
+  const { data: stepRows } = await admin.from("course_steps").select("id").eq("course_id", courseId);
+  const stepsTotal = stepRows?.length ?? 0;
+  if (stepsTotal > 0 && studentIds.length > 0) {
+    const { data: progress } = await admin
+      .from("step_progress")
+      .select("student_id")
+      .in("step_id", (stepRows ?? []).map((r) => r.id))
+      .in("student_id", studentIds);
+    for (const row of progress ?? []) {
+      const stat = stats.get(row.student_id);
+      if (stat) stat.stepsDone += 1;
+    }
+  }
+
   const names = new Map<string, string>();
   if (studentIds.length > 0) {
     const { data: profileRows } = await admin.from("profiles").select("id, display_name, email").in("id", studentIds);
@@ -145,5 +165,5 @@ export async function loadCourseStats(admin: AdminClient, courseId: string): Pro
   const statList = studentIds
     .map((id) => stats.get(id)!)
     .sort((a, b) => (b.lastActivityAt ?? "").localeCompare(a.lastActivityAt ?? ""));
-  return { stats: statList, names, turnIds };
+  return { stats: statList, names, turnIds, stepsTotal };
 }

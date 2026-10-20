@@ -12,6 +12,8 @@ import { transcribeAudio } from "@/lib/ai/audio";
 import { AUTO_CONTINUE_CAP } from "@/lib/discussion-tempo";
 import { COOLDOWN_AFTER_DISMISS_TURNS } from "@/lib/learn/session-end";
 import { buildCourseContext, reasoningEffortFor } from "@/lib/courses/settings";
+import { loadLearnerFlow, stepContextFor, withStepContext } from "@/lib/flow/load";
+import { discussionGate } from "@/lib/flow/steps";
 import { askScene } from "@/lib/ai/persona-scene";
 import {
   HISTORY_LIMIT,
@@ -41,6 +43,10 @@ export async function autoContinueDiscussionAction(courseId: string) {
     .limit(1)
     .maybeSingle();
   if (!session) return;
+
+  // 学習の流れ: インプットの間は、擬似メンバー同士の自動継続も行わない。
+  const flow = await loadLearnerFlow(admin, courseId, user.id);
+  if (!discussionGate(flow.steps, flow.doneIds, flow.inOrder).allowed) return;
 
   const { data: course } = await admin
     .from("courses")
@@ -119,7 +125,7 @@ export async function autoContinueDiscussionAction(courseId: string) {
       "学習者からの新しい発言はまだ無い。少し沈黙が続いたため、あなたから会話を継続する番になった。" +
       "他の参加者の発言があればそれに応答・反論してよいし、学習者に短く問いかけてもよい。",
     otherParticipants,
-    courseContext: buildCourseContext(course),
+    courseContext: withStepContext(buildCourseContext(course), stepContextFor(flow)),
   };
 
   // 擬似メンバーが2人以上いる授業では、沈黙時の継続も、メンバー同士が自然にやり取りする
@@ -132,7 +138,7 @@ export async function autoContinueDiscussionAction(courseId: string) {
       const messages = await askScene(
         {
           personas: members.map(toScenePersona),
-          courseContext: buildCourseContext(course),
+          courseContext: withStepContext(buildCourseContext(course), stepContextFor(flow)),
           materialText,
           turnGuidance:
             "学習者からの新しい発言はまだ無い。少し沈黙が続いたため、擬似メンバーのほうから会話を続ける。" +

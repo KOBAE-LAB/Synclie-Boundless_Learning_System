@@ -46,7 +46,7 @@ export default async function CourseDashboardPage({
     notFound();
   }
 
-  const { stats: statList, names: studentNames, turnIds } = await loadCourseStats(admin, courseId);
+  const { stats: statList, names: studentNames, turnIds, stepsTotal } = await loadCourseStats(admin, courseId);
 
   const { data: guidanceRow } = await admin
     .from("teacher_guidance")
@@ -189,7 +189,7 @@ export default async function CourseDashboardPage({
                 </Link>
               </div>
               <p className="mt-1 text-xs text-ink-muted">
-                発言{stat.turnCount}件・提出{stat.submissionCount}件
+                {stepsTotal > 0 && `学習の流れ${stat.stepsDone}/${stepsTotal}ステップ・`}発言{stat.turnCount}件・提出{stat.submissionCount}件
                 {stat.avgScore !== null && `・論証評価平均${stat.avgScore.toFixed(1)}点`}
                 {stat.lastActivityAt &&
                   `・最終活動 ${new Date(stat.lastActivityAt).toLocaleString("ja-JP")}`}

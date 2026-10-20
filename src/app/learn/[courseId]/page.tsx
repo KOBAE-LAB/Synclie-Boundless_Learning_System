@@ -29,6 +29,9 @@ import {
 } from "./actions";
 import { AUTO_CONTINUE_CAP, TEMPO_OPTIONS } from "@/lib/discussion-tempo";
 import { Breadcrumbs, BackLink } from "@/components/breadcrumbs";
+import { loadLearnerFlow } from "@/lib/flow/load";
+import { canOpenStep, currentStep } from "@/lib/flow/steps";
+import { FlowStepper, InputStepView, OutputStepCard } from "./flow-view";
 
 // F25: ビデオ会議アプリの「映像」のように、背景と人物を別々の画像として重ねて見せる。
 // 人物イラスト(public/avatars/*.png)は教師(ユーザー本人)がAIツールで用意したものに
@@ -142,10 +145,13 @@ interface ReflectionRow {
 
 export default async function LearnCourseSessionPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ courseId: string }>;
+  searchParams: Promise<{ step?: string }>;
 }) {
   const { courseId } = await params;
+  const { step: requestedStepId } = await searchParams;
   const { user } = await requireRole("student");
 
   const admin = createAdminClient();
@@ -163,6 +169,7 @@ export default async function LearnCourseSessionPage({
     { data: avatarOptionRows },
     { data: personalization },
     { data: submissionRows },
+    flow,
   ] = await Promise.all([
     (async () => {
       await requireConsent(admin, user.id);
@@ -211,10 +218,23 @@ export default async function LearnCourseSessionPage({
       .eq("course_id", courseId)
       .eq("student_id", user.id)
       .order("created_at", { ascending: false }),
+    loadLearnerFlow(admin, courseId, user.id),
   ]);
 
   if (!course) {
     notFound();
+  }
+
+  // 学習の流れ(インプット/アウトプット)。いま開くステップを決め、インプットなら専用の画面を出す。
+  const flowCurrent = currentStep(flow.steps, flow.doneIds);
+  const viewingStep =
+    flow.steps.length === 0
+      ? null
+      : requestedStepId && canOpenStep(flow.steps, flow.doneIds, requestedStepId, flow.inOrder)
+        ? (flow.steps.find((s) => s.id === requestedStepId) ?? flowCurrent)
+        : flowCurrent;
+  if (viewingStep && viewingStep.kind === "input") {
+    return <InputStepView admin={admin} course={{ id: course.id, title: course.title }} flow={flow} step={viewingStep} studentId={user.id} />;
   }
 
   const submissions = (submissionRows ?? []) as SubmissionRow[];
@@ -384,6 +404,9 @@ export default async function LearnCourseSessionPage({
       >
         ポートフォリオを見る(F08)→
       </Link>
+
+      {flow.steps.length > 0 && <FlowStepper courseId={courseId} flow={flow} viewingId={viewingStep?.id} />}
+      {viewingStep && <OutputStepCard courseId={courseId} step={viewingStep} isCurrent={flowCurrent?.id === viewingStep.id} />}
 
       <SessionControls
         courseId={courseId}

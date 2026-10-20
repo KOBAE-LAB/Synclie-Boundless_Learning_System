@@ -539,6 +539,11 @@ export default async function CourseDetailPage({
           badge="まず設定"
         />
         <MenuCard
+          href={`/courses/${courseId}/flow`}
+          title="学習の流れ"
+          description="動画・資料を見るインプットと、議論で深めるアウトプットの順番・時間を設計"
+        />
+        <MenuCard
           href={`/courses/${courseId}/criteria`}
           title="評価の観点"
           description="フィードバックの観点(例: 根拠の明確さ)を設定"

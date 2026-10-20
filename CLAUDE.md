@@ -521,6 +521,24 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
       `loadCourseStats`)はダッシュボード本体と共用。学習者が「自分のデータの全削除」をすると、関わった
       授業のヒントは丸ごと消える(個別の文だけを除くのが難しいため。再生成できる)。
       **提案にとどめ、最終判断は教師**(画面に明記)
+    - **`[courseId]/flow/` 学習の流れ(インプットとアウトプットの設計、2026-10)**: 「動画や資料から
+      インプットする時間と、アウトプットで学びを深める時間をコーディネートしたい」という要望。教師が
+      授業ごとに、**インプット(動画・資料を見る)**と**アウトプット(擬似メンバーと議論)**のステップを
+      自由に並べる(最大12個、上下で並べ替え、時間の目安つき、`course_steps`・`0037`)。ステップが1つも
+      無い授業は従来どおり(議論だけ)。**インプット**は、動画URL(**埋め込まず、リンクとして新しいタブで開く**。利用者の要望。外部サイトを画面内に取り込まない。アップロードした動画ファイルの再生も未対応)と、資料(PDFは署名つきURLで画面内表示、それ以外は取り込み済みの本文を表示)、
+      **理解チェック**の問い(資料の本文からAIが下書き、教師が編集。`ai/input-check.ts`)を持てる。
+      学習者は自分の言葉で答え、「答えの目安」を開いて見比べる自己確認で、**AIは採点しない・学習時にAIを
+      呼ばない**。進み具合は`step_progress`(インプットでは本人の答えも保存。全データ削除の対象)。
+      **「順番どおりに進める」(`courses.steps_in_order`、既定オン)**では、インプットを終えるまで議論に入れない。
+      この関門はサーバー側の議論の入口すべて(`dialogue.ts`の`postStudentMessageAndRespond`=テキスト・手書き・
+      音声、`autoContinueDiscussionAction`)で`assertDiscussionAllowed`を通す(画面を迂回したAPI直叩きでも止まる。
+      テストあり)。アウトプットの間は、そのステップの指示を擬似メンバーのプロンプトに添える(`stepContextFor`)。
+      **この先にアウトプットが残っているうちは、AIは「まとめましょう」と議論の終了を急がない**(制限時間の
+      提案は別)。議論のセッションは学習者ごとに1つなので、複数のアウトプットは同じ対話の続きになる。
+      学習者の画面は、上部に進み具合(`flow-view.tsx`の`FlowStepper`)を出し、インプットは専用の画面
+      (`InputStepView`)、アウトプットは従来のチャット画面(`OutputStepCard`の案内つき)。いまのステップと、
+      終えたインプットの見直しだけ開ける(`canOpenStep`)。教師ダッシュボードの学習者の行に、ステップの
+      進み具合を出す
     - `[courseId]/dashboard/` — F14(教師ダッシュボード)。「参加状況、つまずき、
       擬似メンバーの挙動を確認し、学級・個人の指導計画に活かす」(要件定義書4章)。
       新規のAI呼び出しは一切せず、既存の蓄積データ(dialogue_turns/submissions/
@@ -815,6 +833,7 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
     (参加コード、列デフォルト式で新規作成時に自動生成)と`course_enrollments`
     (course_id+student_idの組、unique制約)を追加。既存の`learning_sessions`から
     参加登録済み扱いのバックフィルも行う(詳細は8章の`learn/`の説明を参照)
+  - `0037_learning_flow.sql` — 学習の流れ。`course_steps`(インプット/アウトプットのステップ)・`step_progress`・`courses.steps_in_order`
   - `0036_teacher_guidance.sql` — 教師ダッシュボードの「指導のヒント」(`teacher_guidance`、授業ごと最新1件)
   - `0035_portfolio.sql` — ポートフォリオ。`portfolio_entries`に`submission_id`・`shared`・`updated_at`、`portfolio_share_links`(詳細は`learn/portfolio/`)
   - `0034_reasoning_depth.sql` — 擬似メンバーの発言を作るAIの推論の深さ(`courses.reasoning_depth`)
