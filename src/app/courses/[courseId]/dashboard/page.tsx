@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
+import { Breadcrumbs, BackLink } from "@/components/breadcrumbs";
 
 // F14: 教師ダッシュボード。
 // 「参加状況、つまずき、擬似メンバーの挙動を確認し、学級・個人の指導計画に活かす」
@@ -190,9 +191,7 @@ export default async function CourseDashboardPage({
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <Link href={`/courses/${courseId}`} className="text-sm text-ink-muted hover:underline">
-        ← {course.title}
-      </Link>
+      <Breadcrumbs trail={[{ label: "授業一覧", href: "/courses" }, { label: course.title, href: `/courses/${courseId}` }]} current="教師ダッシュボード" />
       <h1 className="mt-2 text-2xl font-semibold text-ink">
         教師ダッシュボード(F14)
       </h1>
@@ -284,6 +283,8 @@ export default async function CourseDashboardPage({
       >
         発言を確認・修正する(F15)→
       </Link>
+
+      <BackLink href={`/courses/${courseId}`} label={course.title} />
     </div>
   );
 }

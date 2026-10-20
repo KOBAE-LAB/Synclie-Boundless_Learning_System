@@ -27,6 +27,7 @@ import {
   updateSessionTempoAction,
 } from "./actions";
 import { AUTO_CONTINUE_CAP, TEMPO_OPTIONS } from "@/lib/discussion-tempo";
+import { Breadcrumbs, BackLink } from "@/components/breadcrumbs";
 
 // F25: ビデオ会議アプリの「映像」のように、背景と人物を別々の画像として重ねて見せる。
 // 人物イラスト(public/avatars/*.png)は教師(ユーザー本人)がAIツールで用意したものに
@@ -361,7 +362,8 @@ export default async function LearnCourseSessionPage({
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <h1 className="text-2xl font-semibold text-ink">{course.title}</h1>
+      <Breadcrumbs trail={[{ label: "授業一覧", href: "/learn" }]} current={course.title} />
+      <h1 className="mt-3 text-2xl font-semibold text-ink">{course.title}</h1>
       {course.subject && <p className="mt-1 text-sm text-ink-muted">{course.subject}</p>}
       {course.mode === "solo_study" && (
         <p className="mt-1 text-sm text-ink-muted">
@@ -1033,6 +1035,8 @@ export default async function LearnCourseSessionPage({
           </ul>
         )}
       </div>
+
+      <BackLink href="/learn" label="授業一覧" />
     </div>
   );
 }

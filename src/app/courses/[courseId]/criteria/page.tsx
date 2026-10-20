@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { createCriterionAction, deleteCriterionAction } from "./actions";
+import { Breadcrumbs, BackLink } from "@/components/breadcrumbs";
 
 interface CriterionRow {
   id: string;
@@ -39,9 +40,7 @@ export default async function EvaluationCriteriaPage({
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <Link href={`/courses/${courseId}`} className="text-sm text-ink-muted hover:underline">
-        ← {course.title}
-      </Link>
+      <Breadcrumbs trail={[{ label: "授業一覧", href: "/courses" }, { label: course.title, href: `/courses/${courseId}` }]} current="評価の観点" />
       <h1 className="mt-2 text-2xl font-semibold text-ink">
         評価の観点(F07)
       </h1>
@@ -118,6 +117,8 @@ export default async function EvaluationCriteriaPage({
           </li>
         )}
       </ul>
+
+      <BackLink href={`/courses/${courseId}`} label={course.title} />
     </div>
   );
 }

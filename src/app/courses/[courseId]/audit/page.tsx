@@ -1,8 +1,8 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { updateTurnAction } from "./actions";
+import { Breadcrumbs, BackLink } from "@/components/breadcrumbs";
 
 // F15: 擬似メンバーの挙動の監査と修正。
 // 「擬似メンバーの発言ログを確認し、不適切・不正確な挙動を修正する」(要件定義書4章)。
@@ -88,9 +88,7 @@ export default async function PersonaAuditPage({
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <Link href={`/courses/${courseId}`} className="text-sm text-ink-muted hover:underline">
-        ← {course.title}
-      </Link>
+      <Breadcrumbs trail={[{ label: "授業一覧", href: "/courses" }, { label: course.title, href: `/courses/${courseId}` }]} current="発言の監査と修正" />
       <h1 className="mt-2 text-2xl font-semibold text-ink">
         擬似メンバーの挙動の監査と修正(F15)
       </h1>
@@ -168,6 +166,8 @@ export default async function PersonaAuditPage({
           <li className="text-sm text-ink-muted">まだ擬似メンバーの発言がありません。</li>
         )}
       </ul>
+
+      <BackLink href={`/courses/${courseId}`} label={course.title} />
     </div>
   );
 }

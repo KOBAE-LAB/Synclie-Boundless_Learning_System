@@ -10,6 +10,7 @@ import {
   generateLearnerProfileAction,
   generateLearnerSuggestionsAction,
 } from "./actions";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 type LearnerProfileStatus = "pending" | "processing" | "done" | "failed";
 
@@ -185,9 +186,7 @@ export default async function StudentDashboardPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <Link href="/learn" className="text-sm text-ink-muted hover:underline">
-        ← 授業一覧
-      </Link>
+      <Breadcrumbs trail={[{ label: "授業一覧", href: "/learn" }]} current="学習ダッシュボード" />
       <h1 className="mt-2 text-2xl font-semibold text-ink">
         学習ダッシュボード(F23)
       </h1>

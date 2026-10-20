@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { isAdmin, requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { SubmitButton } from "@/components/submit-button";
+import { Breadcrumbs, BackLink } from "@/components/breadcrumbs";
 import {
   uploadMaterialAction,
   generateMaterialRagAction,
@@ -145,69 +146,17 @@ export default async function CourseDetailPage({
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <h1 className="text-2xl font-semibold text-ink">{course.title}</h1>
+      <Breadcrumbs trail={[{ label: "授業一覧", href: "/courses" }]} current={course.title} />
+      <h1 className="mt-3 text-2xl font-semibold text-ink">{course.title}</h1>
       {course.subject && <p className="mt-1 text-sm text-ink-muted">{course.subject}</p>}
 
-      {/* この授業でできること。文字だけのリンクの羅列だと、何があるか・どれから触ればよいかが
-          分かりにくいため、説明つきのカードにして、よく使う順に並べる。 */}
-      <nav aria-label="この授業のメニュー" className="mt-6 grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-3">
-        <MenuCard
-          href={`/courses/${courseId}/personas`}
-          title="ペルソナ設定"
-          description="擬似メンバーの作成・AIによる案・承認して「使用中」にする"
-          badge="まず設定"
-        />
-        <MenuCard
-          href={`/courses/${courseId}/dashboard`}
-          title="教師ダッシュボード"
-          description="参加状況・つまずき・擬似メンバーの挙動をまとめて確認"
-        />
-        <MenuCard
-          href={`/courses/${courseId}/submissions`}
-          title="提出物とフィードバック"
-          description="学習者の成果と、AIのフィードバックの確認・修正"
-        />
-        <MenuCard
-          href={`/courses/${courseId}/criteria`}
-          title="評価の観点"
-          description="フィードバックの観点(例: 根拠の明確さ)を設定"
-        />
-        <MenuCard
-          href={`/courses/${courseId}/students`}
-          title="学習者プロファイル"
-          description="学習者ごとの得意・課題と、個別最適化の提案"
-        />
-        <MenuCard
-          href={`/courses/${courseId}/conformity`}
-          title="同調の計測"
-          description="擬似メンバーが根拠なく同調した割合を、ペルソナ別に確認"
-        />
-        <MenuCard
-          href={`/courses/${courseId}/audit`}
-          title="発言の監査と修正"
-          description="擬似メンバーの発言を確認し、不適切な内容を修正"
-        />
-        {canViewAsStudent && (
-          <form action={boundStartStudentViewAction} className="contents">
-            <button
-              type="submit"
-              className="flex flex-col gap-1 rounded-lg border border-dashed border-line-strong p-4 text-left transition-colors hover:border-accent hover:bg-surface"
-            >
-              <span className="text-sm font-medium text-ink">学習者として表示 →</span>
-              <span className="text-xs leading-5 text-ink-muted">
-                動作確認用(管理者のみ)。テスト学習者として、学習者の画面を試せます
-              </span>
-            </button>
-          </form>
-        )}
-      </nav>
-      <p className="mt-2 text-xs text-ink-faint">
-        学習者は、ログイン後の授業一覧(参加が承認された授業)から、この授業を開きます。
-      </p>
-
-      <form action={boundUpdateCourseSettingsAction} className="mt-8 space-y-4 rounded-lg border border-line p-5">
+      <section className="mt-10">
+        <h2 className="border-b border-line pb-2 text-base font-semibold text-ink">1. 授業を準備する</h2>
+        <p className="mt-2 text-sm text-ink-muted">授業のねらいや資料を入れ、擬似メンバーを用意します。ここが整うほど、議論が授業の目的に沿います。</p>
+      <details open className="mt-4 rounded-lg border border-line p-5">
+        <summary className="cursor-pointer text-sm font-medium text-ink">授業の設定</summary>
+      <form action={boundUpdateCourseSettingsAction} className="mt-4 space-y-4">
         <div>
-          <h2 className="text-sm font-medium text-ink">授業の設定</h2>
           <p className="mt-1 text-sm text-ink-muted">
             ここで設定した内容は、AI擬似メンバーの発言と、ペルソナ設定の「AIにペルソナ案を作ってもらう」の
             両方に反映されます。特に「授業のねらい・議題」を書くと、議論が授業の目的からそれにくくなります。
@@ -386,9 +335,202 @@ export default async function CourseDetailPage({
           設定を保存
         </SubmitButton>
       </form>
+      </details>
 
-      <div className="mt-8 rounded-lg border border-line p-5">
-        <h2 className="text-sm font-medium text-ink">受講登録</h2>
+      <details open className="mt-4 rounded-lg border border-line p-5">
+        <summary className="cursor-pointer text-sm font-medium text-ink">
+          資料と知識ベース(RAG)
+          <span className="ml-2 text-xs font-normal text-ink-muted">{(materials ?? []).length}件</span>
+        </summary>
+        <p className="mt-2 text-sm text-ink-muted">
+          授業の資料を登録すると、擬似メンバーが資料の範囲で発言し、AIによるペルソナ案の手がかりにもなります。
+        </p>
+        <div className="mt-3">
+      <form
+        action={boundUploadAction}
+        className="space-y-3 rounded-md border border-line p-4"
+      >
+        <h3 className="text-xs font-medium text-ink-faint">資料を追加</h3>
+
+        <label htmlFor="material-kind" className="sr-only">
+          資料の種類
+        </label>
+        <select
+          id="material-kind"
+          name="kind"
+          required
+          defaultValue=""
+          className="w-full rounded-md border border-line px-3 py-2 text-sm bg-surface-raised"
+        >
+          <option value="" disabled>
+            種類を選択
+          </option>
+          {Object.entries(KIND_LABELS).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+
+        <label htmlFor="material-title" className="sr-only">
+          資料のタイトル
+        </label>
+        <input
+          id="material-title"
+          name="title"
+          placeholder="資料のタイトル"
+          required
+          className="w-full rounded-md border border-line px-3 py-2 text-sm bg-surface-raised"
+        />
+
+        <label htmlFor="material-url" className="sr-only">
+          URL
+        </label>
+        <input
+          id="material-url"
+          name="url"
+          placeholder="URL(種類が「URL」の場合のみ)"
+          type="url"
+          className="w-full rounded-md border border-line px-3 py-2 text-sm bg-surface-raised"
+        />
+
+        <label htmlFor="material-file" className="sr-only">
+          ファイル
+        </label>
+        <input
+          id="material-file"
+          name="file"
+          type="file"
+          className="w-full text-sm text-ink"
+        />
+        <p className="text-xs text-ink-muted">
+          「URL」を選んだ場合はURL欄のみ、それ以外はファイルを選択してください。
+        </p>
+
+        <button
+          type="submit"
+          className="rounded-md bg-accent-fill px-4 py-2 text-sm font-medium text-white hover:bg-accent-fill-hover"
+        >
+          追加する
+        </button>
+      </form>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-xs font-medium text-ink-faint">登録済みの資料と知識ベース(RAG)</h3>
+        {pendingCount > 0 && (
+          <form action={boundGenerateAllAction}>
+            <SubmitButton
+              pendingText="生成中…"
+              className="rounded-md border border-line px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface disabled:opacity-50"
+            >
+              未処理の資料をまとめて生成({pendingCount}件)
+            </SubmitButton>
+          </form>
+        )}
+      </div>
+
+      <ul className="mt-3 space-y-2">
+        {(materials ?? []).map((material) => {
+          const boundGenerateOneAction = generateMaterialRagAction.bind(null, courseId, material.id);
+          const boundShareAction = shareMaterialAction.bind(null, courseId, material.id);
+          const boundUnshareAction = unshareMaterialAction.bind(null, courseId, material.id);
+          const chunkCount = chunkCountByMaterial.get(material.id) ?? 0;
+          const statusLabel = RAG_STATUS_LABELS[material.rag_status] ?? material.rag_status;
+          const statusStyle =
+            RAG_STATUS_STYLES[material.rag_status] ??
+            "bg-surface text-ink-muted";
+
+          return (
+            <li
+              key={material.id}
+              className="rounded-md border border-line px-4 py-3 text-sm"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <span className="font-medium text-ink">{material.title}</span>
+                  <span className="ml-2 text-ink-muted">
+                    [{KIND_LABELS[material.kind] ?? material.kind}]
+                  </span>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusStyle}`}>
+                    {statusLabel}
+                    {material.rag_status === "done" && chunkCount > 0 && `(${chunkCount}チャンク)`}
+                  </span>
+                  <form action={boundGenerateOneAction}>
+                    <SubmitButton
+                      pendingText="生成中…"
+                      className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface disabled:opacity-50"
+                    >
+                      {material.rag_status === "done" ? "再生成" : "生成する"}
+                    </SubmitButton>
+                  </form>
+                </div>
+              </div>
+              {material.rag_status === "failed" && material.rag_error && (
+                <p className="mt-2 text-xs text-danger">{material.rag_error}</p>
+              )}
+              {material.kind === "syllabus" && (
+                <div className="mt-2 flex items-center gap-2">
+                  {material.shared_at ? (
+                    <>
+                      <span className="text-xs text-accent">
+                        共有ライブラリに公開中(F21)
+                      </span>
+                      <form action={boundUnshareAction}>
+                        <button
+                          type="submit"
+                          className="rounded-md border border-line px-2 py-0.5 text-xs text-ink hover:bg-surface"
+                        >
+                          共有を取り消す
+                        </button>
+                      </form>
+                    </>
+                  ) : (
+                    <form action={boundShareAction}>
+                      <button
+                        type="submit"
+                        className="rounded-md border border-line px-2 py-0.5 text-xs text-ink hover:bg-surface"
+                      >
+                        共有ライブラリに公開する(F21)
+                      </button>
+                    </form>
+                  )}
+                </div>
+              )}
+            </li>
+          );
+        })}
+        {(!materials || materials.length === 0) && (
+          <li className="text-sm text-ink-muted">まだ資料がありません。</li>
+        )}
+      </ul>
+        </div>
+      </details>
+      <nav aria-label="授業の準備のメニュー" className="mt-4 grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-3">
+        <MenuCard
+          href={`/courses/${courseId}/personas`}
+          title="ペルソナ設定"
+          description="擬似メンバーの作成・AIによる案・承認して「使用中」にする"
+          badge="まず設定"
+        />
+        <MenuCard
+          href={`/courses/${courseId}/criteria`}
+          title="評価の観点"
+          description="フィードバックの観点(例: 根拠の明確さ)を設定"
+        />
+      </nav>
+      </section>
+
+      <section className="mt-10">
+        <h2 className="border-b border-line pb-2 text-base font-semibold text-ink">2. 学習者を迎える</h2>
+        <p className="mt-2 text-sm text-ink-muted">授業コードを伝え、参加の申請を承認します。進め方(自動継続)もここで決めます。</p>
+      <details open className="mt-4 rounded-lg border border-line p-5">
+        <summary className="cursor-pointer text-sm font-medium text-ink">
+          受講登録
+          <span className="ml-2 text-xs font-normal text-ink-muted">
+            参加{enrolledStudentIds.length}人{pendingStudentIds.length > 0 ? `・承認待ち${pendingStudentIds.length}人` : ""}
+          </span>
+        </summary>
         <p className="mt-1 text-sm text-ink-muted">
           学習者にこの授業コードを伝えてください。学習者が「授業に参加する」画面でこのコードを
           入力すると参加の申請になり、下の「承認待ち」であなたが承認すると、授業に入れるように
@@ -513,10 +655,11 @@ export default async function CourseDetailPage({
             登録する
           </SubmitButton>
         </form>
-      </div>
+      </details>
 
-      <div className="mt-8 rounded-lg border border-line p-5">
-        <h2 className="text-sm font-medium text-ink">沈黙時の自動継続(テンポ)</h2>
+
+      <details className="mt-4 rounded-lg border border-line p-5">
+        <summary className="cursor-pointer text-sm font-medium text-ink">沈黙時の自動継続(テンポ)</summary>
         <p className="mt-1 text-sm text-ink-muted">
           学習者がしばらく発言しない時、擬似メンバー同士で会話を少しだけ自動的に続けさせるかどうかの
           既定値。学習者は自分の授業画面でこの秒数を自分用に上書きできる(オフにもできる)。
@@ -551,169 +694,59 @@ export default async function CourseDetailPage({
             保存する
           </button>
         </form>
-      </div>
+      </details>
 
-      <form
-        action={boundUploadAction}
-        className="mt-8 space-y-3 rounded-lg border border-line p-5"
-      >
-        <h2 className="text-sm font-medium text-ink">資料を追加</h2>
+      </section>
 
-        <label htmlFor="material-kind" className="sr-only">
-          資料の種類
-        </label>
-        <select
-          id="material-kind"
-          name="kind"
-          required
-          defaultValue=""
-          className="w-full rounded-md border border-line px-3 py-2 text-sm bg-surface-raised"
-        >
-          <option value="" disabled>
-            種類を選択
-          </option>
-          {Object.entries(KIND_LABELS).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
-
-        <label htmlFor="material-title" className="sr-only">
-          資料のタイトル
-        </label>
-        <input
-          id="material-title"
-          name="title"
-          placeholder="資料のタイトル"
-          required
-          className="w-full rounded-md border border-line px-3 py-2 text-sm bg-surface-raised"
+      <section className="mt-10">
+        <h2 className="border-b border-line pb-2 text-base font-semibold text-ink">3. 学習の様子を確認する</h2>
+        <p className="mt-2 text-sm text-ink-muted">参加状況・提出物・擬似メンバーの挙動を見て、指導や設定の見直しに活かします。</p>
+      <nav aria-label="学習の様子を確認するメニュー" className="mt-4 grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-3">
+        <MenuCard
+          href={`/courses/${courseId}/dashboard`}
+          title="教師ダッシュボード"
+          description="参加状況・つまずき・擬似メンバーの挙動をまとめて確認"
         />
-
-        <label htmlFor="material-url" className="sr-only">
-          URL
-        </label>
-        <input
-          id="material-url"
-          name="url"
-          placeholder="URL(種類が「URL」の場合のみ)"
-          type="url"
-          className="w-full rounded-md border border-line px-3 py-2 text-sm bg-surface-raised"
+        <MenuCard
+          href={`/courses/${courseId}/submissions`}
+          title="提出物とフィードバック"
+          description="学習者の成果と、AIのフィードバックの確認・修正"
         />
-
-        <label htmlFor="material-file" className="sr-only">
-          ファイル
-        </label>
-        <input
-          id="material-file"
-          name="file"
-          type="file"
-          className="w-full text-sm text-ink"
+        <MenuCard
+          href={`/courses/${courseId}/students`}
+          title="学習者プロファイル"
+          description="学習者ごとの得意・課題と、個別最適化の提案"
         />
-        <p className="text-xs text-ink-muted">
-          「URL」を選んだ場合はURL欄のみ、それ以外はファイルを選択してください。
-        </p>
-
-        <button
-          type="submit"
-          className="rounded-md bg-accent-fill px-4 py-2 text-sm font-medium text-white hover:bg-accent-fill-hover"
-        >
-          追加する
-        </button>
-      </form>
-
-      <div className="mt-8 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-sm font-medium text-ink">
-          資料と知識ベース(RAG)
-        </h2>
-        {pendingCount > 0 && (
-          <form action={boundGenerateAllAction}>
-            <SubmitButton
-              pendingText="生成中…"
-              className="rounded-md border border-line px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface disabled:opacity-50"
+        <MenuCard
+          href={`/courses/${courseId}/conformity`}
+          title="同調の計測"
+          description="擬似メンバーが根拠なく同調した割合を、ペルソナ別に確認"
+        />
+        <MenuCard
+          href={`/courses/${courseId}/audit`}
+          title="発言の監査と修正"
+          description="擬似メンバーの発言を確認し、不適切な内容を修正"
+        />
+        {canViewAsStudent && (
+          <form action={boundStartStudentViewAction} className="contents">
+            <button
+              type="submit"
+              className="flex flex-col gap-1 rounded-lg border border-dashed border-line-strong p-4 text-left transition-colors hover:border-accent hover:bg-surface"
             >
-              未処理の資料をまとめて生成({pendingCount}件)
-            </SubmitButton>
+              <span className="text-sm font-medium text-ink">学習者として表示 →</span>
+              <span className="text-xs leading-5 text-ink-muted">
+                動作確認用(管理者のみ)。テスト学習者として、学習者の画面を試せます
+              </span>
+            </button>
           </form>
         )}
-      </div>
+      </nav>
+      <p className="mt-2 text-xs text-ink-faint">
+        学習者は、ログイン後の授業一覧(参加が承認された授業)から、この授業を開きます。
+      </p>
+      </section>
 
-      <ul className="mt-3 space-y-2">
-        {(materials ?? []).map((material) => {
-          const boundGenerateOneAction = generateMaterialRagAction.bind(null, courseId, material.id);
-          const boundShareAction = shareMaterialAction.bind(null, courseId, material.id);
-          const boundUnshareAction = unshareMaterialAction.bind(null, courseId, material.id);
-          const chunkCount = chunkCountByMaterial.get(material.id) ?? 0;
-          const statusLabel = RAG_STATUS_LABELS[material.rag_status] ?? material.rag_status;
-          const statusStyle =
-            RAG_STATUS_STYLES[material.rag_status] ??
-            "bg-surface text-ink-muted";
-
-          return (
-            <li
-              key={material.id}
-              className="rounded-md border border-line px-4 py-3 text-sm"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <span className="font-medium text-ink">{material.title}</span>
-                  <span className="ml-2 text-ink-muted">
-                    [{KIND_LABELS[material.kind] ?? material.kind}]
-                  </span>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusStyle}`}>
-                    {statusLabel}
-                    {material.rag_status === "done" && chunkCount > 0 && `(${chunkCount}チャンク)`}
-                  </span>
-                  <form action={boundGenerateOneAction}>
-                    <SubmitButton
-                      pendingText="生成中…"
-                      className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface disabled:opacity-50"
-                    >
-                      {material.rag_status === "done" ? "再生成" : "生成する"}
-                    </SubmitButton>
-                  </form>
-                </div>
-              </div>
-              {material.rag_status === "failed" && material.rag_error && (
-                <p className="mt-2 text-xs text-danger">{material.rag_error}</p>
-              )}
-              {material.kind === "syllabus" && (
-                <div className="mt-2 flex items-center gap-2">
-                  {material.shared_at ? (
-                    <>
-                      <span className="text-xs text-accent">
-                        共有ライブラリに公開中(F21)
-                      </span>
-                      <form action={boundUnshareAction}>
-                        <button
-                          type="submit"
-                          className="rounded-md border border-line px-2 py-0.5 text-xs text-ink hover:bg-surface"
-                        >
-                          共有を取り消す
-                        </button>
-                      </form>
-                    </>
-                  ) : (
-                    <form action={boundShareAction}>
-                      <button
-                        type="submit"
-                        className="rounded-md border border-line px-2 py-0.5 text-xs text-ink hover:bg-surface"
-                      >
-                        共有ライブラリに公開する(F21)
-                      </button>
-                    </form>
-                  )}
-                </div>
-              )}
-            </li>
-          );
-        })}
-        {(!materials || materials.length === 0) && (
-          <li className="text-sm text-ink-muted">まだ資料がありません。</li>
-        )}
-      </ul>
+      <BackLink href="/courses" label="授業一覧" />
     </div>
   );
 }

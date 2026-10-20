@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { withdrawConsentAction, deleteMyDataAction } from "./actions";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 // F16: 同意・データ管理。学習者が自分のデータの状況を確認し、
 // 利用を停止(同意を撤回)したり、蓄積したデータを削除したりできる画面。
@@ -37,9 +38,7 @@ export default async function MyDataPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <Link href="/learn" className="text-sm text-ink-muted hover:underline">
-        ← 授業一覧
-      </Link>
+      <Breadcrumbs trail={[{ label: "授業一覧", href: "/learn" }]} current="自分のデータ" />
       <h1 className="mt-2 text-2xl font-semibold text-ink">
         自分のデータ(F16)
       </h1>

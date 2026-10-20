@@ -1,9 +1,9 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { updatePersonaAction } from "../actions";
 import { PersonaForm, type PersonaFormValues } from "../persona-form";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 interface PersonaRow {
   id: string;
@@ -64,12 +64,7 @@ export default async function EditPersonaPage({
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <Link
-        href={`/courses/${courseId}/personas`}
-        className="text-sm text-ink-muted hover:underline"
-      >
-        ← ペルソナ一覧
-      </Link>
+      <Breadcrumbs trail={[{ label: "授業一覧", href: "/courses" }, { label: course.title, href: `/courses/${courseId}` }, { label: "ペルソナ設定", href: `/courses/${courseId}/personas` }]} current={persona.name} />
       <h1 className="mt-2 text-2xl font-semibold text-ink">
         {persona.name} を編集
       </h1>

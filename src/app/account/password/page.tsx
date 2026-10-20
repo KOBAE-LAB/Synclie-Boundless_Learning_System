@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { requireLogin } from "@/lib/auth/session";
 import { changePasswordAction } from "./actions";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 export default async function ChangePasswordPage({
   searchParams,
@@ -13,7 +13,8 @@ export default async function ChangePasswordPage({
 
   return (
     <div className="mx-auto max-w-md px-6 py-12">
-      <h1 className="text-2xl font-semibold text-ink">パスワード変更</h1>
+      <Breadcrumbs trail={[{ label: "授業一覧", href: home }]} current="パスワード変更" />
+      <h1 className="mt-3 text-2xl font-semibold text-ink">パスワード変更</h1>
       <p className="mt-1 text-sm text-ink-muted">{user.name ?? user.email}</p>
 
       {done && (
@@ -63,9 +64,6 @@ export default async function ChangePasswordPage({
         </button>
       </form>
 
-      <Link href={home} className="mt-6 inline-block text-sm text-ink-muted hover:underline">
-        ← 戻る
-      </Link>
     </div>
   );
 }

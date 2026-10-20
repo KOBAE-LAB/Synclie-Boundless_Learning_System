@@ -33,25 +33,42 @@ export default async function CoursesPage() {
       <p className="mt-1 text-sm text-ink-muted">
         {user.name ?? user.email} さんが担当する授業(F01: 授業・資料の登録)
       </p>
-      <div className="mt-1 flex gap-3 text-sm text-ink-muted">
-        <Link href="/organization" className="hover:underline">
-          組織(F21)→
+      {showAdminLink && (
+        <Link
+          href="/admin/teachers"
+          className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-md border border-line bg-surface px-4 py-3 text-sm hover:bg-surface-raised"
+        >
+          <span className="font-medium text-ink">教師の承認(管理者)</span>
+          <span className={pendingTeacherCount ? "font-medium text-warn" : "text-ink-muted"}>
+            {pendingTeacherCount ? `${pendingTeacherCount}件が承認待ち →` : "承認待ちはありません →"}
+          </span>
         </Link>
-        <Link href="/library" className="hover:underline">
-          共有ライブラリ(F21)→
-        </Link>
-        {showAdminLink && (
-          <Link href="/admin/teachers" className="hover:underline">
-            教師の承認(管理者){pendingTeacherCount ? `: ${pendingTeacherCount}件待ち` : ""}→
-          </Link>
-        )}
-      </div>
+      )}
 
-      <form
-        action={createCourseAction}
-        className="mt-8 space-y-3 rounded-lg border border-line p-5"
-      >
-        <h2 className="text-sm font-medium text-ink">新しい授業を作成</h2>
+      <h2 className="mt-8 text-sm font-medium text-ink">担当している授業({(courses ?? []).length})</h2>
+      <ul className="mt-3 space-y-2">
+        {(courses ?? []).map((course) => (
+          <li key={course.id}>
+            <Link
+              href={`/courses/${course.id}`}
+              className="block rounded-md border border-line px-4 py-3 text-sm hover:bg-surface"
+            >
+              <span className="font-medium text-ink">{course.title}</span>
+              {course.subject && (
+                <span className="ml-2 text-ink-muted">({course.subject})</span>
+              )}
+              <span className="ml-2 text-xs text-ink-faint">[{MODE_LABELS[course.mode] ?? course.mode}]</span>
+            </Link>
+          </li>
+        ))}
+        {(!courses || courses.length === 0) && (
+          <li className="text-sm text-ink-muted">まだ授業がありません。下の「新しい授業を作成」から作成してください。</li>
+        )}
+      </ul>
+
+      <details open={(courses ?? []).length === 0} className="mt-6 rounded-lg border border-line p-5">
+        <summary className="cursor-pointer text-sm font-medium text-ink">新しい授業を作成</summary>
+      <form action={createCourseAction} className="mt-4 space-y-3">
         <label htmlFor="course-title" className="sr-only">
           授業名
         </label>
@@ -90,26 +107,7 @@ export default async function CoursesPage() {
           作成する
         </button>
       </form>
-
-      <ul className="mt-8 space-y-2">
-        {(courses ?? []).map((course) => (
-          <li key={course.id}>
-            <Link
-              href={`/courses/${course.id}`}
-              className="block rounded-md border border-line px-4 py-3 text-sm hover:bg-surface"
-            >
-              <span className="font-medium text-ink">{course.title}</span>
-              {course.subject && (
-                <span className="ml-2 text-ink-muted">({course.subject})</span>
-              )}
-              <span className="ml-2 text-xs text-ink-faint">[{MODE_LABELS[course.mode] ?? course.mode}]</span>
-            </Link>
-          </li>
-        ))}
-        {(!courses || courses.length === 0) && (
-          <li className="text-sm text-ink-muted">まだ授業がありません。上のフォームから作成してください。</li>
-        )}
-      </ul>
+      </details>
     </div>
   );
 }

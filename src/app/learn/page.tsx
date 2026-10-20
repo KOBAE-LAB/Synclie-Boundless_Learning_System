@@ -46,17 +46,13 @@ export default async function LearnCoursesPage({
     <div className="mx-auto max-w-2xl px-6 py-12">
       <h1 className="text-2xl font-semibold text-ink">授業一覧</h1>
       <p className="mt-1 text-sm text-ink-muted">{user.name ?? user.email} さん</p>
-      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink-muted">
-        <Link href="/learn/dashboard" className="hover:underline">
-          学習ダッシュボード(F23)→
-        </Link>
-        <Link href="/learn/data" className="hover:underline">
-          自分のデータ(F16)→
-        </Link>
-        <Link href="/learn/join" className="hover:underline">
-          授業に参加する(コード入力)→
-        </Link>
-      </div>
+      <Link
+        href="/learn/join"
+        className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-md border border-dashed border-line-strong px-4 py-3 text-sm hover:border-accent hover:bg-surface"
+      >
+        <span className="font-medium text-ink">授業コードで授業に参加する</span>
+        <span className="text-ink-muted">先生から教わったコードを入力 →</span>
+      </Link>
 
       {not_enrolled && (
         <p className="mt-4 rounded-md border border-warn bg-warn-soft px-4 py-3 text-sm text-warn">
@@ -87,7 +83,8 @@ export default async function LearnCoursesPage({
         </div>
       )}
 
-      <ul className="mt-8 space-y-2">
+      <h2 className="mt-8 text-sm font-medium text-ink">参加している授業</h2>
+      <ul className="mt-3 space-y-2">
         {(courses ?? []).map((course) => (
           <li key={course.id}>
             <Link

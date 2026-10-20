@@ -1,8 +1,8 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { updateCriterionAction } from "../actions";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 export default async function EditCriterionPage({
   params,
@@ -15,7 +15,7 @@ export default async function EditCriterionPage({
   const admin = createAdminClient();
   const { data: course } = await admin
     .from("courses")
-    .select("id, owner_teacher_id")
+    .select("id, title, owner_teacher_id")
     .eq("id", courseId)
     .maybeSingle();
   if (!course || course.owner_teacher_id !== user.id) {
@@ -35,9 +35,7 @@ export default async function EditCriterionPage({
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <Link href={`/courses/${courseId}/criteria`} className="text-sm text-ink-muted hover:underline">
-        ← 評価の観点一覧
-      </Link>
+      <Breadcrumbs trail={[{ label: "授業一覧", href: "/courses" }, { label: course.title, href: `/courses/${courseId}` }, { label: "評価の観点", href: `/courses/${courseId}/criteria` }]} current={criterion.label} />
       <h1 className="mt-2 text-2xl font-semibold text-ink">
         {criterion.label} を編集
       </h1>

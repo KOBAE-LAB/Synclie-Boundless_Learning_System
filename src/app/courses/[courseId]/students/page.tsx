@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -8,6 +7,7 @@ import {
   generatePersonalizationAction,
   decidePersonalizationAction,
 } from "./actions";
+import { Breadcrumbs, BackLink } from "@/components/breadcrumbs";
 
 type ProfileStatus = "pending" | "processing" | "done" | "failed";
 type SuggestionStatus = "suggested" | "accepted" | "declined";
@@ -108,9 +108,7 @@ export default async function StudentsPage({
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <Link href={`/courses/${courseId}`} className="text-sm text-ink-muted hover:underline">
-        ← {course.title}
-      </Link>
+      <Breadcrumbs trail={[{ label: "授業一覧", href: "/courses" }, { label: course.title, href: `/courses/${courseId}` }]} current="学習者プロファイル" />
       <h1 className="mt-2 text-2xl font-semibold text-ink">
         学習者プロファイルと個別最適化(F09/F11)
       </h1>
@@ -267,6 +265,8 @@ export default async function StudentsPage({
           <li className="text-sm text-ink-muted">まだ活動記録のある学習者がいません。</li>
         )}
       </ul>
+
+      <BackLink href={`/courses/${courseId}`} label={course.title} />
     </div>
   );
 }

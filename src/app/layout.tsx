@@ -5,6 +5,7 @@ import "./globals.css";
 import { auth } from "@/auth";
 import { logoutAction } from "./logout-action";
 import { stopStudentViewAction } from "./view-as-actions";
+import { HeaderNav, type NavItem } from "@/components/header-nav";
 import { isViewingAsStudent } from "@/lib/auth/session";
 
 // 日本語UIが中心のため、ビルド時にGoogle Fontsを取得する next/font/google ではなく
@@ -28,6 +29,22 @@ const ROLE_LABELS: Record<string, string> = {
   guardian: "保護者",
 };
 
+// 役割ごとの共通メニュー。「授業」と並ぶ上位のページへの移動を、ここにまとめる
+// (各画面にリンクが散らばって並ぶのをやめた)。授業の配下のページでは「授業」が強調される。
+const NAV_ITEMS: Record<string, NavItem[]> = {
+  teacher: [
+    { label: "授業", href: "/courses" },
+    { label: "組織", href: "/organization" },
+    { label: "共有ライブラリ", href: "/library" },
+  ],
+  student: [
+    { label: "授業", href: "/learn" },
+    { label: "学習ダッシュボード", href: "/learn/dashboard" },
+    { label: "自分のデータ", href: "/learn/data" },
+    { label: "授業に参加", href: "/learn/join" },
+  ],
+};
+
 const ROLE_HOME_HREF: Record<string, string> = {
   teacher: "/courses",
   student: "/learn",
@@ -43,6 +60,8 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     | undefined;
   // 管理者が「学習者として表示」(動作確認)中かどうか。中は、全ページの上部に常に表示する。
   const viewingAsStudent = user?.role === "teacher" ? await isViewingAsStudent() : false;
+  // 「学習者として表示」中は、メニューも学習者のものにする(教師用のままだと、どこにいるか分かりにくい)。
+  const navRole = viewingAsStudent ? "student" : (user?.role ?? "");
 
   return (
     <html lang="ja" className="h-full antialiased">
@@ -65,12 +84,13 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         {user && (
           <header className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-2">
             <Link
-              href={ROLE_HOME_HREF[user.role ?? ""] ?? "/"}
+              href={ROLE_HOME_HREF[navRole] ?? "/"}
               className="flex items-center gap-2 text-sm font-semibold text-ink"
             >
               <Image src="/logo.png" alt="" width={28} height={28} priority className="rounded-full" />
               Synclie
             </Link>
+            {NAV_ITEMS[navRole] && <HeaderNav items={NAV_ITEMS[navRole]} />}
             <div className="flex flex-wrap items-center gap-3">
               <span className="max-w-[12rem] truncate text-xs text-ink-muted">
                 {user.name ?? user.email ?? ""}

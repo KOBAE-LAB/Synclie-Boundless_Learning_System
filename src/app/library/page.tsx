@@ -3,6 +3,7 @@ import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { requestCrossOrgAccessAction, duplicatePersonaAction, duplicateMaterialAction } from "./actions";
 import { SubmitButton } from "@/components/submit-button";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 // F21: 教員協働のペルソナ・教材ライブラリ共有。
 // 「教員(授業者)が、単元の対応表や擬似メンバー設定を学校・地域をまたいで複製・共有し、
@@ -113,7 +114,8 @@ export default async function LibraryPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <h1 className="text-2xl font-semibold text-ink">共有ライブラリ(F21)</h1>
+      <Breadcrumbs trail={[{ label: "授業一覧", href: "/courses" }]} current="共有ライブラリ" />
+      <h1 className="mt-3 text-2xl font-semibold text-ink">共有ライブラリ(F21)</h1>
       <p className="mt-1 text-sm text-ink-muted">
         他の教師が公開したペルソナ・教材(単元の対応表)を自分の授業に複製できる。同じ組織なら
         即時複製、他組織なら

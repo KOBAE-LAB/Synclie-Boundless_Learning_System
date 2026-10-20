@@ -1,9 +1,9 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { updateFeedbackAction, sendGradeToLmsAction } from "./actions";
 import { SubmitButton } from "@/components/submit-button";
+import { Breadcrumbs, BackLink } from "@/components/breadcrumbs";
 
 interface SubmissionRow {
   id: string;
@@ -123,9 +123,7 @@ export default async function SubmissionsReviewPage({
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <Link href={`/courses/${courseId}`} className="text-sm text-ink-muted hover:underline">
-        ← {course.title}
-      </Link>
+      <Breadcrumbs trail={[{ label: "授業一覧", href: "/courses" }, { label: course.title, href: `/courses/${courseId}` }]} current="提出物とフィードバック" />
       <h1 className="mt-2 text-2xl font-semibold text-ink">
         提出物とフィードバック(F07)
       </h1>
@@ -259,6 +257,8 @@ export default async function SubmissionsReviewPage({
           <li className="text-sm text-ink-muted">まだ提出物がありません。</li>
         )}
       </ul>
+
+      <BackLink href={`/courses/${courseId}`} label={course.title} />
     </div>
   );
 }

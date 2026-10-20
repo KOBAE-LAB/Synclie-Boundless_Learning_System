@@ -1,7 +1,7 @@
-import Link from "next/link";
 import { requireAdmin } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { approveTeacherAction, rejectTeacherAction } from "./actions";
+import { Breadcrumbs } from "@/components/breadcrumbs";
 
 // 管理者専用: 教師の自己登録(サインアップ)の承認。
 export default async function AdminTeachersPage() {
@@ -20,6 +20,8 @@ export default async function AdminTeachersPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
+      <Breadcrumbs trail={[{ label: "授業一覧", href: "/courses" }]} current="教師の承認" />
+
       <h1 className="text-2xl font-semibold text-ink">教師の承認</h1>
       <p className="mt-1 text-sm text-ink-muted">
         自己登録した教師は、ここで承認するまでログインできません。心当たりのない登録は却下してください。
@@ -73,10 +75,6 @@ export default async function AdminTeachersPage() {
           </ul>
         </>
       )}
-
-      <Link href="/courses" className="mt-8 inline-block text-sm text-ink-muted hover:underline">
-        ← 授業一覧に戻る
-      </Link>
     </div>
   );
 }

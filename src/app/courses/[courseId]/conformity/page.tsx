@@ -1,7 +1,7 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
+import { Breadcrumbs, BackLink } from "@/components/breadcrumbs";
 
 // F20: ペルソナ設計と同調の計測。
 // 論証評価(F20/F24共有コンポーネント、src/lib/ai/argument-evaluation.ts)で判定した
@@ -87,9 +87,7 @@ export default async function ConformityPage({
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <Link href={`/courses/${courseId}`} className="text-sm text-ink-muted hover:underline">
-        ← {course.title}
-      </Link>
+      <Breadcrumbs trail={[{ label: "授業一覧", href: "/courses" }, { label: course.title, href: `/courses/${courseId}` }]} current="同調の計測" />
       <h1 className="mt-2 text-2xl font-semibold text-ink">
         ペルソナ設計と同調の計測(F20)
       </h1>
@@ -141,6 +139,8 @@ export default async function ConformityPage({
           )}
         </ul>
       </div>
+
+      <BackLink href={`/courses/${courseId}`} label={course.title} />
     </div>
   );
 }

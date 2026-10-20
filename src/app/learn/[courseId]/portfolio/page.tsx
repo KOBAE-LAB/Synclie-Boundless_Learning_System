@@ -1,9 +1,9 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { requireConsent } from "@/lib/consent";
 import { requireEnrollment } from "@/lib/courses/enrollment";
+import { Breadcrumbs, BackLink } from "@/components/breadcrumbs";
 
 // F08: ポートフォリオ。成果物・フィードバック・振り返りを時系列で並べ、
 // 学習者本人がいつでも見返せるようにする(要件定義書7章)。読み取り専用。
@@ -87,9 +87,7 @@ export default async function PortfolioPage({
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <Link href={`/learn/${courseId}`} className="text-sm text-ink-muted hover:underline">
-        ← {course.title}
-      </Link>
+      <Breadcrumbs trail={[{ label: "授業一覧", href: "/learn" }, { label: course.title, href: `/learn/${courseId}` }]} current="ポートフォリオ" />
       <h1 className="mt-2 text-2xl font-semibold text-ink">
         ポートフォリオ(F08)
       </h1>
@@ -167,6 +165,8 @@ export default async function PortfolioPage({
           </li>
         )}
       </ol>
+
+      <BackLink href={`/learn/${courseId}`} label={course.title} />
     </div>
   );
 }
