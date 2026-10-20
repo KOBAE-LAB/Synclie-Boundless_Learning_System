@@ -4,10 +4,17 @@ import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { SubmitButton } from "@/components/submit-button";
 import { Breadcrumbs, BackLink } from "@/components/breadcrumbs";
-import { lessonName } from "@/lib/courses/series";
+import { lessonName, seriesLabel } from "@/lib/courses/series";
+import { seriesHasLearnerRecords } from "@/lib/courses/series-admin";
 import {
   approveEnrollmentAction,
+  archiveSeriesAction,
+  carryOverSeriesAction,
+  clearEnrollmentsAction,
+  copyEnrollmentsAction,
   createLessonAction,
+  deleteSeriesAction,
+  unarchiveSeriesAction,
   regenerateJoinCodeAction,
   registerStudentAction,
   removeEnrollmentAction,
@@ -29,7 +36,7 @@ export default async function SeriesPage({ params }: { params: Promise<{ seriesI
 
   const { data: series } = await admin
     .from("course_series")
-    .select("id, title, subject, join_code, owner_teacher_id")
+    .select("id, title, subject, join_code, owner_teacher_id, planned_lessons, fiscal_year, archived_at")
     .eq("id", seriesId)
     .maybeSingle();
   if (!series || series.owner_teacher_id !== user.id) {
@@ -58,6 +65,16 @@ export default async function SeriesPage({ params }: { params: Promise<{ seriesI
       : { data: [] };
   const profileById = new Map((enrolledProfiles ?? []).map((p) => [p.id, p]));
 
+  const hasRecords = await seriesHasLearnerRecords(admin, seriesId);
+  const { data: otherSeries } = await admin
+    .from("course_series")
+    .select("id, title, fiscal_year")
+    .eq("owner_teacher_id", user.id)
+    .is("archived_at", null)
+    .neq("id", seriesId)
+    .order("created_at", { ascending: false });
+  const lessonCount = (lessons ?? []).length;
+
   const boundRegenerateJoinCodeAction = regenerateJoinCodeAction.bind(null, seriesId);
   const boundRegisterStudentAction = registerStudentAction.bind(null, seriesId);
   const nextLessonNo = Math.max(0, ...(lessons ?? []).map((l) => l.lesson_no)) + 1;
@@ -65,15 +82,32 @@ export default async function SeriesPage({ params }: { params: Promise<{ seriesI
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
       <Breadcrumbs trail={[{ label: "授業シリーズ一覧", href: "/courses" }]} current={series.title} />
-      <h1 className="mt-3 text-2xl font-semibold text-ink">{series.title}</h1>
-      {series.subject && <p className="mt-1 text-sm text-ink-muted">{series.subject}</p>}
+      <h1 className="mt-3 text-2xl font-semibold text-ink">{seriesLabel(series.title, series.planned_lessons)}</h1>
+      <p className="mt-1 text-sm text-ink-muted">
+        {series.fiscal_year}年度{series.subject ? `・${series.subject}` : ""}
+        {series.planned_lessons ? `・作成済み ${lessonCount}/${series.planned_lessons}回` : `・${lessonCount}回`}
+      </p>
+      {series.archived_at && (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-lg border border-warn bg-warn-soft px-4 py-3 text-sm text-warn">
+          <span>このシリーズはアーカイブ済みです。新しい履修登録・発言・提出は受け付けず、学習者は記録を見返せます。</span>
+          <form action={unarchiveSeriesAction.bind(null, seriesId)}>
+            <SubmitButton pendingText="戻しています…" className="rounded-md border border-warn px-3 py-1.5 text-xs font-medium hover:bg-surface-raised disabled:opacity-50">
+              アーカイブを解除する
+            </SubmitButton>
+          </form>
+        </div>
+      )}
       <details className="mt-2">
-        <summary className="cursor-pointer text-xs text-ink-muted">シリーズの名前を変える</summary>
+        <summary className="cursor-pointer text-xs text-ink-muted">名前・全回数・年度を変える</summary>
         <form action={updateSeriesAction.bind(null, seriesId)} className="mt-2 flex flex-wrap gap-2">
           <label htmlFor="series-title" className="sr-only">シリーズの名前</label>
           <input id="series-title" name="title" defaultValue={series.title} required maxLength={80} className="min-w-0 flex-1 rounded-md border border-line bg-surface-raised px-3 py-1.5 text-sm" />
           <label htmlFor="series-subject" className="sr-only">教科</label>
           <input id="series-subject" name="subject" defaultValue={series.subject ?? ""} placeholder="教科(任意)" maxLength={40} className="w-36 rounded-md border border-line bg-surface-raised px-3 py-1.5 text-sm" />
+          <label htmlFor="series-planned" className="sr-only">全回数</label>
+          <input id="series-planned" name="plannedLessons" type="number" min={1} max={60} defaultValue={series.planned_lessons ?? ""} placeholder="全◯回" className="w-24 rounded-md border border-line bg-surface-raised px-3 py-1.5 text-sm" />
+          <label htmlFor="series-year" className="sr-only">年度</label>
+          <input id="series-year" name="fiscalYear" type="number" min={2000} max={2100} defaultValue={series.fiscal_year} className="w-24 rounded-md border border-line bg-surface-raised px-3 py-1.5 text-sm" />
           <SubmitButton pendingText="保存中…" className="rounded-md border border-line px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface disabled:opacity-50">保存</SubmitButton>
         </form>
       </details>
@@ -98,8 +132,11 @@ export default async function SeriesPage({ params }: { params: Promise<{ seriesI
           {(lessons ?? []).length === 0 && <li className="text-sm text-ink-muted">まだ授業回がありません。下のフォームから作成してください。</li>}
         </ul>
 
+        {!series.archived_at && (
         <details open={(lessons ?? []).length === 0} className="mt-4 rounded-lg border border-line p-5">
-          <summary className="cursor-pointer text-sm font-medium text-ink">第{nextLessonNo}回を作成する</summary>
+          <summary className="cursor-pointer text-sm font-medium text-ink">
+            第{nextLessonNo}回を作成する{series.planned_lessons ? `(全${series.planned_lessons}回)` : ""}
+          </summary>
           <form action={createLessonAction.bind(null, seriesId)} className="mt-4 space-y-3">
             <label htmlFor="lesson-new-title" className="sr-only">授業回の名前</label>
             <input
@@ -120,6 +157,7 @@ export default async function SeriesPage({ params }: { params: Promise<{ seriesI
             </SubmitButton>
           </form>
         </details>
+        )}
       </section>
 
       <section className="mt-10">
@@ -256,6 +294,86 @@ export default async function SeriesPage({ params }: { params: Promise<{ seriesI
       </details>
 
 
+      </section>
+
+
+      <section className="mt-10">
+        <h2 className="border-b border-line pb-2 text-base font-semibold text-ink">3. 年度の処理・シリーズの管理</h2>
+        <div className="mt-4 space-y-3">
+          <details className="rounded-lg border border-line p-4">
+            <summary className="cursor-pointer text-sm font-medium text-ink">翌年度へ引き継ぐ(複製)</summary>
+            <p className="mt-2 text-sm text-ink-muted">
+              授業回・資料・擬似メンバー・評価の観点・学習の流れを、新しい年度のシリーズに複製します。授業回は「準備中」で作られ、
+              履修者・学習者の記録は引き継ぎません(授業コードも新しくなります)。資料の知識ベースは、複製先で改めて生成します。
+            </p>
+            <form action={carryOverSeriesAction.bind(null, seriesId)} className="mt-3 flex flex-wrap items-center gap-2">
+              <label htmlFor="carry-year" className="text-xs text-ink-muted">新しい年度</label>
+              <input id="carry-year" name="fiscalYear" type="number" min={2000} max={2100} defaultValue={series.fiscal_year + 1} className="w-24 rounded-md border border-line bg-surface-raised px-3 py-1.5 text-sm" />
+              <SubmitButton pendingText="複製中…" className="rounded-md bg-accent-fill px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-fill-hover disabled:opacity-50">
+                複製して引き継ぐ
+              </SubmitButton>
+            </form>
+          </details>
+
+          <details className="rounded-lg border border-line p-4">
+            <summary className="cursor-pointer text-sm font-medium text-ink">履修者の一括整理</summary>
+            <p className="mt-2 text-sm text-ink-muted">年度末に、履修者をまとめて別のシリーズに登録したり、履修登録を外したりします。学習者の記録は消えません。</p>
+            {(otherSeries ?? []).length > 0 ? (
+              <form action={copyEnrollmentsAction.bind(null, seriesId)} className="mt-3 flex flex-wrap items-center gap-2">
+                <label htmlFor="copy-target" className="text-xs text-ink-muted">承認済みの{enrolledStudentIds.length}人を、次のシリーズにも登録</label>
+                <select id="copy-target" name="targetSeriesId" required defaultValue="" className="min-w-0 rounded-md border border-line bg-surface-raised px-2 py-1.5 text-sm">
+                  <option value="" disabled>シリーズを選ぶ</option>
+                  {(otherSeries ?? []).map((o) => (
+                    <option key={o.id} value={o.id}>{o.title}({o.fiscal_year}年度)</option>
+                  ))}
+                </select>
+                <SubmitButton pendingText="登録中…" className="rounded-md border border-line px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface disabled:opacity-50">
+                  登録する
+                </SubmitButton>
+              </form>
+            ) : (
+              <p className="mt-3 text-xs text-ink-faint">登録先にできる(アーカイブしていない)他のシリーズがありません。</p>
+            )}
+            <form action={clearEnrollmentsAction.bind(null, seriesId)} className="mt-3 border-t border-line pt-3">
+              <p className="text-xs text-ink-muted">このシリーズの履修登録を、全員分(申請中も)外します。学習者は、このシリーズの授業回を開けなくなります。</p>
+              <SubmitButton pendingText="整理中…" className="mt-2 rounded-md border border-line px-3 py-1.5 text-xs font-medium text-danger hover:bg-surface disabled:opacity-50">
+                履修登録を全員分外す
+              </SubmitButton>
+            </form>
+          </details>
+
+          {!series.archived_at && (
+            <details className="rounded-lg border border-line p-4">
+              <summary className="cursor-pointer text-sm font-medium text-ink">アーカイブする(年度末にシリーズを閉じる)</summary>
+              <p className="mt-2 text-sm text-ink-muted">
+                新しい履修登録・発言・提出を受け付けなくなります。学習者は記録を見返せます。いつでも解除できます。
+              </p>
+              <form action={archiveSeriesAction.bind(null, seriesId)} className="mt-3">
+                <SubmitButton pendingText="処理中…" className="rounded-md border border-line px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface disabled:opacity-50">
+                  アーカイブする
+                </SubmitButton>
+              </form>
+            </details>
+          )}
+
+          <details className="rounded-lg border border-line p-4">
+            <summary className="cursor-pointer text-sm font-medium text-danger">シリーズを削除する</summary>
+            {hasRecords ? (
+              <p className="mt-2 text-sm text-ink-muted">学習者の記録(対話・提出など)があるため、削除できません。代わりに「アーカイブ」してください。</p>
+            ) : (
+              <>
+                <p className="mt-2 text-sm text-ink-muted">
+                  授業回・資料・擬似メンバーなど、このシリーズのすべてを完全に削除します。<b>元に戻せません。</b>
+                </p>
+                <form action={deleteSeriesAction.bind(null, seriesId)} className="mt-3">
+                  <SubmitButton pendingText="削除中…" className="rounded-md bg-danger px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50">
+                    完全に削除する
+                  </SubmitButton>
+                </form>
+              </>
+            )}
+          </details>
+        </div>
       </section>
 
       <BackLink href="/courses" label="授業シリーズ一覧" />

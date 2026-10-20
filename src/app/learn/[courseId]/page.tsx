@@ -394,7 +394,8 @@ export default async function LearnCourseSessionPage({
         policy: course.time_limit_policy,
       })
     : null;
-  const inputLocked = ended || (timeStatus?.blocksInput ?? false);
+  const seriesArchived = lessonCrumbs?.archived ?? false;
+  const inputLocked = ended || seriesArchived || (timeStatus?.blocksInput ?? false);
   const END_REASON_LABELS: Record<string, string> = {
     time_limit: "制限時間になったため",
     ai_suggested: "AIの提案に応じて",
@@ -679,9 +680,11 @@ export default async function LearnCourseSessionPage({
 
       {inputLocked ? (
         <p className="mt-6 rounded-md border border-line bg-surface px-4 py-3 text-sm text-ink-muted">
-          {ended
-            ? "この議論は終了しました。上の「議論のまとめ」を確認して、成果を提出しましょう。"
-            : "制限時間を過ぎました。議論のまとめを作っています…"}
+          {seriesArchived
+            ? "この授業シリーズは終了しています。記録は見返せますが、新しい発言はできません。"
+            : ended
+              ? "この議論は終了しました。上の「議論のまとめ」を確認して、成果を提出しましょう。"
+              : "制限時間を過ぎました。議論のまとめを作っています…"}
         </p>
       ) : (
         <ChatComposer
@@ -880,6 +883,11 @@ export default async function LearnCourseSessionPage({
       )}
 
       <div className="mt-12 border-t border-line pt-8" id="submit-outcome">
+        {seriesArchived ? (
+          <p className="text-sm text-ink-muted">この授業シリーズは終了しているため、新しい成果は提出できません。</p>
+        ) : null}
+        {!seriesArchived && (
+          <>
         <h2 className="text-sm font-medium text-ink">
           成果を提出する
         </h2>
@@ -906,6 +914,9 @@ export default async function LearnCourseSessionPage({
             提出する
           </button>
         </form>
+
+          </>
+        )}
 
         {submissions.length > 0 && (
           <ul className="mt-6 space-y-4">

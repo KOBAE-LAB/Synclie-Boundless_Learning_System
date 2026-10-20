@@ -36,8 +36,9 @@ export async function signupStudentAction(formData: FormData) {
   if (!code) fail(path, "授業コードを入力してください。");
 
   const admin = createAdminClient();
-  const { data: series } = await admin.from("course_series").select("id").eq("join_code", code).maybeSingle();
+  const { data: series } = await admin.from("course_series").select("id, archived_at").eq("join_code", code).maybeSingle();
   if (!series) fail(path, "その授業コードは見つかりません。担当の先生に確認してください。");
+  if (series.archived_at) fail(path, "その授業シリーズは終了しています。担当の先生に確認してください。");
 
   const studentId = crypto.randomUUID();
   const { error } = await admin.from("profiles").insert({

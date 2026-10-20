@@ -11,6 +11,7 @@ import { evaluateArgument } from "@/lib/ai/argument-evaluation";
 import { isEnrolled } from "@/lib/courses/enrollment";
 import { isPersonaMentioned } from "@/lib/persona-mention";
 import { buildCourseContext, reasoningEffortFor } from "@/lib/courses/settings";
+import { ARCHIVED_MESSAGE, isLessonArchived } from "@/lib/courses/series";
 import { assertDiscussionAllowed, hasLaterOutput, stepContextFor, withStepContext } from "@/lib/flow/load";
 import { judgeDiscussionState } from "@/lib/ai/discussion-wrapup";
 import { THINKING_DEPTH_GUIDANCE, normalizeThinkingDepth } from "@/lib/persona-traits";
@@ -99,6 +100,11 @@ export async function getOrCreateSessionRow(
     } else {
       throw new Error("この授業への参加登録がありません。授業コードで申請し、先生の承認を受けてから発言してください。");
     }
+  }
+
+  // 終了(アーカイブ)したシリーズでは、新しい発言・提出は受け付けない(記録の閲覧だけ)。
+  if (await isLessonArchived(admin, courseId)) {
+    throw new Error(ARCHIVED_MESSAGE);
   }
 
   const { data: latest } = await admin

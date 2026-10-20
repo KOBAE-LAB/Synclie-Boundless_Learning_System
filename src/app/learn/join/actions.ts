@@ -19,11 +19,15 @@ export async function joinCourseByCodeAction(formData: FormData) {
 
   const { data: series } = await admin
     .from("course_series")
-    .select("id, title")
+    .select("id, title, archived_at")
     .eq("join_code", rawCode)
     .maybeSingle();
   if (!series) {
     throw new Error("そのコードの授業が見つかりません。コードを確認してください。");
+  }
+
+  if (series.archived_at) {
+    throw new Error("このシリーズは終了しているため、新しく履修登録できません。");
   }
 
   const { data: existing } = await admin

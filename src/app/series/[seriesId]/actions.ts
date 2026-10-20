@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
-import { assertOwnsSeries } from "@/lib/courses/series";
+import { assertOwnsSeries, fiscalYearOfDate } from "@/lib/courses/series";
+import { carryOverSeries, deleteSeriesIfEmpty } from "@/lib/courses/series-admin";
 import { hashPassword } from "@/lib/auth/password";
 import { normalizeEmail, validateSignupFields } from "@/lib/auth/signup-validation";
 
@@ -29,6 +30,10 @@ export async function createLessonAction(seriesId: string, formData: FormData) {
     throw new Error("授業回の名前を入力してください。");
   }
 
+  const { data: seriesRow } = await admin.from("course_series").select("archived_at").eq("id", seriesId).maybeSingle();
+  if (seriesRow?.archived_at) {
+    throw new Error("アーカイブしたシリーズには、授業回を追加できません。");
+  }
   const { data: existing } = await admin.from("courses").select("lesson_no").eq("series_id", seriesId);
   if ((existing?.length ?? 0) >= MAX_LESSONS) {
     throw new Error(`授業回は最大${MAX_LESSONS}回までです。`);
@@ -56,19 +61,40 @@ export async function createLessonAction(seriesId: string, formData: FormData) {
   redirect(`/courses/${data.id}`);
 }
 
-// 授業シリーズの名前・教科の変更。
-export async function updateSeriesAction(seriesId: string, formData: FormData) {
-  const { admin } = await guard(seriesId);
+function parseSeriesFields(formData: FormData) {
   const title = String(formData.get("title") ?? "").trim().slice(0, 80);
   const subject = String(formData.get("subject") ?? "").trim().slice(0, 40);
-  if (!title) {
+  const planned = Number.parseInt(String(formData.get("plannedLessons") ?? ""), 10);
+  const year = Number.parseInt(String(formData.get("fiscalYear") ?? ""), 10);
+  return {
+    title,
+    subject: subject || null,
+    planned_lessons: Number.isInteger(planned) && planned >= 1 && planned <= 60 ? planned : null,
+    fiscal_year: Number.isInteger(year) && year >= 2000 && year <= 2100 ? year : null,
+  };
+}
+
+// 授業シリーズの名前・教科・全回数・年度の変更。
+export async function updateSeriesAction(seriesId: string, formData: FormData) {
+  const { admin } = await guard(seriesId);
+  const fields = parseSeriesFields(formData);
+  if (!fields.title) {
     throw new Error("シリーズの名前を入力してください。");
   }
-  const { error } = await admin.from("course_series").update({ title, subject: subject || null }).eq("id", seriesId);
+  const { error } = await admin
+    .from("course_series")
+    .update({
+      title: fields.title,
+      subject: fields.subject,
+      planned_lessons: fields.planned_lessons,
+      ...(fields.fiscal_year ? { fiscal_year: fields.fiscal_year } : {}),
+    })
+    .eq("id", seriesId);
   if (error) {
     throw new Error(`更新に失敗しました: ${error.message}`);
   }
   revalidatePath(`/series/${seriesId}`);
+  revalidatePath("/courses");
 }
 
 // 授業コードを再発行する(伝えたコードが漏れた・間違って別の生徒に伝えた、などの場合用)。
@@ -164,4 +190,75 @@ export async function registerStudentAction(seriesId: string, formData: FormData
   }
 
   revalidatePath(`/series/${seriesId}`);
+}
+
+// アーカイブ(年度末などにシリーズを閉じる): 新しい履修登録・発言・提出は受け付けず、学習者は記録を見返せる。
+// いつでも元に戻せる。
+export async function archiveSeriesAction(seriesId: string) {
+  const { admin } = await guard(seriesId);
+  const { error } = await admin.from("course_series").update({ archived_at: new Date().toISOString() }).eq("id", seriesId);
+  if (error) throw new Error(`アーカイブに失敗しました: ${error.message}`);
+  revalidatePath(`/series/${seriesId}`);
+  revalidatePath("/courses");
+}
+
+export async function unarchiveSeriesAction(seriesId: string) {
+  const { admin } = await guard(seriesId);
+  const { error } = await admin.from("course_series").update({ archived_at: null }).eq("id", seriesId);
+  if (error) throw new Error(`元に戻せませんでした: ${error.message}`);
+  revalidatePath(`/series/${seriesId}`);
+  revalidatePath("/courses");
+}
+
+// 削除: 学習者の記録が無いシリーズだけ、資料ファイルごと完全に削除する(元に戻せない)。
+export async function deleteSeriesAction(seriesId: string) {
+  const { admin } = await guard(seriesId);
+  await deleteSeriesIfEmpty(admin, seriesId);
+  revalidatePath("/courses");
+  redirect("/courses");
+}
+
+// 翌年度への引き継ぎ: 構成(授業回・資料・擬似メンバー・評価の観点・学習の流れ)を新しいシリーズに複製する。
+export async function carryOverSeriesAction(seriesId: string, formData: FormData) {
+  const { user, admin } = await guard(seriesId);
+  const { data: source } = await admin.from("course_series").select("fiscal_year").eq("id", seriesId).maybeSingle();
+  const requested = Number.parseInt(String(formData.get("fiscalYear") ?? ""), 10);
+  const fiscalYear = Number.isInteger(requested) ? requested : (source?.fiscal_year ?? fiscalYearOfDate(new Date())) + 1;
+  const newSeriesId = await carryOverSeries(admin, seriesId, user.id, fiscalYear);
+  revalidatePath("/courses");
+  redirect(`/series/${newSeriesId}`);
+}
+
+// 履修者の一括整理(1): 承認済みの履修者を、別のシリーズ(自分が担当する、アーカイブしていないもの)にも履修登録する。
+// 元のシリーズの履修は残る(過去の記録を見返せるように)。
+export async function copyEnrollmentsAction(seriesId: string, formData: FormData) {
+  const { user, admin } = await guard(seriesId);
+  const targetId = String(formData.get("targetSeriesId") ?? "");
+  if (!targetId || targetId === seriesId) throw new Error("登録先のシリーズを選んでください。");
+  await assertOwnsSeries(admin, targetId, user.id);
+  const { data: target } = await admin.from("course_series").select("archived_at").eq("id", targetId).maybeSingle();
+  if (target?.archived_at) throw new Error("アーカイブしたシリーズには登録できません。");
+
+  const { data: rows } = await admin
+    .from("series_enrollments")
+    .select("student_id")
+    .eq("series_id", seriesId)
+    .eq("status", "approved");
+  const records = (rows ?? []).map((r) => ({ series_id: targetId, student_id: r.student_id, status: "approved" }));
+  if (records.length > 0) {
+    const { error } = await admin.from("series_enrollments").upsert(records, { onConflict: "series_id,student_id" });
+    if (error) throw new Error(`履修登録に失敗しました: ${error.message}`);
+  }
+  revalidatePath(`/series/${seriesId}`);
+  revalidatePath(`/series/${targetId}`);
+}
+
+// 履修者の一括整理(2): このシリーズの履修登録を全員分まとめて外す(申請中も含む)。
+// 対話ログ・提出物などの学習者の記録は消さない(学習者のポートフォリオには残る)。
+export async function clearEnrollmentsAction(seriesId: string) {
+  const { admin } = await guard(seriesId);
+  const { error } = await admin.from("series_enrollments").delete().eq("series_id", seriesId);
+  if (error) throw new Error(`履修登録の整理に失敗しました: ${error.message}`);
+  revalidatePath(`/series/${seriesId}`);
+  revalidatePath("/courses");
 }

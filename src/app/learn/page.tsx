@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { requireConsent } from "@/lib/consent";
+import { seriesLabel } from "@/lib/courses/series";
 
 // 学習者には、履修登録した授業シリーズだけを見せる(シリーズを選ぶと、公開されている授業回の一覧に進む)。
 export default async function LearnCoursesPage({
@@ -26,7 +27,7 @@ export default async function LearnCoursesPage({
     enrolledSeriesIds.length > 0
       ? await admin
           .from("course_series")
-          .select("id, title, subject")
+          .select("id, title, subject, planned_lessons, archived_at")
           .in("id", enrolledSeriesIds)
           .order("created_at", { ascending: false })
       : { data: [] };
@@ -36,6 +37,8 @@ export default async function LearnCoursesPage({
       : { data: [] };
 
   // 各シリーズの、公開されている授業回の数(学習者が開ける回)。
+  const activeSeries = (seriesRows ?? []).filter((x) => !x.archived_at);
+  const pastSeries = (seriesRows ?? []).filter((x) => x.archived_at);
   const releasedCount = new Map<string, number>();
   if (enrolledSeriesIds.length > 0) {
     const { data: lessons } = await admin
@@ -89,30 +92,59 @@ export default async function LearnCoursesPage({
 
       <h2 className="mt-8 text-sm font-medium text-ink">履修している授業シリーズ</h2>
       <ul className="mt-3 space-y-2">
-        {(seriesRows ?? []).map((series) => (
+        {activeSeries.map((series) => (
           <li key={series.id}>
-            <Link
-              href={`/learn/series/${series.id}`}
-              className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-md border border-line px-4 py-3 text-sm hover:bg-surface"
-            >
-              <span>
-                <span className="font-medium text-ink">{series.title}</span>
-                {series.subject && <span className="ml-2 text-ink-muted">({series.subject})</span>}
-              </span>
-              <span className="text-xs text-ink-muted">公開中 {releasedCount.get(series.id) ?? 0}回</span>
-            </Link>
+            <SeriesLink series={series} releasedCount={releasedCount.get(series.id) ?? 0} />
           </li>
         ))}
-        {(seriesRows ?? []).length === 0 && (
+        {activeSeries.length === 0 && (
           <li className="text-sm text-ink-muted">
-            まだ履修している授業がありません。先生から授業コードをもらったら
-            <Link href="/learn/join" className="mx-1 underline">
-              こちら
-            </Link>
-            から履修登録してください。
+            {pastSeries.length > 0 ? "いま履修中のシリーズはありません。" : "まだ履修している授業がありません。先生から授業コードをもらったら"}
+            {pastSeries.length === 0 && (
+              <>
+                <Link href="/learn/join" className="mx-1 underline">
+                  こちら
+                </Link>
+                から履修登録してください。
+              </>
+            )}
           </li>
         )}
       </ul>
+
+      {pastSeries.length > 0 && (
+        <>
+          <h2 className="mt-8 text-sm font-medium text-ink">過去のシリーズ(記録の閲覧のみ)</h2>
+          <ul className="mt-3 space-y-2">
+            {pastSeries.map((series) => (
+              <li key={series.id}>
+                <SeriesLink series={series} releasedCount={releasedCount.get(series.id) ?? 0} />
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </div>
+  );
+}
+
+function SeriesLink({
+  series,
+  releasedCount,
+}: {
+  series: { id: string; title: string; subject: string | null; planned_lessons: number | null };
+  releasedCount: number;
+}) {
+  return (
+    <Link
+      href={`/learn/series/${series.id}`}
+      className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-md border border-line px-4 py-3 text-sm hover:bg-surface"
+    >
+      <span>
+        <span className="font-medium text-ink">{seriesLabel(series.title, series.planned_lessons)}</span>
+        {series.subject && <span className="ml-2 text-ink-muted">({series.subject})</span>}
+      </span>
+      <span className="text-xs text-ink-muted">公開中 {releasedCount}回</span>
+    </Link>
   );
 }

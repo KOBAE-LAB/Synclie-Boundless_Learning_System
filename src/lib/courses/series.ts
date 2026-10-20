@@ -28,6 +28,8 @@ export interface LessonCrumbs {
   seriesId: string;
   seriesTitle: string;
   lessonNo: number;
+  /** シリーズがアーカイブ済みか(学習者は記録の閲覧のみ) */
+  archived: boolean;
   /** 教師の画面用: 授業シリーズ一覧 › シリーズ › 第N回 */
   teacherTrail: { label: string; href: string }[];
   /** 学習者の画面用: 授業一覧 › シリーズ */
@@ -45,12 +47,13 @@ export async function loadLessonCrumbs(admin: AdminClient, courseId: string): Pr
     .eq("id", courseId)
     .maybeSingle();
   if (!course) return null;
-  const { data: series } = await admin.from("course_series").select("id, title").eq("id", course.series_id).maybeSingle();
+  const { data: series } = await admin.from("course_series").select("id, title, archived_at").eq("id", course.series_id).maybeSingle();
   if (!series) return null;
   return {
     seriesId: series.id,
     seriesTitle: series.title,
     lessonNo: course.lesson_no,
+    archived: !!series.archived_at,
     teacherTrail: [
       { label: "授業シリーズ一覧", href: "/courses" },
       { label: series.title, href: `/series/${series.id}` },
@@ -78,3 +81,25 @@ export async function loadLessonLabels(admin: AdminClient, courseIds: string[]):
   }
   return labels;
 }
+
+/** 「理科1年 光合成(全8回)」。予定回数が無ければ名前だけ。 */
+export function seriesLabel(title: string, plannedLessons: number | null | undefined): string {
+  return plannedLessons ? `${title}(全${plannedLessons}回)` : title;
+}
+
+/** 日本の年度(4月始まり、日本時間)。 */
+export function fiscalYearOfDate(date: Date): number {
+  const jst = new Date(date.getTime() + 9 * 60 * 60 * 1000);
+  const month = jst.getUTCMonth() + 1;
+  return month >= 4 ? jst.getUTCFullYear() : jst.getUTCFullYear() - 1;
+}
+
+/** 授業回が属するシリーズがアーカイブ済みか(アーカイブ済みは、新しい発言・提出ができない)。 */
+export async function isLessonArchived(admin: AdminClient, courseId: string): Promise<boolean> {
+  const { data: course } = await admin.from("courses").select("series_id").eq("id", courseId).maybeSingle();
+  if (!course) return false;
+  const { data: series } = await admin.from("course_series").select("archived_at").eq("id", course.series_id).maybeSingle();
+  return !!series?.archived_at;
+}
+
+export const ARCHIVED_MESSAGE = "この授業シリーズは終了しています(記録の閲覧のみ)。新しい発言や提出はできません。";

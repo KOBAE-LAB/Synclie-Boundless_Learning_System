@@ -2,9 +2,26 @@ import Link from "next/link";
 import { isAdmin, requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { SubmitButton } from "@/components/submit-button";
-import { createSeriesAction } from "./actions";
+import { fiscalYearOfDate, seriesLabel } from "@/lib/courses/series";
+import { archiveYearAction, createSeriesAction } from "./actions";
+import {
+  archiveSeriesAction,
+  carryOverSeriesAction,
+  deleteSeriesAction,
+  unarchiveSeriesAction,
+} from "../series/[seriesId]/actions";
 
-export default async function CoursesPage() {
+// 担当している授業シリーズの一覧と、一覧からの管理(アーカイブ・翌年度への引き継ぎ・削除)。
+// 年度で絞り込め、年度末に一括でアーカイブできる。
+
+const small = "rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface disabled:opacity-50";
+
+export default async function CoursesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ year?: string; archived?: string }>;
+}) {
+  const { year: yearParam, archived } = await searchParams;
   const { user } = await requireRole("teacher");
 
   const admin = createAdminClient();
@@ -19,27 +36,57 @@ export default async function CoursesPage() {
 
   const { data: seriesRows } = await admin
     .from("course_series")
-    .select("id, title, subject, created_at")
+    .select("id, title, subject, planned_lessons, fiscal_year, archived_at, created_at")
     .eq("owner_teacher_id", user.id)
+    .order("fiscal_year", { ascending: false })
     .order("created_at", { ascending: false });
-  const seriesList = seriesRows ?? [];
-  const seriesIds = seriesList.map((x) => x.id);
+  const allSeries = seriesRows ?? [];
 
-  // 各シリーズの授業回の数・履修者の数・承認待ちの数。
+  const currentYear = fiscalYearOfDate(new Date());
+  const years = [...new Set([currentYear, ...allSeries.map((s) => s.fiscal_year)])].sort((a, b) => b - a);
+  const selectedYear = yearParam && yearParam !== "all" ? Number.parseInt(yearParam, 10) : null;
+  const showArchived = archived === "1";
+  const seriesList = allSeries.filter(
+    (s) => (selectedYear === null || s.fiscal_year === selectedYear) && (showArchived || !s.archived_at),
+  );
+  const archivedHidden = allSeries.filter(
+    (s) => (selectedYear === null || s.fiscal_year === selectedYear) && s.archived_at,
+  ).length;
+  const seriesIds = allSeries.map((x) => x.id);
+
+  // 各シリーズの授業回の数・履修者の数・承認待ちの数・学習者の記録の有無(記録があれば削除できない)。
   const lessonCount = new Map<string, number>();
   const enrolledCount = new Map<string, number>();
   const pendingCount = new Map<string, number>();
+  const seriesWithRecords = new Set<string>();
   if (seriesIds.length > 0) {
     const [{ data: lessons }, { data: enrollments }] = await Promise.all([
-      admin.from("courses").select("series_id").in("series_id", seriesIds),
+      admin.from("courses").select("id, series_id").in("series_id", seriesIds),
       admin.from("series_enrollments").select("series_id, status").in("series_id", seriesIds),
     ]);
-    for (const l of lessons ?? []) lessonCount.set(l.series_id, (lessonCount.get(l.series_id) ?? 0) + 1);
+    const seriesOfLesson = new Map<string, string>();
+    for (const l of lessons ?? []) {
+      seriesOfLesson.set(l.id, l.series_id);
+      lessonCount.set(l.series_id, (lessonCount.get(l.series_id) ?? 0) + 1);
+    }
     for (const e of enrollments ?? []) {
       const map = e.status === "pending" ? pendingCount : enrolledCount;
       map.set(e.series_id, (map.get(e.series_id) ?? 0) + 1);
     }
+    const lessonIds = [...seriesOfLesson.keys()];
+    if (lessonIds.length > 0) {
+      const [{ data: sessions }, { data: submissions }] = await Promise.all([
+        admin.from("learning_sessions").select("course_id").in("course_id", lessonIds),
+        admin.from("submissions").select("course_id").in("course_id", lessonIds),
+      ]);
+      for (const r of [...(sessions ?? []), ...(submissions ?? [])]) {
+        const sid = seriesOfLesson.get(r.course_id);
+        if (sid) seriesWithRecords.add(sid);
+      }
+    }
   }
+
+  const activeInYear = (y: number) => allSeries.filter((s) => s.fiscal_year === y && !s.archived_at).length;
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
@@ -59,33 +106,110 @@ export default async function CoursesPage() {
         </Link>
       )}
 
-      <h2 className="mt-8 text-sm font-medium text-ink">担当している授業シリーズ({seriesList.length})</h2>
+      <form method="get" className="mt-8 flex flex-wrap items-end gap-3">
+        <div>
+          <label htmlFor="list-year" className="block text-xs text-ink-muted">年度</label>
+          <select id="list-year" name="year" defaultValue={selectedYear ? String(selectedYear) : "all"} className="rounded-md border border-line bg-surface-raised px-2 py-1.5 text-sm">
+            <option value="all">すべて</option>
+            {years.map((y) => (
+              <option key={y} value={y}>{y}年度</option>
+            ))}
+          </select>
+        </div>
+        <label className="flex items-center gap-2 pb-1.5 text-sm text-ink-muted">
+          <input type="checkbox" name="archived" value="1" defaultChecked={showArchived} />
+          アーカイブ済みも表示
+        </label>
+        <button type="submit" className={small}>絞り込む</button>
+      </form>
+
+      <h2 className="mt-6 text-sm font-medium text-ink">
+        担当している授業シリーズ({seriesList.length})
+        {!showArchived && archivedHidden > 0 && (
+          <span className="ml-2 text-xs font-normal text-ink-faint">アーカイブ済み{archivedHidden}件は非表示</span>
+        )}
+      </h2>
       <ul className="mt-3 space-y-2">
-        {seriesList.map((series) => (
-          <li key={series.id}>
-            <Link
-              href={`/series/${series.id}`}
-              className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-md border border-line px-4 py-3 text-sm hover:bg-surface"
-            >
-              <span>
-                <span className="font-medium text-ink">{series.title}</span>
-                {series.subject && <span className="ml-2 text-ink-muted">({series.subject})</span>}
-              </span>
-              <span className="text-xs text-ink-muted">
-                {lessonCount.get(series.id) ?? 0}回・履修{enrolledCount.get(series.id) ?? 0}人
-                {(pendingCount.get(series.id) ?? 0) > 0 && (
-                  <span className="ml-1 font-medium text-warn">・承認待ち{pendingCount.get(series.id)}人</span>
-                )}
-              </span>
-            </Link>
-          </li>
-        ))}
+        {seriesList.map((series) => {
+          const hasRecords = seriesWithRecords.has(series.id);
+          return (
+            <li key={series.id} className={`rounded-md border border-line ${series.archived_at ? "bg-surface" : ""}`}>
+              <Link
+                href={`/series/${series.id}`}
+                className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-3 text-sm hover:bg-surface"
+              >
+                <span>
+                  <span className="font-medium text-ink">{seriesLabel(series.title, series.planned_lessons)}</span>
+                  <span className="ml-2 text-xs text-ink-faint">{series.fiscal_year}年度</span>
+                  {series.subject && <span className="ml-2 text-ink-muted">({series.subject})</span>}
+                  {series.archived_at && (
+                    <span className="ml-2 rounded-full bg-warn-soft px-2 py-0.5 text-xs font-medium text-warn">アーカイブ済み</span>
+                  )}
+                </span>
+                <span className="text-xs text-ink-muted">
+                  {lessonCount.get(series.id) ?? 0}{series.planned_lessons ? `/${series.planned_lessons}` : ""}回・履修{enrolledCount.get(series.id) ?? 0}人
+                  {(pendingCount.get(series.id) ?? 0) > 0 && (
+                    <span className="ml-1 font-medium text-warn">・承認待ち{pendingCount.get(series.id)}人</span>
+                  )}
+                </span>
+              </Link>
+              <details className="border-t border-line px-4 py-2">
+                <summary className="cursor-pointer text-xs text-ink-muted">管理</summary>
+                <div className="mt-2 flex flex-wrap items-center gap-2 pb-1">
+                  {series.archived_at ? (
+                    <form action={unarchiveSeriesAction.bind(null, series.id)}>
+                      <SubmitButton pendingText="戻しています…" className={small}>アーカイブを解除</SubmitButton>
+                    </form>
+                  ) : (
+                    <form action={archiveSeriesAction.bind(null, series.id)}>
+                      <SubmitButton pendingText="処理中…" className={small}>アーカイブする</SubmitButton>
+                    </form>
+                  )}
+                  <form action={carryOverSeriesAction.bind(null, series.id)} className="flex items-center gap-1">
+                    <label htmlFor={`carry-${series.id}`} className="sr-only">引き継ぎ先の年度</label>
+                    <input id={`carry-${series.id}`} name="fiscalYear" type="number" min={2000} max={2100} defaultValue={series.fiscal_year + 1} className="w-20 rounded-md border border-line bg-surface-raised px-2 py-1 text-xs" />
+                    <SubmitButton pendingText="複製中…" className={small}>翌年度へ引き継ぐ</SubmitButton>
+                  </form>
+                  {hasRecords ? (
+                    <span className="text-xs text-ink-faint">学習者の記録があるため削除できません</span>
+                  ) : (
+                    <details className="inline-block">
+                      <summary className="cursor-pointer text-xs text-danger">削除…</summary>
+                      <form action={deleteSeriesAction.bind(null, series.id)} className="mt-2 rounded-md border border-danger p-2 text-xs">
+                        <p className="text-ink-muted">授業回・資料・擬似メンバーを含め、完全に削除します。元に戻せません。</p>
+                        <SubmitButton pendingText="削除中…" className="mt-2 rounded-md bg-danger px-2.5 py-1 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50">
+                          完全に削除する
+                        </SubmitButton>
+                      </form>
+                    </details>
+                  )}
+                </div>
+              </details>
+            </li>
+          );
+        })}
         {seriesList.length === 0 && (
-          <li className="text-sm text-ink-muted">まだ授業シリーズがありません。下のフォームから作成してください。</li>
+          <li className="text-sm text-ink-muted">
+            {allSeries.length === 0 ? "まだ授業シリーズがありません。下のフォームから作成してください。" : "この条件に合うシリーズはありません。"}
+          </li>
         )}
       </ul>
 
-      <details open={seriesList.length === 0} className="mt-6 rounded-lg border border-line p-5">
+      <details className="mt-6 rounded-lg border border-line p-5">
+        <summary className="cursor-pointer text-sm font-medium text-ink">年度末の一括アーカイブ</summary>
+        <p className="mt-2 text-sm text-ink-muted">選んだ年度の、まだ閉じていないシリーズをまとめてアーカイブします(学習者は記録を見返せます。シリーズごとに解除できます)。</p>
+        <form action={archiveYearAction} className="mt-3 flex flex-wrap items-center gap-2">
+          <label htmlFor="archive-year" className="sr-only">年度</label>
+          <select id="archive-year" name="fiscalYear" defaultValue={String(selectedYear ?? currentYear)} className="rounded-md border border-line bg-surface-raised px-2 py-1.5 text-sm">
+            {years.map((y) => (
+              <option key={y} value={y}>{y}年度({activeInYear(y)}件)</option>
+            ))}
+          </select>
+          <SubmitButton pendingText="処理中…" className={small}>この年度をまとめてアーカイブ</SubmitButton>
+        </form>
+      </details>
+
+      <details open={allSeries.length === 0} className="mt-4 rounded-lg border border-line p-5">
         <summary className="cursor-pointer text-sm font-medium text-ink">新しい授業シリーズを作成</summary>
         <p className="mt-2 text-sm text-ink-muted">科目や講座の単位です。作成後、その中に授業回(第1回、第2回…)を作ります。</p>
         <form action={createSeriesAction} className="mt-4 space-y-3">
@@ -106,6 +230,16 @@ export default async function CoursesPage() {
             maxLength={40}
             className="w-full rounded-md border border-line bg-surface-raised px-3 py-2 text-sm"
           />
+          <div className="flex flex-wrap gap-3">
+            <label className="text-xs text-ink-muted">
+              全回数(予定。任意)
+              <input name="plannedLessons" type="number" min={1} max={60} placeholder="例: 8" className="mt-1 block w-28 rounded-md border border-line bg-surface-raised px-3 py-2 text-sm" />
+            </label>
+            <label className="text-xs text-ink-muted">
+              年度
+              <input name="fiscalYear" type="number" min={2000} max={2100} defaultValue={currentYear} className="mt-1 block w-28 rounded-md border border-line bg-surface-raised px-3 py-2 text-sm" />
+            </label>
+          </div>
           <SubmitButton pendingText="作成中…" className="rounded-md bg-accent-fill px-4 py-2 text-sm font-medium text-white hover:bg-accent-fill-hover disabled:opacity-50">
             作成する
           </SubmitButton>

@@ -833,6 +833,7 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
     (参加コード、列デフォルト式で新規作成時に自動生成)と`course_enrollments`
     (course_id+student_idの組、unique制約)を追加。既存の`learning_sessions`から
     参加登録済み扱いのバックフィルも行う(詳細は8章の`learn/`の説明を参照)
+  - `0040_series_management.sql` — `course_series.planned_lessons`(全回数)・`fiscal_year`(年度)・`archived_at`(アーカイブ)
   - `0039_course_series.sql` — 授業シリーズ(`course_series`)・`series_enrollments`・`courses.series_id/lesson_no/released`。既存の授業は同名シリーズの第1回に移し、`course_enrollments`・`courses.join_code`は廃止
   - `0038_step_video_file.sql` — インプットのステップに動画ファイル(`course_steps.video_path`)
   - `0037_learning_flow.sql` — 学習の流れ。`course_steps`(インプット/アウトプットのステップ)・`step_progress`・`courses.steps_in_order`
@@ -885,6 +886,26 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
   確認できる)。授業コードはシリーズのもの(`course_series.join_code`)。LTI経由の自動登録もシリーズに作る。
 - 旧`course_enrollments`と`courses.join_code`は廃止した(上の「`learn/`」の説明にある受講登録の記述は、今は
   シリーズ単位として読み替えること)。
+
+#### 授業シリーズの管理(全回数・年度・アーカイブ・削除、2026-10)
+
+「授業名(全◯回)/第1回、第2回…の形にしたい。一覧から削除や年次処理ができるように」という要望(`0040`)。
+- **全◯回**(`course_series.planned_lessons`、任意): **表示用の予定回数**(「理科1年 光合成(全8回)」「作成済み 3/8回」)。
+  回は自動では作らず、先生が1つずつ作る(超えても作れる)。`seriesLabel()`で表示名を作る。
+- **年度**(`fiscal_year`、4月始まり・日本時間。既存は作成日から算出): 一覧を年度で絞り込む。
+- **アーカイブ**(`archived_at`): 年度末などにシリーズを閉じる。**新しい履修登録(授業コード・サインアップ)・発言・提出・
+  インプットの完了を受け付けない**(サーバー側は`getOrCreateSessionRow`・`completeStepAction`・参加申請で
+  `isLessonArchived`/`ARCHIVED_MESSAGE`を確かめる。画面は入力欄・提出フォームを隠す)。学習者は「過去のシリーズ」
+  として記録を見返せる。いつでも解除できる。一覧の「年度末の一括アーカイブ」で、年度ごとにまとめて閉じられる。
+- **削除**(`series-admin.ts`の`deleteSeriesIfEmpty`): **学習者の記録(対話・提出・インプットの進み)が1つも無い
+  シリーズだけ**、資料ファイル・動画ファイルのStorageごと完全に削除する(学習者のポートフォリオが消えるのを防ぐ
+  ため、記録があれば削除できず、アーカイブを促す)。
+- **翌年度への引き継ぎ**(`carryOverSeries`): 授業回・資料(ファイルも複製、RAGは複製先で再生成)・擬似メンバー
+  (**学習進化型は除く**。特定年度の学習者の記録から作られているため)・評価の観点・学習の流れ(資料は複製先に付け替え、
+  動画ファイルも複製)を、新しい年度のシリーズに複製する。授業回は「準備中」。**履修者・学習者の記録は引き継がず、
+  授業コードは新しくなる**。途中で失敗したら、新しいシリーズごと消して巻き戻す。
+- **履修者の一括整理**: 承認済みの履修者を別のシリーズにも登録する/履修登録を全員分外す(学習者の記録は消えない)。
+- 管理は、`/courses`(一覧の「管理」)と`/series/[seriesId]`(「3. 年度の処理・シリーズの管理」)のどちらからもできる。
 
 ### 画面の文章と「流れ」の見せ方(2026-10)
 

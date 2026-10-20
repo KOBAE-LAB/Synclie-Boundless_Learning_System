@@ -4,7 +4,7 @@ import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { requireConsent } from "@/lib/consent";
 import { isEnrolledInSeries } from "@/lib/courses/enrollment";
-import { lessonName } from "@/lib/courses/series";
+import { lessonName, seriesLabel } from "@/lib/courses/series";
 import { Breadcrumbs, BackLink } from "@/components/breadcrumbs";
 
 // 履修している授業シリーズの、授業回(第1回、第2回…)の一覧。公開されている回だけを見せ、
@@ -18,7 +18,7 @@ export default async function LearnSeriesPage({ params }: { params: Promise<{ se
     redirect("/learn?not_enrolled=1");
   }
 
-  const { data: series } = await admin.from("course_series").select("id, title, subject").eq("id", seriesId).maybeSingle();
+  const { data: series } = await admin.from("course_series").select("id, title, subject, planned_lessons, archived_at").eq("id", seriesId).maybeSingle();
   if (!series) notFound();
 
   const { data: lessons } = await admin
@@ -64,8 +64,13 @@ export default async function LearnSeriesPage({ params }: { params: Promise<{ se
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
       <Breadcrumbs trail={[{ label: "授業一覧", href: "/learn" }]} current={series.title} />
-      <h1 className="mt-3 text-2xl font-semibold text-ink">{series.title}</h1>
+      <h1 className="mt-3 text-2xl font-semibold text-ink">{seriesLabel(series.title, series.planned_lessons)}</h1>
       {series.subject && <p className="mt-1 text-sm text-ink-muted">{series.subject}</p>}
+      {series.archived_at && (
+        <p className="mt-3 rounded-md border border-warn bg-warn-soft px-4 py-3 text-sm text-warn">
+          このシリーズは終了しています。記録は見返せますが、新しい発言や提出はできません。
+        </p>
+      )}
 
       <h2 className="mt-8 text-sm font-medium text-ink">授業回({(lessons ?? []).length}回が公開中)</h2>
       <ol className="mt-3 space-y-2">
