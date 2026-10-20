@@ -39,7 +39,7 @@ export default async function LearnCoursesPage({
 
   const MODE_LABELS: Record<string, string> = {
     group: "グループワーク",
-    solo_study: "独習(F19)",
+    solo_study: "独習",
   };
 
   return (

@@ -40,7 +40,7 @@ export default async function MyDataPage() {
     <div className="mx-auto max-w-2xl px-6 py-12">
       <Breadcrumbs trail={[{ label: "授業一覧", href: "/learn" }]} current="自分のデータ" />
       <h1 className="mt-2 text-2xl font-semibold text-ink">
-        自分のデータ(F16)
+        自分のデータ
       </h1>
 
       <div className="mt-6 rounded-lg border border-line p-5 text-sm">

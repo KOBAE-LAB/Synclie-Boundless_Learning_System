@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { StepNumber } from "@/components/step-number";
 import { notFound } from "next/navigation";
 import { isAdmin, requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -57,21 +58,24 @@ function MenuCard({
   title,
   description,
   badge,
+  step,
 }: {
   href: string;
   title: string;
   description: string;
   badge?: string;
+  step?: number;
 }) {
   return (
     <Link
       href={href}
       className="flex flex-col gap-1 rounded-lg border border-line bg-surface p-4 transition-colors hover:border-accent hover:bg-surface-raised"
     >
-      <span className="flex items-center gap-2 text-sm font-medium text-ink">
+      <span className="flex items-center text-sm font-medium text-ink">
+        {step !== undefined && <StepNumber n={step} />}
         {title}
         {badge && (
-          <span className="rounded-full bg-accent-soft px-2 py-0.5 text-[0.6875rem] font-medium text-accent">{badge}</span>
+          <span className="ml-2 rounded-full bg-accent-soft px-2 py-0.5 text-[0.6875rem] font-medium text-accent">{badge}</span>
         )}
       </span>
       <span className="text-xs leading-5 text-ink-muted">{description}</span>
@@ -155,12 +159,11 @@ export default async function CourseDetailPage({
         <h2 className="border-b border-line pb-2 text-base font-semibold text-ink">1. 授業を準備する</h2>
         <p className="mt-2 text-sm text-ink-muted">授業のねらいや資料を入れ、擬似メンバーを用意します。ここが整うほど、議論が授業の目的に沿います。</p>
       <details open className="mt-4 rounded-lg border border-line p-5">
-        <summary className="cursor-pointer text-sm font-medium text-ink">授業の設定</summary>
+        <summary className="cursor-pointer text-sm font-medium text-ink"><StepNumber n={1} />授業の設定</summary>
       <form action={boundUpdateCourseSettingsAction} className="mt-4 space-y-4">
         <div>
           <p className="mt-1 text-sm text-ink-muted">
-            ここで設定した内容は、AI擬似メンバーの発言と、ペルソナ設定の「AIにペルソナ案を作ってもらう」の
-            両方に反映されます。特に「授業のねらい・議題」を書くと、議論が授業の目的からそれにくくなります。
+            AI擬似メンバーの発言と、ペルソナ案の作成に反映されます。「ねらい・議題」を書くと、議論がそれにくくなります。
           </p>
         </div>
 
@@ -255,9 +258,8 @@ export default async function CourseDetailPage({
             ))}
           </select>
           <p className="text-xs text-ink-muted">
-            学習者の発言のあと、擬似メンバーが続けて何発言まで話してよいかの上限です(擬似メンバーが2人以上いる
-            授業のとき)。誰が話すかは、各メンバーの性格・視点・発言頻度・介入の条件から、AIが場面ごとに
-            決めます。メンバー同士で議論することもあり、最後は学習者に話を返します。
+            学習者の発言のあと、擬似メンバーが続けて話してよい発言数の上限です(2人以上のとき)。
+            誰が話すかは、各メンバーの性格・視点から、AIが場面ごとに決めます。
           </p>
         </div>
 
@@ -278,10 +280,8 @@ export default async function CourseDetailPage({
             ))}
           </select>
           <p className="text-xs text-ink-muted">
-            擬似メンバーの発言を作るAIが、どれだけ深く考えるかの設定です。深いほど的確になる可能性がありますが、
-            返答が遅く、費用も増えます。浅くしても、実際の速さは思ったほど変わらないことがあります。
-            論証評価(同調の計測)や、議論のまとめなどには適用されません(いつも同じ条件で計測するため)。
-            ペルソナごとの個性は、各ペルソナの「考え方の深さ」「返答のテンポ」で設定します。
+            擬似メンバーの発言を作るAIの考える深さです。深いほど的確になりやすい反面、遅く、費用も増えます。
+            論証評価や議論のまとめには適用されません(計測の条件をそろえるため)。
           </p>
         </div>
 
@@ -364,11 +364,12 @@ export default async function CourseDetailPage({
 
       <details open className="mt-4 rounded-lg border border-line p-5">
         <summary className="cursor-pointer text-sm font-medium text-ink">
-          資料と知識ベース(RAG)
+          <StepNumber n={2} />
+          資料の登録
           <span className="ml-2 text-xs font-normal text-ink-muted">{(materials ?? []).length}件</span>
         </summary>
         <p className="mt-2 text-sm text-ink-muted">
-          授業の資料を登録すると、擬似メンバーが資料の範囲で発言し、AIによるペルソナ案の手がかりにもなります。
+          登録した資料の範囲で、擬似メンバーが発言します。
         </p>
         <div className="mt-3">
       <form
@@ -499,7 +500,7 @@ export default async function CourseDetailPage({
                   {material.shared_at ? (
                     <>
                       <span className="text-xs text-accent">
-                        共有ライブラリに公開中(F21)
+                        共有ライブラリに公開中
                       </span>
                       <form action={boundUnshareAction}>
                         <button
@@ -516,7 +517,7 @@ export default async function CourseDetailPage({
                         type="submit"
                         className="rounded-md border border-line px-2 py-0.5 text-xs text-ink hover:bg-surface"
                       >
-                        共有ライブラリに公開する(F21)
+                        共有ライブラリに公開する
                       </button>
                     </form>
                   )}
@@ -535,18 +536,20 @@ export default async function CourseDetailPage({
         <MenuCard
           href={`/courses/${courseId}/personas`}
           title="ペルソナ設定"
-          description="擬似メンバーの作成・AIによる案・承認して「使用中」にする"
-          badge="まず設定"
+          step={3}
+          description="擬似メンバーを作り、承認して「使用中」にする"
         />
         <MenuCard
           href={`/courses/${courseId}/flow`}
           title="学習の流れ"
-          description="動画・資料を見るインプットと、議論で深めるアウトプットの順番・時間を設計"
+          step={4}
+          description="インプットとアウトプットの順番・時間を設計"
         />
         <MenuCard
           href={`/courses/${courseId}/criteria`}
           title="評価の観点"
-          description="フィードバックの観点(例: 根拠の明確さ)を設定"
+          step={5}
+          description="フィードバックの観点を設定"
         />
       </nav>
       </section>
@@ -556,15 +559,14 @@ export default async function CourseDetailPage({
         <p className="mt-2 text-sm text-ink-muted">授業コードを伝え、参加の申請を承認します。進め方(自動継続)もここで決めます。</p>
       <details open className="mt-4 rounded-lg border border-line p-5">
         <summary className="cursor-pointer text-sm font-medium text-ink">
+          <StepNumber n={1} />
           受講登録
           <span className="ml-2 text-xs font-normal text-ink-muted">
             参加{enrolledStudentIds.length}人{pendingStudentIds.length > 0 ? `・承認待ち${pendingStudentIds.length}人` : ""}
           </span>
         </summary>
         <p className="mt-1 text-sm text-ink-muted">
-          学習者にこの授業コードを伝えてください。学習者が「授業に参加する」画面でこのコードを
-          入力すると参加の申請になり、下の「承認待ち」であなたが承認すると、授業に入れるように
-          なります。コードを使わず、あなたが直接学習者を登録することもできます。
+          このコードを学習者に伝えます。学習者が入力すると申請になり、下の「承認待ち」で承認すると授業に入れます。
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
           <span className="rounded-md border border-line bg-surface-raised px-3 py-1.5 font-mono text-lg tracking-widest text-ink">
@@ -645,9 +647,8 @@ export default async function CourseDetailPage({
         <form action={boundRegisterStudentAction} className="mt-5 space-y-2 border-t border-line pt-4">
           <h3 className="text-xs font-medium text-ink-faint">学習者を直接登録する</h3>
           <p className="text-xs text-ink-muted">
-            アカウントが無ければ、ここで決めた初期パスワードで作ります(本人に直接伝え、ログイン後に
-            「パスワード変更」で変えてもらってください)。既にアカウントがある場合は、パスワードは
-            変えずに参加登録だけ行います。
+            アカウントが無ければ、この初期パスワードで作ります(本人に伝え、ログイン後に変更してもらう)。
+            既にある場合は、参加登録だけ行います。
           </p>
           <div className="flex flex-wrap gap-2">
             <label className="sr-only" htmlFor="reg-name">お名前</label>
@@ -689,10 +690,10 @@ export default async function CourseDetailPage({
 
 
       <details className="mt-4 rounded-lg border border-line p-5">
-        <summary className="cursor-pointer text-sm font-medium text-ink">沈黙時の自動継続(テンポ)</summary>
+        <summary className="cursor-pointer text-sm font-medium text-ink"><StepNumber n={2} />沈黙時の自動継続(テンポ・任意)</summary>
         <p className="mt-1 text-sm text-ink-muted">
-          学習者がしばらく発言しない時、擬似メンバー同士で会話を少しだけ自動的に続けさせるかどうかの
-          既定値。学習者は自分の授業画面でこの秒数を自分用に上書きできる(オフにもできる)。
+          学習者がしばらく発言しないとき、擬似メンバー同士の会話を少しだけ自動で続けるかの既定値です。
+          学習者は自分用に変更・オフにできます。
         </p>
         <form action={boundUpdateAutoDiscussionAction} className="mt-3 space-y-3">
           <label className="block text-sm">

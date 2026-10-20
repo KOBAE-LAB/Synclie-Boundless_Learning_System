@@ -12,6 +12,8 @@ import {
   addSuggestionToPlanAction,
 } from "./actions";
 import { Breadcrumbs } from "@/components/breadcrumbs";
+import { loadPortfolio } from "@/lib/portfolio/load";
+import { summarizePortfolio } from "@/lib/portfolio/summary";
 
 type LearnerProfileStatus = "pending" | "processing" | "done" | "failed";
 
@@ -72,6 +74,7 @@ export default async function StudentDashboardPage() {
   const { user } = await requireRole("student");
   const admin = createAdminClient();
   await requireConsent(admin, user.id);
+  const portfolioSummary = summarizePortfolio((await loadPortfolio(admin, user.id)).entries);
 
   // F26: 横断的な学びの記録とAIフィードバック。授業をまたいだ蓄積のため courseId では絞らない。
   const { data: learnerProfileRow } = await admin
@@ -189,23 +192,61 @@ export default async function StudentDashboardPage() {
     <div className="mx-auto max-w-2xl px-6 py-12">
       <Breadcrumbs trail={[{ label: "授業一覧", href: "/learn" }]} current="学習ダッシュボード" />
       <h1 className="mt-2 text-2xl font-semibold text-ink">
-        学習ダッシュボード(F23)
+        学習ダッシュボード
       </h1>
       <p className="mt-1 text-sm text-ink-muted">
-        すべての授業の学習状況をまとめて確認し、AIの提案や振り返りをもとに次の学習計画を立てる。
+        すべての授業の学習状況を確認し、次の学習計画を立てます。
       </p>
-      <Link href="/learn/portfolio" className="mt-2 inline-block text-xs text-ink-muted hover:underline">
-        成果・フィードバック・自己評価をまとめて見る(ポートフォリオ)→
-      </Link>
+
+      <section className="mt-6 rounded-lg border border-line p-5">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+          <h2 className="text-sm font-medium text-ink">ポートフォリオ</h2>
+          <Link href="/learn/portfolio" className="text-xs text-accent hover:underline">
+            すべて見る・書き出す →
+          </Link>
+        </div>
+        {portfolioSummary.total === 0 ? (
+          <p className="mt-2 text-sm text-ink-muted">成果を提出すると、ここに記録が集まります。</p>
+        ) : (
+          <>
+            <dl className="mt-3 grid grid-cols-[repeat(auto-fill,minmax(7rem,1fr))] gap-2 text-center">
+              {[
+                ["成果", portfolioSummary.total],
+                ["先生のコメント", portfolioSummary.withTeacherComment],
+                ["自己評価がまだ", portfolioSummary.withoutSelfAssessment],
+                ["公開用", portfolioSummary.shared],
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-md bg-surface px-2 py-2">
+                  <dt className="text-xs text-ink-muted">{label}</dt>
+                  <dd className="text-lg font-semibold text-ink">{value}</dd>
+                </div>
+              ))}
+            </dl>
+            <ul className="mt-3 space-y-1 text-sm">
+              {portfolioSummary.latest.map((entry) => (
+                <li key={entry.submissionId} className="flex flex-wrap items-baseline justify-between gap-x-3">
+                  <span className="min-w-0 truncate">
+                    <span className="text-xs text-ink-faint">
+                      {new Date(entry.createdAt).toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo" })} ・ {entry.courseTitle}
+                    </span>{" "}
+                    {entry.content.slice(0, 40)}
+                    {entry.content.length > 40 ? "…" : ""}
+                  </span>
+                  {!entry.selfAssessment && <span className="text-xs text-warn">自己評価を書こう</span>}
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </section>
 
       <div className="mt-6 rounded-lg border border-line p-5">
         <h2 className="text-sm font-medium text-ink">
-          次の学びに向けて(F26: 横断的な学びの記録とAIの提案)
+          次の学びに向けて(横断的な学びの記録とAIの提案)
         </h2>
         <p className="mt-1 text-xs text-ink-muted">
-          すべての授業をまたいだ提出物・フィードバック・振り返りから、得意な点・課題・学習の流れ
-          をまとめ、次の学びに向けてどう努力するとよいかを提案する。自分から求めたときだけ生成される。
-          自己評価や先生のコメントも手がかりにする。AIの提案は材料で、取り入れるかどうかを決めるのはあなたです。
+          全授業の記録から、次の学びに向けた努力の方向を提案します。押したときだけ生成されます。
+          AIの提案は材料で、取り入れるかは自分で決めます。
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <span className="text-xs text-ink-faint">
@@ -287,7 +328,7 @@ export default async function StudentDashboardPage() {
                 {stat.title}
               </Link>
               <Link href={`/learn/${stat.courseId}/portfolio`} className="shrink-0 text-xs text-ink-muted hover:underline">
-                ポートフォリオ(F08)→
+                ポートフォリオ→
               </Link>
             </div>
             <p className="mt-1 text-xs text-ink-muted">
@@ -296,7 +337,7 @@ export default async function StudentDashboardPage() {
             </p>
             {stat.inquiryThemeSuggestion && (
               <p className="mt-1 text-xs text-accent">
-                おすすめの探究テーマ(F11): {stat.inquiryThemeSuggestion}
+                おすすめの探究テーマ: {stat.inquiryThemeSuggestion}
               </p>
             )}
           </li>
@@ -307,7 +348,7 @@ export default async function StudentDashboardPage() {
       {nextGoals.length > 0 && (
         <>
           <h2 className="mt-8 text-sm font-medium text-ink">
-            振り返りで書いた「次にやりたいこと」(F08)
+            振り返りで書いた「次にやりたいこと」
           </h2>
           <ul className="mt-3 space-y-2 text-sm">
             {nextGoals.map((goal, i) => (

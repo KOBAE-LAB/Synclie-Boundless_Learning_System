@@ -29,6 +29,7 @@ import {
 } from "./actions";
 import { AUTO_CONTINUE_CAP, TEMPO_OPTIONS } from "@/lib/discussion-tempo";
 import { Breadcrumbs, BackLink } from "@/components/breadcrumbs";
+import { StepNumber } from "@/components/step-number";
 import { loadLearnerFlow } from "@/lib/flow/load";
 import { canOpenStep, currentStep } from "@/lib/flow/steps";
 import { FlowStepper, InputStepView, OutputStepCard } from "./flow-view";
@@ -395,14 +396,14 @@ export default async function LearnCourseSessionPage({
       {course.subject && <p className="mt-1 text-sm text-ink-muted">{course.subject}</p>}
       {course.mode === "solo_study" && (
         <p className="mt-1 text-sm text-ink-muted">
-          独習モード(F19): まだ分かっていない擬似メンバーに、自分の言葉で説明してみよう。
+          独習モード: まだ分かっていない擬似メンバーに、自分の言葉で説明してみよう。
         </p>
       )}
       <Link
         href={`/learn/${courseId}/portfolio`}
         className="mt-1 inline-block text-sm text-ink-muted hover:underline"
       >
-        ポートフォリオを見る(F08)→
+        ポートフォリオを見る→
       </Link>
 
       {flow.steps.length > 0 && <FlowStepper courseId={courseId} flow={flow} viewingId={viewingStep?.id} />}
@@ -511,13 +512,13 @@ export default async function LearnCourseSessionPage({
 
       {personalization && (
         <p className="mt-4 rounded-md border border-accent bg-accent-soft px-4 py-3 text-sm text-accent">
-          おすすめの探究テーマ(F11): {personalization.inquiry_theme_suggestion}
+          おすすめの探究テーマ: {personalization.inquiry_theme_suggestion}
         </p>
       )}
 
       {(!activePersonaCount || activePersonaCount === 0) && (
         <p className="mt-4 rounded-md border border-warn bg-warn-soft px-4 py-3 text-sm text-warn">
-          この授業にはまだ「使用中」の擬似メンバーがいません。教師がペルソナ設定画面(F04)で
+          この授業にはまだ「使用中」の擬似メンバーがいません。教師がペルソナ設定画面で
           承認・有効化すると、擬似メンバーと議論できるようになります。発言は保存されます。
         </p>
       )}
@@ -685,11 +686,11 @@ export default async function LearnCourseSessionPage({
         <>
       <details className="mt-3 rounded-md border border-line px-4 py-3 text-sm">
         <summary className="cursor-pointer text-xs font-medium text-ink-muted">
-          手書き・音声で発言する(F12/F13)
+          手書き・音声で発言する
         </summary>
         <form action={boundUploadHandwritingAction} className="mt-3 flex flex-wrap items-center gap-2">
           <label className="text-xs text-ink-muted">
-            手書きで発言する(F12)
+            手書きで発言する
             <input
               name="image"
               type="file"
@@ -708,7 +709,7 @@ export default async function LearnCourseSessionPage({
 
         <form action={boundUploadAudioAction} className="mt-3 flex flex-wrap items-center gap-2">
           <label className="text-xs text-ink-muted">
-            音声で発言する(F13)
+            音声で発言する
             <input
               name="audio"
               type="file"
@@ -868,7 +869,7 @@ export default async function LearnCourseSessionPage({
 
       <div className="mt-12 border-t border-line pt-8" id="submit-outcome">
         <h2 className="text-sm font-medium text-ink">
-          成果を提出する(F06)
+          成果を提出する
         </h2>
         <p className="mt-1 text-sm text-ink-muted">
           擬似メンバーとの議論をふまえて、自分の考えをまとめて提出しましょう。
@@ -922,37 +923,48 @@ export default async function LearnCourseSessionPage({
                   className="rounded-md border border-line px-4 py-3 text-sm"
                 >
                   <p className="whitespace-pre-wrap">{submission.content}</p>
-                  <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
-                    <p className="text-xs text-ink-faint">
-                      {new Date(submission.created_at).toLocaleString("ja-JP")}
-                    </p>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <span className="text-xs text-ink-faint">
-                        フィードバック: {FEEDBACK_STATUS_LABELS[submission.feedback_status]}
+                  <p className="mt-2 text-xs text-ink-faint">
+                    {new Date(submission.created_at).toLocaleString("ja-JP")}
+                  </p>
+                  <ol className="mt-3 space-y-2 rounded-md bg-surface px-3 py-2" aria-label="提出したあとの流れ">
+                    <li className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                      <span className="text-xs font-medium text-ink">
+                        <StepNumber n={1} />
+                        AIフィードバック
+                        <span className="ml-2 font-normal text-ink-faint">{FEEDBACK_STATUS_LABELS[submission.feedback_status]}</span>
                       </span>
                       <form action={boundGenerateFeedbackAction}>
                         <SubmitButton
                           pendingText="生成中…"
-                          className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface disabled:opacity-50"
+                          className="rounded-md border border-line bg-surface-raised px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface disabled:opacity-50"
                         >
-                          {submission.feedback_status === "done" ? "再生成する" : "フィードバックをもらう"}
+                          {submission.feedback_status === "done" ? "再生成する" : "もらう"}
                         </SubmitButton>
                       </form>
-                    </div>
-                  </div>
-                  <div className="mt-1 flex items-center justify-end gap-2">
-                    <span className="text-xs text-ink-faint">
-                      AIジャッジ(F24): {JUDGMENT_STATUS_LABELS[submission.judgment_status]}
-                    </span>
-                    <form action={boundJudgeDiscussionAction}>
-                      <SubmitButton
-                        pendingText="ジャッジ中…"
-                        className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface disabled:opacity-50"
-                      >
-                        {submission.judgment_status === "done" ? "再ジャッジする" : "AIジャッジを受ける"}
-                      </SubmitButton>
-                    </form>
-                  </div>
+                    </li>
+                    <li className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                      <span className="text-xs font-medium text-ink">
+                        <StepNumber n={2} />
+                        AIジャッジ(議論全体の評価・任意)
+                        <span className="ml-2 font-normal text-ink-faint">{JUDGMENT_STATUS_LABELS[submission.judgment_status]}</span>
+                      </span>
+                      <form action={boundJudgeDiscussionAction}>
+                        <SubmitButton
+                          pendingText="ジャッジ中…"
+                          className="rounded-md border border-line bg-surface-raised px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface disabled:opacity-50"
+                        >
+                          {submission.judgment_status === "done" ? "再ジャッジする" : "受ける"}
+                        </SubmitButton>
+                      </form>
+                    </li>
+                    <li className="text-xs font-medium text-ink">
+                      <StepNumber n={3} />
+                      振り返り
+                      <span className="ml-2 font-normal text-ink-faint">
+                        {reflection ? "記入済み" : submission.feedback_status === "done" ? "下の欄に書けます" : "フィードバックのあとに書けます"}
+                      </span>
+                    </li>
+                  </ol>
 
                   {submission.feedback_status === "failed" && submission.feedback_error && (
                     <p className="mt-2 text-xs text-danger">
@@ -963,22 +975,6 @@ export default async function LearnCourseSessionPage({
                     <p className="mt-2 text-xs text-danger">
                       {submission.judgment_error}
                     </p>
-                  )}
-
-                  {judgment && (
-                    <div className="mt-4 space-y-1 border-t border-line pt-3">
-                      <p className="text-xs font-medium text-ink">
-                        AIジャッジ(F24): 議論全体を通しての評価
-                      </p>
-                      <p className="text-xs text-ink-muted">
-                        論理構成 {judgment.logic_structure}/5 ・ 根拠の質 {judgment.evidence_quality}/5 ・
-                        反論への応答 {judgment.rebuttal_response}/5
-                      </p>
-                      <p className="mt-1">{judgment.summary_comment}</p>
-                      <p className="mt-1 text-xs text-ink-faint">
-                        この評価は最終ではありません。自己評価や教師の評価の参考にしてください。
-                      </p>
-                    </div>
                   )}
 
                   {feedbackItems.length > 0 && (
@@ -1004,10 +1000,27 @@ export default async function LearnCourseSessionPage({
                     </div>
                   )}
 
+                  {judgment && (
+                    <div className="mt-4 space-y-1 border-t border-line pt-3">
+                      <p className="text-xs font-medium text-ink">
+                        AIジャッジ: 議論全体を通しての評価
+                      </p>
+                      <p className="text-xs text-ink-muted">
+                        論理構成 {judgment.logic_structure}/5 ・ 根拠の質 {judgment.evidence_quality}/5 ・
+                        反論への応答 {judgment.rebuttal_response}/5
+                      </p>
+                      <p className="mt-1">{judgment.summary_comment}</p>
+                      <p className="mt-1 text-xs text-ink-faint">
+                        この評価は最終ではありません。自己評価や教師の評価の参考にしてください。
+                      </p>
+                    </div>
+                  )}
+
                   {submission.feedback_status === "done" && (
                     <div className="mt-4 border-t border-line pt-3">
                       <p className="text-xs font-medium text-ink">
-                        振り返り(F08){reflection && " (記入済み・編集できます)"}
+                        <StepNumber n={3} />
+                        振り返り{reflection && "(記入済み・編集できます)"}
                       </p>
                       <form action={boundSaveReflectionAction} className="mt-2 space-y-2">
                         <label className="block">

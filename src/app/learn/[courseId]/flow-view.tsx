@@ -94,6 +94,13 @@ export async function InputStepView({
   const done = flow.doneIds.has(step.id);
   const questions = readCheckQuestions(step.checkQuestions);
 
+  // アップロードされた動画ファイルは、署名つきURL(2時間)で配信する(Supabase Storageから直接。VPSを通さない)。
+  let videoSrc: string | null = null;
+  if (step.videoPath) {
+    const { data: signed } = await admin.storage.from("materials").createSignedUrl(step.videoPath, 7200);
+    videoSrc = signed?.signedUrl ?? null;
+  }
+
   // 資料: PDFは署名つきURLで画面内に表示し、それ以外は取り込み済みの本文を表示する。
   let materialTitle: string | null = null;
   let pdfUrl: string | null = null;
@@ -145,6 +152,19 @@ export async function InputStepView({
         <h2 className="mt-1 text-xl font-semibold text-ink">{step.title}</h2>
         {step.instruction && <p className="mt-2 whitespace-pre-wrap text-sm text-ink-muted">{step.instruction}</p>}
       </section>
+
+      {videoSrc && (
+        <section className="mt-4">
+          <video
+            src={videoSrc}
+            controls
+            playsInline
+            preload="metadata"
+            className="aspect-video w-full rounded-lg border border-line bg-black"
+            aria-label={`${step.title}の動画`}
+          />
+        </section>
+      )}
 
       {step.videoUrl && (
         <section className="mt-4 rounded-lg border border-line p-4">

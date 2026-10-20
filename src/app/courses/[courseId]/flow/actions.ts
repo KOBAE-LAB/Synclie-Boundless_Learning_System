@@ -5,7 +5,7 @@ import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { assertOwnsCourse } from "@/lib/courses/ownership";
 import { generateCheckQuestions } from "@/lib/ai/input-check";
-import { parseVideoUrl, type StepKind } from "@/lib/flow/steps";
+import { parseVideoUrl, validateVideoFile, type StepKind } from "@/lib/flow/steps";
 
 // 学習の流れ(インプット/アウトプットのステップ)の設計。授業の持ち主の教師だけが変更できる。
 
@@ -23,7 +23,7 @@ async function guard(courseId: string) {
 async function getStep(admin: AdminClient, courseId: string, stepId: string) {
   const { data } = await admin
     .from("course_steps")
-    .select("id, course_id, kind, instruction, material_id")
+    .select("id, course_id, kind, instruction, material_id, video_path")
     .eq("id", stepId)
     .maybeSingle();
   if (!data || data.course_id !== courseId) throw new Error("ステップが見つかりません。");
@@ -36,6 +36,20 @@ async function validMaterialId(admin: AdminClient, courseId: string, raw: string
   const { data } = await admin.from("course_materials").select("id, course_id").eq("id", raw).maybeSingle();
   if (!data || data.course_id !== courseId) throw new Error("選んだ資料が、この授業の資料ではありません。");
   return data.id;
+}
+
+/** 動画ファイルを Storage に保存して、そのパスを返す。ファイルが選ばれていなければ null。 */
+async function uploadStepVideo(admin: AdminClient, courseId: string, value: FormDataEntryValue | null): Promise<string | null> {
+  if (!(value instanceof File) || value.size === 0) return null;
+  const { ext, contentType } = validateVideoFile(value);
+  const path = `${courseId}/step-videos/${crypto.randomUUID()}.${ext}`;
+  const { error } = await admin.storage.from("materials").upload(path, value, { contentType });
+  if (error) throw new Error(`動画のアップロードに失敗しました: ${error.message}`);
+  return path;
+}
+
+async function removeStepVideo(admin: AdminClient, path: string | null) {
+  if (path) await admin.storage.from("materials").remove([path]);
 }
 
 function parseMinutes(raw: string): number | null {
@@ -68,10 +82,12 @@ export async function addStepAction(courseId: string, formData: FormData) {
   if ((existing?.length ?? 0) >= MAX_STEPS) throw new Error(`ステップは最大${MAX_STEPS}個までです。`);
   const position = Math.max(0, ...(existing ?? []).map((s) => s.position)) + 1;
 
+  const videoPath = kind === "input" ? await uploadStepVideo(admin, courseId, formData.get("videoFile")) : null;
   const { error } = await admin.from("course_steps").insert({
     course_id: courseId,
     position,
     kind,
+    video_path: videoPath,
     title: f.title,
     instruction: f.instruction,
     minutes: f.minutes,
@@ -79,7 +95,10 @@ export async function addStepAction(courseId: string, formData: FormData) {
     material_id: kind === "input" ? await validMaterialId(admin, courseId, f.rawMaterial) : null,
     video_url: kind === "input" ? parseVideoUrl(f.rawVideo) : null,
   });
-  if (error) throw new Error(`追加に失敗しました: ${error.message}`);
+  if (error) {
+    await removeStepVideo(admin, videoPath);
+    throw new Error(`追加に失敗しました: ${error.message}`);
+  }
   revalidatePath(`/courses/${courseId}/flow`);
 }
 
@@ -89,6 +108,11 @@ export async function updateStepAction(courseId: string, stepId: string, formDat
   const f = fields(formData);
   const isInput = step.kind === "input";
 
+  // 動画ファイル: 新しいファイルがあれば差し替え、「取り除く」が選ばれていれば消す。
+  const newVideoPath = isInput ? await uploadStepVideo(admin, courseId, formData.get("videoFile")) : null;
+  const removeOld = !isInput || newVideoPath !== null || formData.get("removeVideoFile") === "on";
+  const videoPath = newVideoPath ?? (removeOld ? null : step.video_path);
+
   const { error } = await admin
     .from("course_steps")
     .update({
@@ -97,9 +121,14 @@ export async function updateStepAction(courseId: string, stepId: string, formDat
       minutes: f.minutes,
       material_id: isInput ? await validMaterialId(admin, courseId, f.rawMaterial) : null,
       video_url: isInput ? parseVideoUrl(f.rawVideo) : null,
+      video_path: videoPath,
     })
     .eq("id", stepId);
-  if (error) throw new Error(`更新に失敗しました: ${error.message}`);
+  if (error) {
+    await removeStepVideo(admin, newVideoPath);
+    throw new Error(`更新に失敗しました: ${error.message}`);
+  }
+  if (removeOld) await removeStepVideo(admin, step.video_path);
   revalidatePath(`/courses/${courseId}/flow`);
 }
 
@@ -110,8 +139,9 @@ async function reindex(admin: AdminClient, courseId: string) {
 
 export async function deleteStepAction(courseId: string, stepId: string) {
   const admin = await guard(courseId);
-  await getStep(admin, courseId, stepId);
+  const step = await getStep(admin, courseId, stepId);
   await admin.from("course_steps").delete().eq("id", stepId);
+  await removeStepVideo(admin, step.video_path);
   await reindex(admin, courseId);
   revalidatePath(`/courses/${courseId}/flow`);
 }

@@ -58,8 +58,8 @@ export default async function FlowPage({ params }: { params: Promise<{ courseId:
       <Breadcrumbs trail={[{ label: "授業一覧", href: "/courses" }, { label: course.title, href: `/courses/${courseId}` }]} current="学習の流れ" />
       <h1 className="mt-2 text-2xl font-semibold text-ink">学習の流れ</h1>
       <p className="mt-1 text-sm text-ink-muted">
-        動画や資料から学ぶ<b>インプット</b>と、擬似メンバーと議論して深める<b>アウトプット</b>を、好きな順に並べて授業の流れを設計します。
-        学習者は、ここで決めた順に進みます。ステップを1つも作らなければ、これまでどおり議論だけの授業になります。
+        動画・資料で学ぶ<b>インプット</b>と、議論で深める<b>アウトプット</b>を好きな順に並べます。
+        ステップが無ければ、これまでどおり議論だけの授業です。
       </p>
 
       <form action={updateFlowSettingsAction.bind(null, courseId)} className="mt-6 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-lg border border-line p-4">
@@ -67,7 +67,7 @@ export default async function FlowPage({ params }: { params: Promise<{ courseId:
           <input type="checkbox" name="stepsInOrder" defaultChecked={course.steps_in_order !== false} className="mt-1" />
           <span>
             順番どおりに進める
-            <span className="block text-xs text-ink-muted">オンにすると、インプットを終えるまで議論には入れません(オフなら自由に行き来できます)。</span>
+            <span className="block text-xs text-ink-muted">インプットを終えるまで議論に入れません(オフなら自由に行き来できます)。</span>
           </span>
         </label>
         <SubmitButton className={btn} pendingText="保存中…">保存</SubmitButton>
@@ -88,6 +88,7 @@ export default async function FlowPage({ params }: { params: Promise<{ courseId:
                   </span>
                   {step.title}
                   {step.minutes ? <span className="ml-2 text-xs font-normal text-ink-muted">目安{step.minutes}分</span> : null}
+                  {step.videoPath ? <span className="ml-2 text-xs font-normal text-ink-muted">動画ファイルあり</span> : null}
                 </p>
                 <div className="flex flex-wrap gap-1">
                   <form action={moveStepAction.bind(null, courseId, step.id, "up")}>
@@ -116,9 +117,19 @@ export default async function FlowPage({ params }: { params: Promise<{ courseId:
                   {step.kind === "input" && (
                     <>
                       <label className="block text-xs text-ink-muted">
-                        動画のURL(学習者にはリンクとして表示されます。任意)
+                        動画サイトのURL(学習者にはリンクとして表示されます。任意)
                         <input name="videoUrl" defaultValue={step.videoUrl ?? ""} placeholder="https://www.youtube.com/watch?v=..." className={`mt-1 ${input}`} />
                       </label>
+                      <label className="block text-xs text-ink-muted">
+                        動画ファイル(mp4・webm、20MBまで。画面内で再生されます)
+                        <input name="videoFile" type="file" accept="video/mp4,video/webm" className={`mt-1 ${input}`} />
+                      </label>
+                      {step.videoPath && (
+                        <label className="flex items-center gap-2 text-xs text-ink-muted">
+                          <input type="checkbox" name="removeVideoFile" />
+                          いま登録している動画ファイルを取り除く(新しいファイルを選ぶと差し替わります)
+                        </label>
+                      )}
                       <label className="block text-xs text-ink-muted">
                         資料(学習者が読む資料。動画の場合は字幕の資料にすると、理解チェックを作れます)
                         <span className="mt-1 block">{materialSelect("materialId", step.materialId ?? "")}</span>
@@ -182,8 +193,12 @@ export default async function FlowPage({ params }: { params: Promise<{ courseId:
           <textarea name="instruction" rows={2} maxLength={600} placeholder="例: 動画のポイントを3つ見つけながら見よう" className={`mt-1 ${input}`} />
         </label>
         <label className="block text-xs text-ink-muted">
-          動画のURL(インプットのみ。学習者にはリンクとして表示されます)
+          動画サイトのURL(インプットのみ。リンクとして表示されます)
           <input name="videoUrl" placeholder="https://www.youtube.com/watch?v=..." className={`mt-1 ${input}`} />
+        </label>
+        <label className="block text-xs text-ink-muted">
+          動画ファイル(インプットのみ。mp4・webm、20MBまで。大きい動画は上のURLを使います)
+          <input name="videoFile" type="file" accept="video/mp4,video/webm" className={`mt-1 ${input}`} />
         </label>
         <label className="block text-xs text-ink-muted">
           資料(インプットのみ)

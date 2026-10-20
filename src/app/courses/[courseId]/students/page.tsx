@@ -110,13 +110,11 @@ export default async function StudentsPage({
     <div className="mx-auto max-w-2xl px-6 py-12">
       <Breadcrumbs trail={[{ label: "授業一覧", href: "/courses" }, { label: course.title, href: `/courses/${courseId}` }]} current="学習者プロファイル" />
       <h1 className="mt-2 text-2xl font-semibold text-ink">
-        学習者プロファイルと個別最適化(F09/F11)
+        学習者プロファイルと個別最適化
       </h1>
       <p className="mt-1 text-sm text-ink-muted">
-        提出物・AIフィードバック・振り返り(F06〜F08)の蓄積から、学習者ごとの得意な点・課題・
-        学習履歴の要約を生成する(F09)。それをもとに、個別最適化の提案(F11: 同じ誤解を避ける
-        問い、探究テーマ、促し方、難度・足場かけの調整)を生成できる。提案は採用するまで
-        対話には反映されない(AIが学習内容を一方的に固定しないため、教師の判断を必須にしている)。
+        学習者ごとの得意な点・課題・要約を作り、それをもとに個別最適化の提案を作ります。
+        提案は、採用するまで対話には反映されません。
       </p>
 
       <ul className="mt-8 space-y-4">
@@ -196,7 +194,7 @@ export default async function StudentsPage({
                 <div className="mt-3 border-t border-line pt-3">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <span className="text-xs font-medium text-ink">
-                      個別最適化の提案(F11)
+                      個別最適化の提案
                     </span>
                     <div className="flex shrink-0 items-center gap-2">
                       {suggestion && (

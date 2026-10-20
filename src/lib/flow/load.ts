@@ -8,6 +8,8 @@ export interface CourseStep extends FlowStep {
   instruction: string;
   materialId: string | null;
   videoUrl: string | null;
+  /** アップロードした動画ファイル(Storageのパス) */
+  videoPath: string | null;
   minutes: number | null;
   checkQuestions: unknown;
 }
@@ -18,7 +20,7 @@ export interface LearnerFlow {
   inOrder: boolean;
 }
 
-export const STEP_COLUMNS = "id, course_id, position, kind, title, instruction, material_id, video_url, minutes, check_questions";
+export const STEP_COLUMNS = "id, course_id, position, kind, title, instruction, material_id, video_url, video_path, minutes, check_questions";
 
 export function toCourseStep(row: Record<string, unknown>): CourseStep {
   return {
@@ -30,6 +32,7 @@ export function toCourseStep(row: Record<string, unknown>): CourseStep {
     instruction: (row.instruction as string) ?? "",
     materialId: (row.material_id as string | null) ?? null,
     videoUrl: (row.video_url as string | null) ?? null,
+    videoPath: (row.video_path as string | null) ?? null,
     minutes: (row.minutes as number | null) ?? null,
     checkQuestions: row.check_questions,
   };

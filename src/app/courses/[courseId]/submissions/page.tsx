@@ -139,10 +139,10 @@ export default async function SubmissionsReviewPage({
     <div className="mx-auto max-w-2xl px-6 py-12">
       <Breadcrumbs trail={[{ label: "授業一覧", href: "/courses" }, { label: course.title, href: `/courses/${courseId}` }]} current="提出物とフィードバック" />
       <h1 className="mt-2 text-2xl font-semibold text-ink">
-        提出物とフィードバック(F07)
+        提出物とフィードバック
       </h1>
       <p className="mt-1 text-sm text-ink-muted">
-        学習者の提出物(F06)とAIフィードバックを確認し、必要であれば文面を修正できる。
+        学習者の提出物とAIフィードバックを確認し、必要であれば文面を修正できる。
       </p>
 
       <ul className="mt-8 space-y-4">
@@ -223,14 +223,14 @@ export default async function SubmissionsReviewPage({
                 <div className="mt-4 space-y-1 border-t border-line pt-3 text-xs">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <p className="font-medium text-ink">
-                      AIジャッジ(F24): 議論全体を通しての評価
+                      AIジャッジ: 議論全体を通しての評価
                     </p>
                     <form action={sendGradeToLmsAction.bind(null, courseId, submission.id)}>
                       <SubmitButton
                         pendingText="送信中…"
                         className="shrink-0 rounded-md border border-line px-2 py-0.5 text-xs text-ink hover:bg-surface disabled:opacity-50"
                       >
-                        LMSに成績を送信する(F17)
+                        LMSに成績を送信する
                       </SubmitButton>
                     </form>
                   </div>

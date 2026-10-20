@@ -42,10 +42,10 @@ export default async function EvaluationCriteriaPage({
     <div className="mx-auto max-w-2xl px-6 py-12">
       <Breadcrumbs trail={[{ label: "授業一覧", href: "/courses" }, { label: course.title, href: `/courses/${courseId}` }]} current="評価の観点" />
       <h1 className="mt-2 text-2xl font-semibold text-ink">
-        評価の観点(F07)
+        評価の観点
       </h1>
       <p className="mt-1 text-sm text-ink-muted">
-        学習者の提出物(F06)に対するAIフィードバックの観点を設定する。
+        学習者の提出物に対するAIフィードバックの観点を設定する。
         例: 根拠の明確さ、多面的な見方、資料の活用。点数ではなく、観点ごとの助言を返す。
       </p>
 

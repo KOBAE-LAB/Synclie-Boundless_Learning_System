@@ -97,3 +97,18 @@ export function parseVideoUrl(raw: string): string | null {
     throw new Error("動画のURLは、https:// から始まる形式で入力してください。");
   }
 }
+
+// 送信全体の上限(Next.jsのサーバーアクション25MB・nginx25MB)に収まるよう、余裕をみて20MB。
+export const MAX_VIDEO_BYTES = 20 * 1024 * 1024;
+const VIDEO_TYPES: Record<string, string> = { mp4: "video/mp4", webm: "video/webm" };
+
+/** アップロードされた動画ファイルの検証。許可するのは mp4 / webm で、サイズは上限以内。 */
+export function validateVideoFile(file: { name: string; size: number }): { ext: string; contentType: string } {
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+  const contentType = VIDEO_TYPES[ext];
+  if (!contentType) throw new Error("動画ファイルは mp4 または webm にしてください。");
+  if (file.size > MAX_VIDEO_BYTES) {
+    throw new Error(`動画ファイルは${Math.round(MAX_VIDEO_BYTES / 1024 / 1024)}MBまでです。大きい動画は、動画サイトのURLを使ってください。`);
+  }
+  return { ext, contentType };
+}

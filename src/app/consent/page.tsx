@@ -20,7 +20,7 @@ export default async function ConsentPage() {
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
       <h1 className="text-2xl font-semibold text-ink">
-        データの利用について(F16)
+        データの利用について
       </h1>
 
       <div className="mt-6 space-y-3 rounded-lg border border-line p-5 text-sm">

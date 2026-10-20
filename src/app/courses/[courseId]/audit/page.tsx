@@ -90,11 +90,10 @@ export default async function PersonaAuditPage({
     <div className="mx-auto max-w-2xl px-6 py-12">
       <Breadcrumbs trail={[{ label: "授業一覧", href: "/courses" }, { label: course.title, href: `/courses/${courseId}` }]} current="発言の監査と修正" />
       <h1 className="mt-2 text-2xl font-semibold text-ink">
-        擬似メンバーの挙動の監査と修正(F15)
+        擬似メンバーの挙動の監査と修正
       </h1>
       <p className="mt-1 text-sm text-ink-muted">
-        擬似メンバーの発言ログを確認し、不適切・不正確な内容を直接修正できる。修正した内容は、
-        その後の対話でも擬似メンバー自身の履歴として使われるため、同じ誤りが続くのを防げる。
+        発言を確認し、不適切・不正確な内容を直接修正できます。修正後の内容は以後の対話に使われます。
       </p>
 
       <ul className="mt-8 space-y-4">

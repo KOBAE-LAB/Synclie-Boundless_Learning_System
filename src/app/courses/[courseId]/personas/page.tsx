@@ -131,11 +131,10 @@ export default async function PersonasPage({
     <div className="mx-auto max-w-2xl px-6 py-12">
       <Breadcrumbs trail={[{ label: "授業一覧", href: "/courses" }, { label: course.title, href: `/courses/${courseId}` }]} current="ペルソナ設定" />
       <h1 className="mt-2 text-2xl font-semibold text-ink">
-        ペルソナ設定(F03/F04)
+        ペルソナ設定
       </h1>
       <p className="mt-1 text-sm text-ink-muted">
-        AI擬似メンバーのプロフィール・立場・行動ルールを設定し(F03)、承認のうえ授業で使うペルソナを選ぶ(F04)。
-        段階1では教師設定型のみ作成できる。
+        擬似メンバーを作り、承認して「使用中」にすると授業で使われます。
       </p>
       <p className="mt-1 text-sm text-ink-muted">
         この授業で使用中のペルソナ: <span className="font-medium">{activeCount}体</span>
@@ -157,10 +156,8 @@ export default async function PersonasPage({
       <div className="mt-8 rounded-lg border border-line p-5">
         <h2 className="text-sm font-medium text-ink">AIにペルソナ案を作ってもらう</h2>
         <p className="mt-1 text-sm text-ink-muted">
-          授業設定(ねらい・学習者の校種学年・討論の型)と、登録済みの資料をもとに、互いに補い合う
-          擬似メンバーの案を作ります。作られた案は<strong>下書き</strong>として下の一覧に並ぶので、
-          内容を確認・修正し、承認→「使用中」にして初めて授業で使われます(AIが勝手に使い始めることは
-          ありません)。
+          授業設定と資料をもとに、互いに補い合う案を作ります。案は<strong>下書き</strong>として下に並び、
+          確認・修正して承認→「使用中」にして初めて使われます。
         </p>
         {!course.objective && (
           <p className="mt-2 rounded-md border border-warn bg-warn-soft px-3 py-2 text-sm text-warn">
@@ -272,9 +269,24 @@ export default async function PersonasPage({
                 </Link>
 
                 <div className="flex shrink-0 items-center gap-2">
-                  <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[persona.status]}`}>
-                    {STATUS_LABELS[persona.status]}
-                  </span>
+                  <ol className="flex items-center gap-1 text-[0.6875rem]" aria-label={`状態: ${STATUS_LABELS[persona.status]}`}>
+                    {(["draft", "approved", "active"] as const).map((st, idx) => {
+                      const order = { draft: 0, approved: 1, active: 2 } as const;
+                      const reached = order[persona.status] >= idx;
+                      const isNow = persona.status === st;
+                      return (
+                        <li
+                          key={st}
+                          aria-current={isNow ? "step" : undefined}
+                          className={`rounded-full px-2 py-0.5 ${
+                            isNow ? STATUS_STYLES[st] + " font-semibold" : reached ? "bg-surface text-ink-muted" : "text-ink-faint"
+                          }`}
+                        >
+                          {idx + 1} {STATUS_LABELS[st]}
+                        </li>
+                      );
+                    })}
+                  </ol>
 
                   {persona.status === "draft" && (
                     <form action={boundApproveAction}>
@@ -282,7 +294,7 @@ export default async function PersonasPage({
                         type="submit"
                         className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface"
                       >
-                        承認する
+                        次へ: 承認する
                       </button>
                     </form>
                   )}
@@ -292,7 +304,7 @@ export default async function PersonasPage({
                         type="submit"
                         className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface"
                       >
-                        授業で使う
+                        次へ: 授業で使う
                       </button>
                     </form>
                   )}
@@ -323,7 +335,7 @@ export default async function PersonasPage({
               <div className="mt-2 flex items-center gap-2">
                 {persona.shared_at ? (
                   <>
-                    <span className="text-xs text-accent">共有ライブラリに公開中(F21)</span>
+                    <span className="text-xs text-accent">共有ライブラリに公開中</span>
                     <form action={boundUnshareAction}>
                       <button
                         type="submit"
@@ -340,7 +352,7 @@ export default async function PersonasPage({
                         type="submit"
                         className="rounded-md border border-line px-2 py-0.5 text-xs text-ink hover:bg-surface"
                       >
-                        共有ライブラリに公開する(F21)
+                        共有ライブラリに公開する
                       </button>
                     </form>
                   )
@@ -348,7 +360,7 @@ export default async function PersonasPage({
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-line pt-2">
                 <span className="text-xs text-ink-faint">
-                  アバター(F25): {AVATAR_STATUS_LABELS[persona.avatar_status]}
+                  アバター: {AVATAR_STATUS_LABELS[persona.avatar_status]}
                   {avatar && ` — ${avatar.label}`}
                 </span>
                 <form action={boundRecommendAvatarAction}>
@@ -408,13 +420,10 @@ export default async function PersonasPage({
 
       <details className="mt-3 rounded-lg border border-line p-5">
         <summary className="cursor-pointer text-sm font-medium text-ink">
-          学習進化型ペルソナ(F10)
+          学習進化型ペルソナ
         </summary>
         <p className="mt-1 text-sm text-ink-muted">
-          同意済みの学習者の発言・成果・振り返りから、論点・誤概念・有効な問いを抽出し、
-          3〜5個の役割プロファイルを下書き(下書き状態)として提案する。特定の学習者の発言だと
-          推測されないよう、同意済みの学習者が一定数(3人)集まるまでは生成できない。
-          提案されたペルソナは、他のペルソナと同様に確認・編集してから承認・有効化すること。
+          同意済みの学習者の記録から、3〜5個の下書きを作ります。個人が特定されないよう、同意済みが3人以上になるまで作れません。
         </p>
         <form action={boundGenerateEvolvedAction} className="mt-3">
           <SubmitButton

@@ -85,19 +85,16 @@ export default async function CourseDashboardPage({
     <div className="mx-auto max-w-2xl px-6 py-12">
       <Breadcrumbs trail={[{ label: "授業一覧", href: "/courses" }, { label: course.title, href: `/courses/${courseId}` }]} current="教師ダッシュボード" />
       <h1 className="mt-2 text-2xl font-semibold text-ink">
-        教師ダッシュボード(F14)
+        教師ダッシュボード
       </h1>
       <p className="mt-1 text-sm text-ink-muted">
-        参加状況・つまずき・擬似メンバーの挙動をまとめて確認し、学級・個人の指導計画に活かす。
-        各行から学習者プロファイルの確認・生成(F09)や個別最適化の判断(F11)にそのまま進める。
+        参加状況・つまずき・擬似メンバーの挙動を確認し、指導に活かします。
       </p>
 
       <section className="mt-6 rounded-lg border border-line p-5">
         <h2 className="text-sm font-medium text-ink">指導のヒント(AIの提案)</h2>
         <p className="mt-1 text-xs text-ink-muted">
-          参加状況・論証評価・つまずき・学習者が共有した迷ったこと・議論の問いをもとに、次にどうファシリテートし、
-          どう指導するとよいかを提案します。学習者の氏名はAIに送りません。提案は材料で、判断と実行は先生です。
-          押したときだけ生成されます。
+          学習の様子から、次のファシリテーションと指導を提案します。氏名はAIに送りません。提案は材料で、判断は先生です。
         </p>
         <form action={generateTeacherGuidanceAction.bind(null, courseId)} className="mt-3 flex flex-wrap items-center gap-3">
           <SubmitButton
@@ -185,7 +182,7 @@ export default async function CourseDashboardPage({
                   href={`/courses/${courseId}/students#${stat.studentId}`}
                   className="shrink-0 text-xs text-ink-muted hover:underline"
                 >
-                  プロファイル・提案を見る(F09/F11)→
+                  プロファイル・提案を見る→
                 </Link>
               </div>
               <p className="mt-1 text-xs text-ink-muted">
@@ -196,7 +193,7 @@ export default async function CourseDashboardPage({
               </p>
               {stat.turnCount > 0 && stat.submissionCount === 0 && (
                 <p className="mt-1 text-xs text-warn">
-                  対話はあるが、まだ成果(F06)を提出していない。
+                  対話はあるが、まだ成果を提出していない。
                 </p>
               )}
               {stat.avgScore !== null && stat.avgScore < STRUGGLE_SCORE_THRESHOLD && (
@@ -205,7 +202,7 @@ export default async function CourseDashboardPage({
                 </p>
               )}
               {stat.challenges && (
-                <p className="mt-1 text-xs text-ink-muted">課題(F09): {stat.challenges}</p>
+                <p className="mt-1 text-xs text-ink-muted">課題: {stat.challenges}</p>
               )}
             </li>
           );
@@ -216,7 +213,7 @@ export default async function CourseDashboardPage({
       </ul>
 
       <h2 className="mt-8 text-sm font-medium text-ink">
-        擬似メンバーの挙動(F20)
+        擬似メンバーの挙動
       </h2>
       <ul className="mt-3 space-y-2">
         {[...personaStats.entries()].map(([personaId, stat]) => (
@@ -234,14 +231,14 @@ export default async function CourseDashboardPage({
         href={`/courses/${courseId}/conformity`}
         className="mt-2 inline-block text-xs text-ink-muted hover:underline"
       >
-        発言単位の詳細を見る(F20)→
+        発言単位の詳細を見る→
       </Link>
       <br />
       <Link
         href={`/courses/${courseId}/audit`}
         className="mt-1 inline-block text-xs text-ink-muted hover:underline"
       >
-        発言を確認・修正する(F15)→
+        発言を確認・修正する→
       </Link>
 
       <BackLink href={`/courses/${courseId}`} label={course.title} />

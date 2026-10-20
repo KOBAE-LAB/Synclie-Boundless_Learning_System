@@ -89,11 +89,11 @@ export default async function ConformityPage({
     <div className="mx-auto max-w-2xl px-6 py-12">
       <Breadcrumbs trail={[{ label: "授業一覧", href: "/courses" }, { label: course.title, href: `/courses/${courseId}` }]} current="同調の計測" />
       <h1 className="mt-2 text-2xl font-semibold text-ink">
-        ペルソナ設計と同調の計測(F20)
+        ペルソナ設計と同調の計測
       </h1>
       <p className="mt-1 text-sm text-ink-muted">
         学習者の発言に新しい根拠・具体例が無いのに、擬似メンバーが同調(譲歩)した割合を
-        ペルソナごとに集計する。ペルソナの設定(F03/F04)を変えて比較する材料にする。
+        ペルソナごとに集計する。ペルソナの設定を変えて比較する材料にする。
       </p>
 
       <div className="mt-8 rounded-lg border border-line p-5 text-sm">

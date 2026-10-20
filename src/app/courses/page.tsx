@@ -24,14 +24,14 @@ export default async function CoursesPage() {
 
   const MODE_LABELS: Record<string, string> = {
     group: "グループワーク",
-    solo_study: "独習(F19)",
+    solo_study: "独習",
   };
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
       <h1 className="text-2xl font-semibold text-ink">授業一覧</h1>
       <p className="mt-1 text-sm text-ink-muted">
-        {user.name ?? user.email} さんが担当する授業(F01: 授業・資料の登録)
+        {user.name ?? user.email} さんが担当する授業
       </p>
       {showAdminLink && (
         <Link
@@ -98,7 +98,7 @@ export default async function CoursesPage() {
           className="w-full rounded-md border border-line px-3 py-2 text-sm bg-surface-raised"
         >
           <option value="group">グループワーク(複数の学習者、対立するペルソナと議論)</option>
-          <option value="solo_study">独習(F19。「まだ分からない仲間」役のペルソナに説明する)</option>
+          <option value="solo_study">独習(「まだ分からない仲間」役のペルソナに説明する)</option>
         </select>
         <button
           type="submit"

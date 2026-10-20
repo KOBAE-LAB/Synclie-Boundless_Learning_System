@@ -32,7 +32,7 @@ export default async function LtiDeepLinkPage({
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
       <h1 className="text-2xl font-semibold text-ink">
-        LMSにリンクする授業を選ぶ(F17)
+        LMSにリンクする授業を選ぶ
       </h1>
       <p className="mt-1 text-sm text-ink-muted">
         {returnUrl

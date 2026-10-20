@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canOpenStep, currentStep, discussionGate, hasLaterOutput, parseVideoUrl, readCheckQuestions, type FlowStep } from "./steps";
+import { canOpenStep, currentStep, discussionGate, hasLaterOutput, parseVideoUrl, readCheckQuestions, validateVideoFile, MAX_VIDEO_BYTES, type FlowStep } from "./steps";
 
 const steps: FlowStep[] = [
   { id: "i1", position: 1, kind: "input", title: "動画を見る" },
@@ -72,5 +72,17 @@ describe("readCheckQuestions", () => {
     expect(readCheckQuestions([{ question: "Q1", answerPoints: "A", evidence: "E" }, { question: "" }, 3, null])).toEqual([
       { question: "Q1", answerPoints: "A", evidence: "E" },
     ]);
+  });
+});
+
+describe("validateVideoFile", () => {
+  it("mp4 / webm で上限以内なら通す", () => {
+    expect(validateVideoFile({ name: "授業.MP4", size: 1000 })).toEqual({ ext: "mp4", contentType: "video/mp4" });
+    expect(validateVideoFile({ name: "a.webm", size: MAX_VIDEO_BYTES })).toMatchObject({ contentType: "video/webm" });
+  });
+  it("他の形式・上限超えは拒否する", () => {
+    expect(() => validateVideoFile({ name: "a.exe", size: 10 })).toThrow("mp4");
+    expect(() => validateVideoFile({ name: "a.mp4", size: MAX_VIDEO_BYTES + 1 })).toThrow("MB");
+    expect(() => validateVideoFile({ name: "noext", size: 10 })).toThrow();
   });
 });

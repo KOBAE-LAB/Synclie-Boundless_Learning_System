@@ -525,7 +525,7 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
       インプットする時間と、アウトプットで学びを深める時間をコーディネートしたい」という要望。教師が
       授業ごとに、**インプット(動画・資料を見る)**と**アウトプット(擬似メンバーと議論)**のステップを
       自由に並べる(最大12個、上下で並べ替え、時間の目安つき、`course_steps`・`0037`)。ステップが1つも
-      無い授業は従来どおり(議論だけ)。**インプット**は、動画URL(**埋め込まず、リンクとして新しいタブで開く**。利用者の要望。外部サイトを画面内に取り込まない。アップロードした動画ファイルの再生も未対応)と、資料(PDFは署名つきURLで画面内表示、それ以外は取り込み済みの本文を表示)、
+      無い授業は従来どおり(議論だけ)。**インプット**は、動画URL(**埋め込まず、リンクとして新しいタブで開く**。利用者の要望。外部サイトを画面内に取り込まない。アップロードした動画ファイル(mp4/webm、20MBまで)は`<video>`で画面内再生。署名つきURLでSupabase Storageから直接配信し、VPSを通さない。`course_steps.video_path`、`0038`)と、資料(PDFは署名つきURLで画面内表示、それ以外は取り込み済みの本文を表示)、
       **理解チェック**の問い(資料の本文からAIが下書き、教師が編集。`ai/input-check.ts`)を持てる。
       学習者は自分の言葉で答え、「答えの目安」を開いて見比べる自己確認で、**AIは採点しない・学習時にAIを
       呼ばない**。進み具合は`step_progress`(インプットでは本人の答えも保存。全データ削除の対象)。
@@ -833,6 +833,7 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
     (参加コード、列デフォルト式で新規作成時に自動生成)と`course_enrollments`
     (course_id+student_idの組、unique制約)を追加。既存の`learning_sessions`から
     参加登録済み扱いのバックフィルも行う(詳細は8章の`learn/`の説明を参照)
+  - `0038_step_video_file.sql` — インプットのステップに動画ファイル(`course_steps.video_path`)
   - `0037_learning_flow.sql` — 学習の流れ。`course_steps`(インプット/アウトプットのステップ)・`step_progress`・`courses.steps_in_order`
   - `0036_teacher_guidance.sql` — 教師ダッシュボードの「指導のヒント」(`teacher_guidance`、授業ごと最新1件)
   - `0035_portfolio.sql` — ポートフォリオ。`portfolio_entries`に`submission_id`・`shared`・`updated_at`、`portfolio_share_links`(詳細は`learn/portfolio/`)
@@ -859,6 +860,17 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
 - `scripts/dev/generate-lti-keys.mjs` — F17用: このツール自身のRSA署名鍵ペア(PKCS8 PEM)を
   生成し、`.env.local`に貼り付ける`LTI_TOOL_PRIVATE_KEY`/`LTI_TOOL_KEY_ID`を出力する
   (`node scripts/dev/generate-lti-keys.mjs`)。
+
+### 画面の文章と「流れ」の見せ方(2026-10)
+
+- **画面の文章に、機能番号(F01〜F26)を出さない**(利用者には意味が無い。コメントや本ファイルでは使ってよい)。
+  説明文は1〜2文を目安に、長い仕様の説明は書かない(必要なら`<details>`に畳む)。
+- **順番のある操作(流れ)には、`<StepNumber n={…}/>`(`src/components/step-number.tsx`)で番号を付けて、
+  実際の順に並べる**。例: 授業の準備(1授業の設定→2資料→3ペルソナ→4学習の流れ→5評価の観点)、学習者の
+  提出後(1AIフィードバック→2AIジャッジ→3振り返り。結果の表示もこの順)、ペルソナの状態(1下書き→
+  2承認済み→3使用中。いまの段階を強調し、次のボタンは「次へ: …」)。任意の操作には「任意」と書く。
+- 学習ダッシュボードの先頭に、ポートフォリオの要約(`portfolio/summary.ts`: 成果・先生のコメント・
+  自己評価がまだ・公開用の件数と最新3件)を出す。
 
 ### 画面の階層と「戻る」の設計(2026-10)
 
