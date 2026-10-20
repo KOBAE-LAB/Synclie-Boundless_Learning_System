@@ -28,27 +28,120 @@ export async function seriesHasLearnerRecords(admin: AdminClient, seriesId: stri
   return (progress.count ?? 0) > 0;
 }
 
+export interface SeriesFiles {
+  /** materials バケット(資料・動画ファイル) */
+  materials: string[];
+  /** handwriting バケット(手書き画像) */
+  handwriting: string[];
+  /** audio バケット(音声) */
+  audio: string[];
+}
+
+/** シリーズ配下に保存されている実ファイルのパス。DBの削除では消えないので、削除の前に控える。 */
+export async function collectSeriesFiles(admin: AdminClient, seriesId: string): Promise<SeriesFiles> {
+  const files: SeriesFiles = { materials: [], handwriting: [], audio: [] };
+  const lessonIds = await lessonIdsOf(admin, seriesId);
+  if (lessonIds.length === 0) return files;
+
+  const [{ data: materials }, { data: steps }, { data: sessions }] = await Promise.all([
+    admin.from("course_materials").select("storage_path").in("course_id", lessonIds),
+    admin.from("course_steps").select("video_path").in("course_id", lessonIds),
+    admin.from("learning_sessions").select("id").in("course_id", lessonIds),
+  ]);
+  for (const m of materials ?? []) if (m.storage_path) files.materials.push(m.storage_path);
+  for (const st of steps ?? []) if (st.video_path) files.materials.push(st.video_path);
+
+  const sessionIds = (sessions ?? []).map((x) => x.id);
+  if (sessionIds.length > 0) {
+    const [{ data: turns }, { data: hw }, { data: au }] = await Promise.all([
+      admin.from("dialogue_turns").select("source_kind, source_path").in("session_id", sessionIds).not("source_path", "is", null),
+      admin.from("handwriting_uploads").select("image_path").in("session_id", sessionIds),
+      admin.from("audio_uploads").select("audio_path").in("session_id", sessionIds),
+    ]);
+    for (const t of turns ?? []) {
+      if (!t.source_path) continue;
+      (t.source_kind === "audio" ? files.audio : files.handwriting).push(t.source_path);
+    }
+    for (const u of hw ?? []) if (u.image_path) files.handwriting.push(u.image_path);
+    for (const u of au ?? []) if (u.audio_path) files.audio.push(u.audio_path);
+  }
+  return files;
+}
+
+async function removeSeriesFiles(admin: AdminClient, files: SeriesFiles) {
+  const unique = (xs: string[]) => [...new Set(xs)];
+  if (files.materials.length > 0) await admin.storage.from("materials").remove(unique(files.materials));
+  if (files.handwriting.length > 0) await admin.storage.from("handwriting").remove(unique(files.handwriting));
+  if (files.audio.length > 0) await admin.storage.from("audio").remove(unique(files.audio));
+}
+
+/**
+ * 学習者の記録を、外部キーの依存の順に消す(対話ログ → ポートフォリオの記録)。
+ * まとめて消すと、擬似メンバー(personas)を先に消そうとして、それを参照する対話ログ(dialogue_turns)の
+ * 外部キーで失敗するため、参照している側を先に消しておく。
+ */
+async function deleteLearnerRecords(admin: AdminClient, seriesId: string) {
+  const lessonIds = await lessonIdsOf(admin, seriesId);
+  if (lessonIds.length === 0) return;
+  const { data: sessions } = await admin.from("learning_sessions").select("id").in("course_id", lessonIds);
+  const sessionIds = (sessions ?? []).map((x) => x.id);
+  if (sessionIds.length === 0) return;
+
+  const turns = await admin.from("dialogue_turns").delete().in("session_id", sessionIds);
+  if (turns.error) throw new Error(`対話ログの削除に失敗しました: ${turns.error.message}`);
+  const entries = await admin.from("portfolio_entries").delete().in("session_id", sessionIds);
+  if (entries.error) throw new Error(`ポートフォリオの記録の削除に失敗しました: ${entries.error.message}`);
+}
+
 /** 学習者の記録が無いシリーズだけを、資料ファイルごと完全に削除する。 */
 export async function deleteSeriesIfEmpty(admin: AdminClient, seriesId: string) {
   if (await seriesHasLearnerRecords(admin, seriesId)) {
-    throw new Error("学習者の記録があるため削除できません。代わりにアーカイブしてください。");
+    throw new Error("学習者の記録があるため削除できません。代わりにアーカイブするか、強制削除を使ってください。");
   }
-
-  // Storageのファイルは、DBの削除では消えないので、先にパスを控えておく。
-  const lessonIds = await lessonIdsOf(admin, seriesId);
-  const paths: string[] = [];
-  if (lessonIds.length > 0) {
-    const [{ data: materials }, { data: steps }] = await Promise.all([
-      admin.from("course_materials").select("storage_path").in("course_id", lessonIds),
-      admin.from("course_steps").select("video_path").in("course_id", lessonIds),
-    ]);
-    for (const m of materials ?? []) if (m.storage_path) paths.push(m.storage_path);
-    for (const s of steps ?? []) if (s.video_path) paths.push(s.video_path);
-  }
-
+  const files = await collectSeriesFiles(admin, seriesId);
   const { error } = await admin.from("course_series").delete().eq("id", seriesId);
   if (error) throw new Error(`削除に失敗しました: ${error.message}`);
-  if (paths.length > 0) await admin.storage.from("materials").remove(paths);
+  await removeSeriesFiles(admin, files);
+}
+
+export interface SeriesRecordSummary {
+  /** 記録のある学習者の数 */
+  learners: number;
+  sessions: number;
+  submissions: number;
+}
+
+/** 強制削除の前に見せる、消えてしまう学習者の記録の量。 */
+export async function summarizeSeriesRecords(admin: AdminClient, seriesId: string): Promise<SeriesRecordSummary> {
+  const lessonIds = await lessonIdsOf(admin, seriesId);
+  if (lessonIds.length === 0) return { learners: 0, sessions: 0, submissions: 0 };
+  const [{ data: sessions }, { data: submissions }] = await Promise.all([
+    admin.from("learning_sessions").select("student_id").in("course_id", lessonIds),
+    admin.from("submissions").select("student_id").in("course_id", lessonIds),
+  ]);
+  const learners = new Set<string>();
+  for (const r of [...(sessions ?? []), ...(submissions ?? [])]) if (r.student_id) learners.add(r.student_id);
+  return { learners: learners.size, sessions: (sessions ?? []).length, submissions: (submissions ?? []).length };
+}
+
+/**
+ * 強制削除: 学習者の記録(対話・提出物・フィードバック・振り返り・ポートフォリオの評価・手書き画像・音声)ごと、
+ * シリーズを完全に削除する。元に戻せない。誤操作を防ぐため、(1)先にアーカイブしてあること、
+ * (2)シリーズ名を一字一句入力して確かめること、を求める。
+ */
+export async function forceDeleteSeries(admin: AdminClient, seriesId: string, confirmTitle: string) {
+  const { data: series } = await admin.from("course_series").select("title, archived_at").eq("id", seriesId).maybeSingle();
+  if (!series) throw new Error("授業シリーズが見つかりません。");
+  if (!series.archived_at) throw new Error("強制削除するには、先にシリーズをアーカイブしてください。");
+  if (confirmTitle.trim() !== series.title.trim()) {
+    throw new Error("入力したシリーズ名が一致しません。削除する場合は、シリーズ名を正確に入力してください。");
+  }
+
+  const files = await collectSeriesFiles(admin, seriesId);
+  await deleteLearnerRecords(admin, seriesId);
+  const { error } = await admin.from("course_series").delete().eq("id", seriesId);
+  if (error) throw new Error(`削除に失敗しました: ${error.message}`);
+  await removeSeriesFiles(admin, files);
 }
 
 /**

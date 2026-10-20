@@ -18,8 +18,8 @@
   --color-line-strong: #bdb4ae;
 
   --color-ink: #231f1d; /* 本文 */
-  --color-ink-muted: #5a524d;
-  --color-ink-faint: #766e68; /* 白地で4.5:1以上 */
+  --color-ink-muted: #4d4540;
+  --color-ink-faint: #6b625c; /* 白地で5.5:1以上 */
 
   --color-accent: #a81c1c; /* 文字・枠線・選択中の輪郭。ロゴの深紅 */
   --color-accent-fill: #a81c1c; /* 塗りボタンの地(白文字) */
@@ -35,9 +35,22 @@
   --color-warn-soft: #fff4cc;
   --color-highlight: #f5c518; /* ヘルメットの黄 */
 
+  /* 日本語フォント: Noto Sans JP(可変、自サーバーから配信。layout.tsxで読み込む)を先頭にする。
+     以前はヒラギノ角ゴ(通常がW3=細い)や游ゴシックを先頭にしていたため、OSによって文字が細く見えた。
+     読み込めない間・失敗時だけ、OSのフォントに切り替わる。 */
   --font-sans:
-    "Hiragino Kaku Gothic ProN", "Hiragino Sans", "ヒラギノ角ゴ ProN W3",
-    "Noto Sans JP", "Yu Gothic UI", Meiryo, system-ui, -apple-system, sans-serif;
+    "Noto Sans JP Variable", "Hiragino Sans", "Hiragino Kaku Gothic ProN",
+    "Yu Gothic UI", Meiryo, system-ui, -apple-system, sans-serif;
+
+  /* 文字の太さ: 本文を一段太くし(500)、強調との差(600・700)は保つ。Tailwindの font-normal / font-medium /
+     font-semibold が、それぞれ 500 / 600 / 700 になる。 */
+  --font-weight-normal: 500;
+  --font-weight-medium: 600;
+  --font-weight-semibold: 700;
+
+  /* 小さい文字(補足・ラベル)が読みにくいため、text-xs だけ少し大きくする。 */
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.5;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
 }
 
@@ -55,7 +68,9 @@ body {
   background: var(--color-canvas);
   color: var(--color-ink);
   font-family: var(--font-sans);
+  font-weight: 500;
   line-height: 1.7;
+  text-rendering: optimizeLegibility;
 }
 
 /* 操作したことが必ず分かるように、フォーカスリングはブランドカラーで強調する(F18)。 */

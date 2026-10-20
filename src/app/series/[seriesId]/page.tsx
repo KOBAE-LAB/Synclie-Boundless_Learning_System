@@ -5,7 +5,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { SubmitButton } from "@/components/submit-button";
 import { Breadcrumbs, BackLink } from "@/components/breadcrumbs";
 import { lessonName, seriesLabel } from "@/lib/courses/series";
-import { seriesHasLearnerRecords } from "@/lib/courses/series-admin";
+import { seriesHasLearnerRecords, summarizeSeriesRecords } from "@/lib/courses/series-admin";
 import {
   approveEnrollmentAction,
   archiveSeriesAction,
@@ -14,6 +14,7 @@ import {
   copyEnrollmentsAction,
   createLessonAction,
   deleteSeriesAction,
+  forceDeleteSeriesAction,
   unarchiveSeriesAction,
   regenerateJoinCodeAction,
   registerStudentAction,
@@ -66,6 +67,7 @@ export default async function SeriesPage({ params }: { params: Promise<{ seriesI
   const profileById = new Map((enrolledProfiles ?? []).map((p) => [p.id, p]));
 
   const hasRecords = await seriesHasLearnerRecords(admin, seriesId);
+  const recordSummary = hasRecords ? await summarizeSeriesRecords(admin, seriesId) : null;
   const { data: otherSeries } = await admin
     .from("course_series")
     .select("id, title, fiscal_year")
@@ -297,7 +299,7 @@ export default async function SeriesPage({ params }: { params: Promise<{ seriesI
       </section>
 
 
-      <section className="mt-10">
+      <section className="mt-10" id="manage">
         <h2 className="border-b border-line pb-2 text-base font-semibold text-ink">3. 年度の処理・シリーズの管理</h2>
         <div className="mt-4 space-y-3">
           <details className="rounded-lg border border-line p-4">
@@ -359,7 +361,30 @@ export default async function SeriesPage({ params }: { params: Promise<{ seriesI
           <details className="rounded-lg border border-line p-4">
             <summary className="cursor-pointer text-sm font-medium text-danger">シリーズを削除する</summary>
             {hasRecords ? (
-              <p className="mt-2 text-sm text-ink-muted">学習者の記録(対話・提出など)があるため、削除できません。代わりに「アーカイブ」してください。</p>
+              <div className="mt-2 space-y-3 text-sm text-ink-muted">
+                <p>学習者の記録(対話・提出など)があるため、通常の削除はできません。ふだんは「アーカイブ」を使ってください。</p>
+                <div className="rounded-md border border-danger p-3">
+                  <p className="font-medium text-danger">強制削除(学習者の記録ごと完全に削除)</p>
+                  <p className="mt-1">
+                    記録のある学習者{recordSummary?.learners ?? 0}人分の、対話{recordSummary?.sessions ?? 0}件・提出物{recordSummary?.submissions ?? 0}件を、
+                    フィードバック・振り返り・ポートフォリオの評価・手書き画像・音声も含めてすべて削除します。
+                    <b>元に戻せません。</b>学習者のポートフォリオからも消えるので、必要な学習者には先に「書き出し」で記録を持ち出すよう伝えてください。
+                  </p>
+                  {series.archived_at ? (
+                    <form action={forceDeleteSeriesAction.bind(null, seriesId)} className="mt-3 space-y-2">
+                      <label htmlFor="force-confirm" className="block text-xs text-ink-muted">
+                        確認のため、シリーズ名「{series.title}」を入力してください
+                      </label>
+                      <input id="force-confirm" name="confirmTitle" required autoComplete="off" className="w-full rounded-md border border-line bg-surface-raised px-3 py-1.5 text-sm" />
+                      <SubmitButton pendingText="削除中…" className="rounded-md bg-danger px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50">
+                        記録ごと完全に削除する
+                      </SubmitButton>
+                    </form>
+                  ) : (
+                    <p className="mt-2 text-xs text-warn">強制削除するには、先に上の「アーカイブする」でシリーズを閉じてください。</p>
+                  )}
+                </div>
+              </div>
             ) : (
               <>
                 <p className="mt-2 text-sm text-ink-muted">

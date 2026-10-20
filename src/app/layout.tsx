@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
+import "@fontsource-variable/noto-sans-jp/index.css";
 import "./globals.css";
 import { auth } from "@/auth";
 import { logoutAction } from "./logout-action";
@@ -8,8 +9,9 @@ import { stopStudentViewAction } from "./view-as-actions";
 import { HeaderNav, type NavItem } from "@/components/header-nav";
 import { isViewingAsStudent } from "@/lib/auth/session";
 
-// 日本語UIが中心のため、ビルド時にGoogle Fontsを取得する next/font/google ではなく
-// OSの標準フォント(日本語グリフを含む)を使う。オフライン/プロキシ環境でもビルドが安定する。
+// 日本語UIが中心。Google Fonts(next/font/google)をビルド時に取得するのではなく、npmパッケージ
+// @fontsource-variable/noto-sans-jp(Noto Sans JP、OFL)を自サーバーから配信する(外部サービスに依存せず、
+// OSによる字形・太さの差も出ない)。文字の範囲ごとに分割されているので、使う文字の分だけが読み込まれる。
 
 export const metadata: Metadata = {
   title: "Synclie - Boundless Learning System",

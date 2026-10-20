@@ -171,7 +171,9 @@ export default async function CoursesPage({
                     <SubmitButton pendingText="複製中…" className={small}>翌年度へ引き継ぐ</SubmitButton>
                   </form>
                   {hasRecords ? (
-                    <span className="text-xs text-ink-faint">学習者の記録があるため削除できません</span>
+                    <Link href={`/series/${series.id}#manage`} className="text-xs text-ink-muted hover:underline">
+                      学習者の記録あり(強制削除は、シリーズのページから)
+                    </Link>
                   ) : (
                     <details className="inline-block">
                       <summary className="cursor-pointer text-xs text-danger">削除…</summary>

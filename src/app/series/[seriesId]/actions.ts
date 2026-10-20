@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { assertOwnsSeries, fiscalYearOfDate } from "@/lib/courses/series";
-import { carryOverSeries, deleteSeriesIfEmpty } from "@/lib/courses/series-admin";
+import { carryOverSeries, deleteSeriesIfEmpty, forceDeleteSeries } from "@/lib/courses/series-admin";
 import { hashPassword } from "@/lib/auth/password";
 import { normalizeEmail, validateSignupFields } from "@/lib/auth/signup-validation";
 
@@ -214,6 +214,14 @@ export async function unarchiveSeriesAction(seriesId: string) {
 export async function deleteSeriesAction(seriesId: string) {
   const { admin } = await guard(seriesId);
   await deleteSeriesIfEmpty(admin, seriesId);
+  revalidatePath("/courses");
+  redirect("/courses");
+}
+
+// 強制削除: 学習者の記録ごと完全に削除する(元に戻せない)。先にアーカイブし、シリーズ名を入力して確かめる。
+export async function forceDeleteSeriesAction(seriesId: string, formData: FormData) {
+  const { admin } = await guard(seriesId);
+  await forceDeleteSeries(admin, seriesId, String(formData.get("confirmTitle") ?? ""));
   revalidatePath("/courses");
   redirect("/courses");
 }
