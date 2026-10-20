@@ -263,6 +263,20 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
     `src/lib/consent.ts`の`requireConsent()`がここへリダイレクトする
     (`/learn`, `/learn/[courseId]`, `/learn/[courseId]/portfolio`から呼んでいる)。
     同意すると`consent_records`に記録され`/learn`に戻る
+  - `src/app/learn/portfolio/` — ポートフォリオ(学習者本人の「学びのデータベース」。EduDX方針の
+    「学習者が所有し持ち出せる学びの記録」)。全授業を横断し、成果(`submissions`)に、議論のまとめ
+    (`learning_sessions.closing_summary`)・AIフィードバック・AIジャッジ・振り返りを束ねて時系列表示する
+    (コピーは作らず`src/lib/portfolio/load.ts`の`loadPortfolio`が読むだけ)。授業・年度(4月始まり、日本時間)で
+    絞り込める。新しく保存するのは`portfolio_entries`(成果1件ごと: 自己評価`self_assessment`・教師評価
+    `teacher_assessment`・公開用の印`shared`)と`portfolio_share_links`(本人が作る、期限つき
+    7/30/90日・取り消せる公開リンク)だけ(`0035_portfolio.sql`)。**AIの評価は材料にとどめ、最終判断は
+    本人と教師**(画面・書き出しに必ず注記)。書き出しは`GET /api/learn/portfolio/export?format=html|md|json&course=`
+    (本人のデータだけ。同意撤回中でも持ち出せる)。公開リンク`/portfolio/shared/[token]`はログイン不要・noindex・
+    無効理由を区別せず404で、`toSharedView`が「公開用」の成果だけを残し振り返り・AIフィードバックを外す。
+    **進級・転校の引き継ぎは自動では行わず、このリンクか書き出しで本人が渡す(オプトイン)**。
+    教師の評価は`courses/[courseId]/submissions/`の`saveTeacherAssessmentAction`(自分の授業のみ)。
+    旧`learn/[courseId]/portfolio/`はここへリダイレクトする。`deleteMyDataAction`は
+    `portfolio_share_links`も削除する
   - `src/app/learn/data/` — F16用。学習者が自分の同意状況の確認・撤回(利用停止)、
     保存データ件数の確認、全データ削除(`deleteMyDataAction`。ログインアカウント自体は
     残す)ができる。同意状況に関わらずアクセスできる(撤回中でもここは使える)。
@@ -792,6 +806,8 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
   - `0029_signup_approval.sql` — 自己登録の承認制。`profiles.approval_status`(`pending`/
     `approved`/`rejected`、既定`approved`)・`profiles.is_admin`、`course_enrollments.status`
     (`pending`/`approved`、既存の登録は承認済み扱い)を追加(詳細は8章の`signup/`の説明を参照)
+  - `0035_portfolio.sql` — ポートフォリオ。`portfolio_entries`に`submission_id`(成果1件1行)・`shared`・
+    `updated_at`を追加し、公開リンク`portfolio_share_links`を追加(詳細は8章の`learn/portfolio/`を参照)
 - `scripts/stage0/` — 段階0の使い捨てプロトタイプ(`debate_experiment.py`)。
   ペルソナ対話と論証評価の「質感」を、画面なしでローカル検証するためのCLIスクリプト。
   段階1のNext.js実装に置き換わる前提の使い捨てコード。

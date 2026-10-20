@@ -95,6 +95,7 @@ export async function deleteMyDataAction() {
   await admin.from("student_profiles").delete().eq("student_id", user.id);
   await admin.from("personalization_suggestions").delete().eq("student_id", user.id);
   await admin.from("portfolio_entries").delete().eq("student_id", user.id);
+  await admin.from("portfolio_share_links").delete().eq("student_id", user.id);
   await admin.from("study_plan_items").delete().eq("student_id", user.id);
   // F26実装時に追加。
   await admin.from("learner_profiles").delete().eq("student_id", user.id);

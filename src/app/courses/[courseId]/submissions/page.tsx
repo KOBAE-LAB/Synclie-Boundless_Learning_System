@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
-import { updateFeedbackAction, sendGradeToLmsAction } from "./actions";
+import { updateFeedbackAction, sendGradeToLmsAction, saveTeacherAssessmentAction } from "./actions";
+import { RATING_LABELS, readAssessment } from "@/lib/portfolio/assessment";
 import { SubmitButton } from "@/components/submit-button";
 import { Breadcrumbs, BackLink } from "@/components/breadcrumbs";
 
@@ -70,6 +71,7 @@ export default async function SubmissionsReviewPage({
   const feedbackBySubmission = new Map<string, FeedbackRow[]>();
   const reflectionBySubmission = new Map<string, ReflectionRow>();
   const judgmentBySubmission = new Map<string, JudgmentRow>();
+  const teacherAssessmentBySubmission = new Map<string, ReturnType<typeof readAssessment>>();
 
   if (submissions.length > 0) {
     const studentIds = [...new Set(submissions.map((s) => s.student_id))];
@@ -119,6 +121,18 @@ export default async function SubmissionsReviewPage({
     for (const row of (judgmentRows ?? []) as JudgmentRow[]) {
       judgmentBySubmission.set(row.submission_id, row);
     }
+
+    // ポートフォリオ: 教師自身が書いた評価(学習者のポートフォリオにも表示される)。
+    const { data: entryRows } = await admin
+      .from("portfolio_entries")
+      .select("submission_id, teacher_assessment")
+      .in(
+        "submission_id",
+        submissions.map((s) => s.id),
+      );
+    for (const row of entryRows ?? []) {
+      teacherAssessmentBySubmission.set(row.submission_id, readAssessment(row.teacher_assessment));
+    }
   }
 
   return (
@@ -136,6 +150,7 @@ export default async function SubmissionsReviewPage({
           const feedbackItems = feedbackBySubmission.get(submission.id) ?? [];
           const reflection = reflectionBySubmission.get(submission.id);
           const judgment = judgmentBySubmission.get(submission.id);
+          const teacherAssessment = teacherAssessmentBySubmission.get(submission.id);
           return (
             <li
               key={submission.id}
@@ -250,6 +265,39 @@ export default async function SubmissionsReviewPage({
                   </p>
                 </div>
               )}
+
+              <form
+                action={saveTeacherAssessmentAction.bind(null, courseId, submission.id)}
+                className="mt-4 space-y-2 border-t border-line pt-3 text-xs"
+              >
+                <p className="font-medium text-ink">教師の評価(学習者のポートフォリオに表示されます)</p>
+                <p className="text-ink-faint">AIの評価は材料です。最終的な評価は先生が決めます。</p>
+                <fieldset className="flex flex-wrap gap-3">
+                  <legend className="sr-only">評価の段階</legend>
+                  {[4, 3, 2, 1].map((r) => (
+                    <label key={r} className="flex items-center gap-1">
+                      <input type="radio" name="rating" value={r} defaultChecked={teacherAssessment?.rating === r} />
+                      {RATING_LABELS[r]}
+                    </label>
+                  ))}
+                </fieldset>
+                <label htmlFor={`ta-${submission.id}`} className="sr-only">教師のコメント</label>
+                <textarea
+                  id={`ta-${submission.id}`}
+                  name="comment"
+                  rows={2}
+                  maxLength={1000}
+                  defaultValue={teacherAssessment?.comment ?? ""}
+                  placeholder="学習者へのコメント"
+                  className={inputClassName}
+                />
+                <SubmitButton
+                  pendingText="保存中…"
+                  className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface"
+                >
+                  教師の評価を保存
+                </SubmitButton>
+              </form>
             </li>
           );
         })}

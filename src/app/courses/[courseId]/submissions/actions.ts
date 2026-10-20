@@ -5,6 +5,32 @@ import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { assertOwnsCourse } from "@/lib/courses/ownership";
 import { sendScoreToLms } from "@/lib/lti/ags";
+import { parseAssessmentInput } from "@/lib/portfolio/assessment";
+import { patchPortfolioEntry } from "@/lib/portfolio/entries";
+
+// ポートフォリオ: 教師が成果ごとに評価(段階とコメント)を書く。AIの評価は材料で、最終判断は教師と学習者。
+// 学習者のポートフォリオに表示される。
+export async function saveTeacherAssessmentAction(courseId: string, submissionId: string, formData: FormData) {
+  const { user } = await requireRole("teacher");
+  const admin = createAdminClient();
+  await assertOwnsCourse(admin, courseId, user.id);
+
+  const { data: submission } = await admin
+    .from("submissions")
+    .select("id, course_id, student_id")
+    .eq("id", submissionId)
+    .maybeSingle();
+  if (!submission || submission.course_id !== courseId) {
+    throw new Error("提出物が見つかりません。");
+  }
+
+  const assessment = parseAssessmentInput({
+    rating: String(formData.get("rating") ?? ""),
+    comment: String(formData.get("comment") ?? ""),
+  });
+  await patchPortfolioEntry(admin, submission.student_id, submissionId, { teacher_assessment: assessment });
+  revalidatePath(`/courses/${courseId}/submissions`);
+}
 
 // F07: 教師はAIが生成したフィードバックの文面を確認・修正できる(要件定義書7章)。
 export async function updateFeedbackAction(
