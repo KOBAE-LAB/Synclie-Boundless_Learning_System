@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireRole } from "@/lib/auth/session";
+import { isAdmin, requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { SubmitButton } from "@/components/submit-button";
 import { Breadcrumbs, BackLink } from "@/components/breadcrumbs";
@@ -66,6 +66,7 @@ export default async function SeriesPage({ params }: { params: Promise<{ seriesI
       : { data: [] };
   const profileById = new Map((enrolledProfiles ?? []).map((p) => [p.id, p]));
 
+  const canPurge = await isAdmin(admin, user.id);
   const hasRecords = await seriesHasLearnerRecords(admin, seriesId);
   const recordSummary = hasRecords ? await summarizeSeriesRecords(admin, seriesId) : null;
   const { data: otherSeries } = await admin
@@ -365,31 +366,36 @@ export default async function SeriesPage({ params }: { params: Promise<{ seriesI
           )}
 
           <details className="rounded-lg border border-line p-4">
-            <summary className="cursor-pointer text-sm font-medium text-danger">シリーズを削除する</summary>
+            <summary className="cursor-pointer text-sm font-medium text-danger">シリーズを削除する(テストデータの消去を含む)</summary>
             {hasRecords ? (
               <div className="mt-2 space-y-3 text-sm text-ink-muted">
                 <p>学習者の記録(対話・提出など)があるため、通常の削除はできません。ふだんは「アーカイブ」を使ってください。</p>
-                <div className="rounded-md border border-danger p-3">
-                  <p className="font-medium text-danger">強制削除(学習者の記録ごと完全に削除)</p>
-                  <p className="mt-1">
-                    記録のある学習者{recordSummary?.learners ?? 0}人分の、対話{recordSummary?.sessions ?? 0}件・提出物{recordSummary?.submissions ?? 0}件を、
-                    フィードバック・振り返り・ポートフォリオの評価・手書き画像・音声も含めてすべて削除します。
-                    <b>元に戻せません。</b>学習者のポートフォリオからも消えるので、必要な学習者には先に「書き出し」で記録を持ち出すよう伝えてください。
-                  </p>
-                  {series.archived_at ? (
-                    <form action={forceDeleteSeriesAction.bind(null, seriesId)} className="mt-3 space-y-2">
-                      <label htmlFor="force-confirm" className="block text-xs text-ink-muted">
-                        確認のため、シリーズ名「{series.title}」を入力してください
-                      </label>
-                      <input id="force-confirm" name="confirmTitle" required autoComplete="off" className="w-full rounded-md border border-line bg-surface-raised px-3 py-1.5 text-sm" />
-                      <SubmitButton pendingText="削除中…" className="rounded-md bg-danger px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50">
-                        記録ごと完全に削除する
-                      </SubmitButton>
-                    </form>
-                  ) : (
-                    <p className="mt-2 text-xs text-warn">強制削除するには、先に上の「アーカイブする」でシリーズを閉じてください。</p>
-                  )}
-                </div>
+                {canPurge ? (
+                  <div className="rounded-md border border-danger p-3">
+                    <p className="font-medium text-danger">テストデータの消去(管理者のみ・学習者の記録ごと完全に削除)</p>
+                    <p className="mt-1">
+                      導入初期のテストデータを片付けるための機能です。本物の学習者の記録には使わないでください。
+                      記録のある学習者{recordSummary?.learners ?? 0}人分の、対話{recordSummary?.sessions ?? 0}件・提出物{recordSummary?.submissions ?? 0}件を、
+                      フィードバック・振り返り・ポートフォリオの評価・手書き画像・音声も含めてすべて削除します。
+                      <b>元に戻せません。</b>
+                    </p>
+                    {series.archived_at ? (
+                      <form action={forceDeleteSeriesAction.bind(null, seriesId)} className="mt-3 space-y-2">
+                        <label htmlFor="force-confirm" className="block text-xs text-ink-muted">
+                          確認のため、シリーズ名「{series.title}」を入力してください
+                        </label>
+                        <input id="force-confirm" name="confirmTitle" required autoComplete="off" className="w-full rounded-md border border-line bg-surface-raised px-3 py-1.5 text-sm" />
+                        <SubmitButton pendingText="削除中…" className="rounded-md bg-danger px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50">
+                          記録ごと完全に削除する
+                        </SubmitButton>
+                      </form>
+                    ) : (
+                      <p className="mt-2 text-xs text-warn">消去するには、先に上の「アーカイブする」でシリーズを閉じてください。</p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-xs text-ink-faint">学習者の記録は、教師は消せません。テストデータの消去が必要なときは、管理者に依頼してください。</p>
+                )}
               </div>
             ) : (
               <>

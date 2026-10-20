@@ -172,7 +172,7 @@ export default async function CoursesPage({
                   </form>
                   {hasRecords ? (
                     <Link href={`/series/${series.id}#manage`} className="text-xs text-ink-muted hover:underline">
-                      学習者の記録あり(強制削除は、シリーズのページから)
+                      学習者の記録あり(消去は管理者が、シリーズのページから)
                     </Link>
                   ) : (
                     <details className="inline-block">

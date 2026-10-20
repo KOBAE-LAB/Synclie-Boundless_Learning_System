@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireRole } from "@/lib/auth/session";
+import { requireAdmin, requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { assertOwnsSeries, fiscalYearOfDate } from "@/lib/courses/series";
 import { copyCriteriaBetweenLessons, copyPersonasBetweenLessons } from "@/lib/courses/lesson-copy";
@@ -234,9 +234,14 @@ export async function deleteSeriesAction(seriesId: string) {
   redirect("/courses");
 }
 
-// 強制削除: 学習者の記録ごと完全に削除する(元に戻せない)。先にアーカイブし、シリーズ名を入力して確かめる。
+// テストデータの消去(強制削除): 学習者の記録ごと完全に削除する(元に戻せない)。**管理者だけ**が使える。
+// 導入初期のテストデータを片付けるための機能で、本物の学習者の記録を消すために使わない
+// (一般の教師は、学習者の記録を消せない。要件定義書14章の設計原則)。
+// 先にアーカイブし、シリーズ名を入力して確かめる。
 export async function forceDeleteSeriesAction(seriesId: string, formData: FormData) {
-  const { admin } = await guard(seriesId);
+  const { user } = await requireAdmin();
+  const admin = createAdminClient();
+  await assertOwnsSeries(admin, seriesId, user.id);
   await forceDeleteSeries(admin, seriesId, String(formData.get("confirmTitle") ?? ""));
   revalidatePath("/courses");
   redirect("/courses");
