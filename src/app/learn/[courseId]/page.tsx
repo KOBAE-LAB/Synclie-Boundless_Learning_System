@@ -31,6 +31,7 @@ import { AUTO_CONTINUE_CAP, TEMPO_OPTIONS } from "@/lib/discussion-tempo";
 import { Breadcrumbs, BackLink } from "@/components/breadcrumbs";
 import { StepNumber } from "@/components/step-number";
 import { loadLearnerFlow } from "@/lib/flow/load";
+import { lessonName, loadLessonCrumbs } from "@/lib/courses/series";
 import { canOpenStep, currentStep } from "@/lib/flow/steps";
 import { FlowStepper, InputStepView, OutputStepCard } from "./flow-view";
 
@@ -171,6 +172,7 @@ export default async function LearnCourseSessionPage({
     { data: personalization },
     { data: submissionRows },
     flow,
+    lessonCrumbs,
   ] = await Promise.all([
     (async () => {
       await requireConsent(admin, user.id);
@@ -179,7 +181,7 @@ export default async function LearnCourseSessionPage({
     admin
       .from("courses")
       .select(
-        "id, title, subject, mode, auto_discussion_tempo_seconds, auto_discussion_affects_evaluation, time_limit_minutes, time_limit_policy, time_limit_affects_evaluation",
+        "id, title, subject, mode, lesson_no, auto_discussion_tempo_seconds, auto_discussion_affects_evaluation, time_limit_minutes, time_limit_policy, time_limit_affects_evaluation",
       )
       .eq("id", courseId)
       .maybeSingle(),
@@ -220,6 +222,7 @@ export default async function LearnCourseSessionPage({
       .eq("student_id", user.id)
       .order("created_at", { ascending: false }),
     loadLearnerFlow(admin, courseId, user.id),
+    loadLessonCrumbs(admin, courseId),
   ]);
 
   if (!course) {
@@ -235,7 +238,16 @@ export default async function LearnCourseSessionPage({
         ? (flow.steps.find((s) => s.id === requestedStepId) ?? flowCurrent)
         : flowCurrent;
   if (viewingStep && viewingStep.kind === "input") {
-    return <InputStepView admin={admin} course={{ id: course.id, title: course.title }} flow={flow} step={viewingStep} studentId={user.id} />;
+    return (
+      <InputStepView
+        admin={admin}
+        course={{ id: course.id, title: lessonName(course.lesson_no, course.title) }}
+        trail={lessonCrumbs?.learnerTrail ?? [{ label: "授業一覧", href: "/learn" }]}
+        flow={flow}
+        step={viewingStep}
+        studentId={user.id}
+      />
+    );
   }
 
   const submissions = (submissionRows ?? []) as SubmissionRow[];
@@ -391,8 +403,8 @@ export default async function LearnCourseSessionPage({
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <Breadcrumbs trail={[{ label: "授業一覧", href: "/learn" }]} current={course.title} />
-      <h1 className="mt-3 text-2xl font-semibold text-ink">{course.title}</h1>
+      <Breadcrumbs trail={lessonCrumbs?.learnerTrail ?? [{ label: "授業一覧", href: "/learn" }]} current={lessonName(course.lesson_no, course.title)} />
+      <h1 className="mt-3 text-2xl font-semibold text-ink">{lessonName(course.lesson_no, course.title)}</h1>
       {course.subject && <p className="mt-1 text-sm text-ink-muted">{course.subject}</p>}
       {course.mode === "solo_study" && (
         <p className="mt-1 text-sm text-ink-muted">
@@ -1080,7 +1092,7 @@ export default async function LearnCourseSessionPage({
         )}
       </div>
 
-      <BackLink href="/learn" label="授業一覧" />
+      <BackLink href={lessonCrumbs ? `/learn/series/${lessonCrumbs.seriesId}` : "/learn"} label={lessonCrumbs?.seriesTitle ?? "授業一覧"} />
     </div>
   );
 }

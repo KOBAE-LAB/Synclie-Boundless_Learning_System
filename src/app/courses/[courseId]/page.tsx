@@ -5,6 +5,7 @@ import { isAdmin, requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { SubmitButton } from "@/components/submit-button";
 import { Breadcrumbs, BackLink } from "@/components/breadcrumbs";
+import { lessonName, loadLessonCrumbs } from "@/lib/courses/series";
 import {
   uploadMaterialAction,
   generateMaterialRagAction,
@@ -13,11 +14,9 @@ import {
   unshareMaterialAction,
   updateAutoDiscussionSettingsAction,
   updateCourseSettingsAction,
-  regenerateJoinCodeAction,
   startStudentViewAction,
-  removeEnrollmentAction,
-  approveEnrollmentAction,
-  registerStudentAction,
+  setLessonReleasedAction,
+  renameLessonAction,
 } from "./actions";
 import { TEMPO_OPTIONS } from "@/lib/discussion-tempo";
 import {
@@ -95,7 +94,7 @@ export default async function CourseDetailPage({
   const { data: course } = await admin
     .from("courses")
     .select(
-      "id, title, subject, owner_teacher_id, join_code, auto_discussion_tempo_seconds, auto_discussion_affects_evaluation, objective, learner_level, discussion_style, ai_member_count, discussion_liveliness, reasoning_depth, time_limit_minutes, time_limit_policy, time_limit_affects_evaluation, ai_close_suggestion",
+      "id, title, subject, owner_teacher_id, series_id, lesson_no, released, auto_discussion_tempo_seconds, auto_discussion_affects_evaluation, objective, learner_level, discussion_style, ai_member_count, discussion_liveliness, reasoning_depth, time_limit_minutes, time_limit_policy, time_limit_affects_evaluation, ai_close_suggestion",
     )
     .eq("id", courseId)
     .maybeSingle();
@@ -104,20 +103,7 @@ export default async function CourseDetailPage({
     notFound();
   }
 
-  // F01拡張(受講登録): 参加登録している学習者の一覧(名前が無い場合はメールアドレスで表示)。
-  const { data: enrollmentRows } = await admin
-    .from("course_enrollments")
-    .select("student_id, status, created_at")
-    .eq("course_id", courseId)
-    .order("created_at", { ascending: true });
-  const enrolledStudentIds = (enrollmentRows ?? []).filter((e) => e.status === "approved").map((e) => e.student_id);
-  const pendingStudentIds = (enrollmentRows ?? []).filter((e) => e.status === "pending").map((e) => e.student_id);
-  const allEnrollmentStudentIds = (enrollmentRows ?? []).map((e) => e.student_id);
-  const { data: enrolledProfiles } =
-    allEnrollmentStudentIds.length > 0
-      ? await admin.from("profiles").select("id, display_name, email").in("id", allEnrollmentStudentIds)
-      : { data: [] };
-  const profileById = new Map((enrolledProfiles ?? []).map((p) => [p.id, p]));
+  const crumbs = await loadLessonCrumbs(admin, courseId);
 
   const { data: materials } = await admin
     .from("course_materials")
@@ -143,17 +129,51 @@ export default async function CourseDetailPage({
   const boundUploadAction = uploadMaterialAction.bind(null, courseId);
   const boundGenerateAllAction = generateAllPendingRagAction.bind(null, courseId);
   const boundUpdateAutoDiscussionAction = updateAutoDiscussionSettingsAction.bind(null, courseId);
-  const boundRegenerateJoinCodeAction = regenerateJoinCodeAction.bind(null, courseId);
-  const boundRegisterStudentAction = registerStudentAction.bind(null, courseId);
   const boundUpdateCourseSettingsAction = updateCourseSettingsAction.bind(null, courseId);
   const boundStartStudentViewAction = startStudentViewAction.bind(null, courseId);
   const canViewAsStudent = await isAdmin(admin, user.id);
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <Breadcrumbs trail={[{ label: "授業一覧", href: "/courses" }]} current={course.title} />
-      <h1 className="mt-3 text-2xl font-semibold text-ink">{course.title}</h1>
-      {course.subject && <p className="mt-1 text-sm text-ink-muted">{course.subject}</p>}
+      <Breadcrumbs trail={crumbs?.teacherTrail.slice(0, 2) ?? [{ label: "授業シリーズ一覧", href: "/courses" }]} current={lessonName(course.lesson_no, course.title)} />
+      <h1 className="mt-3 text-2xl font-semibold text-ink">{lessonName(course.lesson_no, course.title)}</h1>
+      {crumbs && <p className="mt-1 text-sm text-ink-muted">{crumbs.seriesTitle}の授業回</p>}
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-lg border border-line p-4">
+        <p className="text-sm">
+          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${course.released ? "bg-success-soft text-success" : "bg-warn-soft text-warn"}`}>
+            {course.released ? "公開中" : "準備中"}
+          </span>
+          <span className="ml-2 text-xs text-ink-muted">
+            {course.released ? "履修している学習者が開けます。" : "公開するまで、学習者には見えません。"}
+          </span>
+        </p>
+        <form action={setLessonReleasedAction.bind(null, courseId, !course.released)}>
+          <SubmitButton
+            pendingText="変更中…"
+            className={`rounded-md px-3 py-1.5 text-xs font-medium disabled:opacity-50 ${course.released ? "border border-line text-ink hover:bg-surface" : "bg-accent-fill text-white hover:bg-accent-fill-hover"}`}
+          >
+            {course.released ? "準備中に戻す" : "学習者に公開する"}
+          </SubmitButton>
+        </form>
+      </div>
+      <details className="mt-2">
+        <summary className="cursor-pointer text-xs text-ink-muted">授業回の名前を変える</summary>
+        <form action={renameLessonAction.bind(null, courseId)} className="mt-2 flex flex-wrap gap-2">
+          <label htmlFor="lesson-title" className="sr-only">授業回の名前</label>
+          <input
+            id="lesson-title"
+            name="title"
+            defaultValue={course.title}
+            maxLength={80}
+            required
+            className="min-w-0 flex-1 rounded-md border border-line bg-surface-raised px-3 py-1.5 text-sm"
+          />
+          <SubmitButton pendingText="保存中…" className="rounded-md border border-line px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface disabled:opacity-50">
+            保存
+          </SubmitButton>
+        </form>
+      </details>
 
       <section className="mt-10">
         <h2 className="border-b border-line pb-2 text-base font-semibold text-ink">1. 授業を準備する</h2>
@@ -555,142 +575,13 @@ export default async function CourseDetailPage({
       </section>
 
       <section className="mt-10">
-        <h2 className="border-b border-line pb-2 text-base font-semibold text-ink">2. 学習者を迎える</h2>
-        <p className="mt-2 text-sm text-ink-muted">授業コードを伝え、参加の申請を承認します。進め方(自動継続)もここで決めます。</p>
-      <details open className="mt-4 rounded-lg border border-line p-5">
-        <summary className="cursor-pointer text-sm font-medium text-ink">
-          <StepNumber n={1} />
-          受講登録
-          <span className="ml-2 text-xs font-normal text-ink-muted">
-            参加{enrolledStudentIds.length}人{pendingStudentIds.length > 0 ? `・承認待ち${pendingStudentIds.length}人` : ""}
-          </span>
-        </summary>
-        <p className="mt-1 text-sm text-ink-muted">
-          このコードを学習者に伝えます。学習者が入力すると申請になり、下の「承認待ち」で承認すると授業に入れます。
+        <h2 className="border-b border-line pb-2 text-base font-semibold text-ink">2. 学習者の進め方</h2>
+        <p className="mt-2 text-sm text-ink-muted">
+          履修登録(授業コード・承認)は、シリーズのページで管理します。
+          <Link href={`/series/${course.series_id}`} className="ml-1 text-accent hover:underline">履修登録を開く →</Link>
         </p>
-        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
-          <span className="rounded-md border border-line bg-surface-raised px-3 py-1.5 font-mono text-lg tracking-widest text-ink">
-            {course.join_code}
-          </span>
-          <form action={boundRegenerateJoinCodeAction}>
-            <button
-              type="submit"
-              className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface"
-            >
-              コードを再発行する
-            </button>
-          </form>
-        </div>
-
-        {pendingStudentIds.length > 0 && (
-          <div className="mt-4 rounded-md border border-warn bg-warn-soft p-3">
-            <h3 className="text-xs font-medium text-warn">承認待ち({pendingStudentIds.length}人)</h3>
-            <ul className="mt-2 space-y-1">
-              {pendingStudentIds.map((studentId) => {
-                const profile = profileById.get(studentId);
-                const boundApproveAction = approveEnrollmentAction.bind(null, courseId, studentId);
-                const boundRejectAction = removeEnrollmentAction.bind(null, courseId, studentId);
-                return (
-                  <li
-                    key={studentId}
-                    className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm"
-                  >
-                    <span className="text-ink">{profile?.display_name || profile?.email || studentId}</span>
-                    <span className="flex items-center gap-2">
-                      <form action={boundApproveAction}>
-                        <button
-                          type="submit"
-                          className="rounded-md bg-accent-fill px-2.5 py-1 text-xs font-medium text-white hover:bg-accent-fill-hover"
-                        >
-                          承認する
-                        </button>
-                      </form>
-                      <form action={boundRejectAction}>
-                        <button type="submit" className="text-xs text-ink-faint hover:text-danger hover:underline">
-                          却下する
-                        </button>
-                      </form>
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        )}
-
-        <h3 className="mt-4 text-xs font-medium text-ink-faint">
-          参加している学習者({enrolledStudentIds.length}人)
-        </h3>
-        <ul className="mt-2 space-y-1">
-          {enrolledStudentIds.map((studentId) => {
-            const profile = profileById.get(studentId);
-            const boundRemoveAction = removeEnrollmentAction.bind(null, courseId, studentId);
-            return (
-              <li
-                key={studentId}
-                className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm"
-              >
-                <span className="text-ink-muted">{profile?.display_name || profile?.email || studentId}</span>
-                <form action={boundRemoveAction}>
-                  <button type="submit" className="text-xs text-ink-faint hover:text-danger hover:underline">
-                    参加登録を外す
-                  </button>
-                </form>
-              </li>
-            );
-          })}
-          {enrolledStudentIds.length === 0 && (
-            <li className="text-sm text-ink-muted">まだ誰も参加していません。</li>
-          )}
-        </ul>
-
-        <form action={boundRegisterStudentAction} className="mt-5 space-y-2 border-t border-line pt-4">
-          <h3 className="text-xs font-medium text-ink-faint">学習者を直接登録する</h3>
-          <p className="text-xs text-ink-muted">
-            アカウントが無ければ、この初期パスワードで作ります(本人に伝え、ログイン後に変更してもらう)。
-            既にある場合は、参加登録だけ行います。
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <label className="sr-only" htmlFor="reg-name">お名前</label>
-            <input
-              id="reg-name"
-              name="name"
-              required
-              placeholder="お名前"
-              className="min-w-0 flex-1 rounded-md border border-line bg-surface-raised px-3 py-1.5 text-sm"
-            />
-            <label className="sr-only" htmlFor="reg-email">メールアドレス</label>
-            <input
-              id="reg-email"
-              name="email"
-              type="email"
-              required
-              placeholder="メールアドレス"
-              className="min-w-0 flex-1 rounded-md border border-line bg-surface-raised px-3 py-1.5 text-sm"
-            />
-            <label className="sr-only" htmlFor="reg-password">初期パスワード(10文字以上)</label>
-            <input
-              id="reg-password"
-              name="password"
-              type="text"
-              minLength={10}
-              autoComplete="off"
-              placeholder="初期パスワード(10文字以上)"
-              className="min-w-0 flex-1 rounded-md border border-line bg-surface-raised px-3 py-1.5 text-sm"
-            />
-          </div>
-          <SubmitButton
-            pendingText="登録中…"
-            className="rounded-md bg-accent-fill px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-fill-hover disabled:opacity-50"
-          >
-            登録する
-          </SubmitButton>
-        </form>
-      </details>
-
-
       <details className="mt-4 rounded-lg border border-line p-5">
-        <summary className="cursor-pointer text-sm font-medium text-ink"><StepNumber n={2} />沈黙時の自動継続(テンポ・任意)</summary>
+        <summary className="cursor-pointer text-sm font-medium text-ink">沈黙時の自動継続(テンポ・任意)</summary>
         <p className="mt-1 text-sm text-ink-muted">
           学習者がしばらく発言しないとき、擬似メンバー同士の会話を少しだけ自動で続けるかの既定値です。
           学習者は自分用に変更・オフにできます。
@@ -777,7 +668,7 @@ export default async function CourseDetailPage({
       </p>
       </section>
 
-      <BackLink href="/courses" label="授業一覧" />
+      <BackLink href={crumbs ? `/series/${crumbs.seriesId}` : "/courses"} label={crumbs?.seriesTitle ?? "授業シリーズ一覧"} />
     </div>
   );
 }

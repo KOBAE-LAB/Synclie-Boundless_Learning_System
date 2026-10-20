@@ -7,6 +7,7 @@ import {
   generatePersonalizationAction,
   decidePersonalizationAction,
 } from "./actions";
+import { loadLessonCrumbs } from "@/lib/courses/series";
 import { Breadcrumbs, BackLink } from "@/components/breadcrumbs";
 
 type ProfileStatus = "pending" | "processing" | "done" | "failed";
@@ -108,7 +109,7 @@ export default async function StudentsPage({
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <Breadcrumbs trail={[{ label: "授業一覧", href: "/courses" }, { label: course.title, href: `/courses/${courseId}` }]} current="学習者プロファイル" />
+      <Breadcrumbs trail={[...((await loadLessonCrumbs(admin, courseId))?.teacherTrail ?? [])]} current="学習者プロファイル" />
       <h1 className="mt-2 text-2xl font-semibold text-ink">
         学習者プロファイルと個別最適化
       </h1>

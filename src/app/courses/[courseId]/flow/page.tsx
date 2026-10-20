@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
+import { loadLessonCrumbs } from "@/lib/courses/series";
 import { Breadcrumbs, BackLink } from "@/components/breadcrumbs";
 import { SubmitButton } from "@/components/submit-button";
 import { readCheckQuestions, STEP_KIND_LABELS } from "@/lib/flow/steps";
@@ -55,7 +56,7 @@ export default async function FlowPage({ params }: { params: Promise<{ courseId:
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-10">
-      <Breadcrumbs trail={[{ label: "授業一覧", href: "/courses" }, { label: course.title, href: `/courses/${courseId}` }]} current="学習の流れ" />
+      <Breadcrumbs trail={[...((await loadLessonCrumbs(admin, courseId))?.teacherTrail ?? [])]} current="学習の流れ" />
       <h1 className="mt-2 text-2xl font-semibold text-ink">学習の流れ</h1>
       <p className="mt-1 text-sm text-ink-muted">
         動画・資料で学ぶ<b>インプット</b>と、議論で深める<b>アウトプット</b>を好きな順に並べます。

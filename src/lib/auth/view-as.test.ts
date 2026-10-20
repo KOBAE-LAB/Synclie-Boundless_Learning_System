@@ -3,14 +3,17 @@ import { ensureTestStudentEnrolled, getOrCreateTestStudent, TEST_STUDENT_NAME } 
 
 type FakeAdmin = Parameters<typeof getOrCreateTestStudent>[0];
 
-// profiles(select/insert)と course_enrollments(upsert)だけを再現する偽クライアント。
+// profiles(select/insert)・courses(select)・series_enrollments(upsert)だけを再現する偽クライアント。
 function fakeAdmin(opts: { existing?: { id: string } | null; insertError?: { message: string } | null }) {
   const inserts: Array<Record<string, unknown>> = [];
   const upserts: Array<Record<string, unknown>> = [];
   let existing = opts.existing ?? null;
   const admin = {
     from: (table: string) => {
-      if (table === "course_enrollments") {
+      if (table === "courses") {
+        return { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { series_id: "series-1" }, error: null }) }) }) };
+      }
+      if (table === "series_enrollments") {
         return {
           upsert: async (values: Record<string, unknown>) => {
             upserts.push(values);
@@ -77,9 +80,9 @@ describe("getOrCreateTestStudent", () => {
 });
 
 describe("ensureTestStudentEnrolled", () => {
-  it("テスト学習者を、その授業の『承認済み』の受講者にする", async () => {
+  it("テスト学習者を、その授業回のシリーズの『承認済み』の履修者にする", async () => {
     const { admin, upserts } = fakeAdmin({ existing: { id: "t1" } });
     await expect(ensureTestStudentEnrolled(admin, "admin-1", "course-1")).resolves.toBe("t1");
-    expect(upserts[0]).toEqual({ course_id: "course-1", student_id: "t1", status: "approved" });
+    expect(upserts[0]).toEqual({ series_id: "series-1", student_id: "t1", status: "approved" });
   });
 });

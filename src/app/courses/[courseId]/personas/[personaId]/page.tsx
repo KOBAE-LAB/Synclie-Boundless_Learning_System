@@ -3,6 +3,7 @@ import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { updatePersonaAction } from "../actions";
 import { PersonaForm, type PersonaFormValues } from "../persona-form";
+import { loadLessonCrumbs } from "@/lib/courses/series";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 
 interface PersonaRow {
@@ -68,7 +69,7 @@ export default async function EditPersonaPage({
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <Breadcrumbs trail={[{ label: "授業一覧", href: "/courses" }, { label: course.title, href: `/courses/${courseId}` }, { label: "ペルソナ設定", href: `/courses/${courseId}/personas` }]} current={persona.name} />
+      <Breadcrumbs trail={[...((await loadLessonCrumbs(admin, courseId))?.teacherTrail ?? []), { label: "ペルソナ設定", href: `/courses/${courseId}/personas` }]} current={persona.name} />
       <h1 className="mt-2 text-2xl font-semibold text-ink">
         {persona.name} を編集
       </h1>

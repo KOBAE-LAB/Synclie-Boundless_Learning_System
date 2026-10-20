@@ -10,6 +10,8 @@ import { usePathname } from "next/navigation";
 export interface NavItem {
   label: string;
   href: string;
+  /** href とは別に、この項目の配下として扱うURLの先頭(例: 授業シリーズ /series は「授業」の配下) */
+  alsoUnder?: string[];
 }
 
 /**
@@ -18,7 +20,8 @@ export interface NavItem {
  * ダッシュボードを開いている時に「授業」まで強調されないようにするため。
  */
 export function getActiveHref(pathname: string, items: NavItem[]): string | null {
-  const matches = items.filter((item) => pathname === item.href || pathname.startsWith(`${item.href}/`));
+  const under = (base: string) => pathname === base || pathname.startsWith(`${base}/`);
+  const matches = items.filter((item) => under(item.href) || (item.alsoUnder ?? []).some(under));
   if (matches.length === 0) return null;
   return matches.reduce((best, item) => (item.href.length > best.href.length ? item : best)).href;
 }

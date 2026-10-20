@@ -1,4 +1,5 @@
 import type { createAdminClient } from "@/lib/supabase/server";
+import { loadLessonLabels } from "@/lib/courses/series";
 import { fiscalYearOf, readAssessment } from "./assessment";
 import type { DiscussionSummary, Portfolio, PortfolioEntry } from "./types";
 
@@ -52,7 +53,7 @@ export async function loadPortfolio(
   const sessionIds = [...new Set(submissions.map((s) => s.session_id).filter((id): id is string => !!id))];
 
   const [courses, feedback, judgments, reflections, entries, sessions] = await Promise.all([
-    admin.from("courses").select("id, title").in("id", courseIds),
+    loadLessonLabels(admin, courseIds),
     admin.from("submission_feedback").select("submission_id, criteria_label, good_points, next_question").in("submission_id", submissionIds),
     admin.from("discussion_judgments").select("submission_id, logic_structure, evidence_quality, rebuttal_response, summary_comment").in("submission_id", submissionIds),
     admin.from("reflections").select("submission_id, what_learned, what_confused, next_goal").in("submission_id", submissionIds),
@@ -62,7 +63,7 @@ export async function loadPortfolio(
       : Promise.resolve({ data: [] as { id: string; closing_summary: unknown }[] }),
   ]);
 
-  const titleByCourse = new Map((courses.data ?? []).map((c) => [c.id as string, c.title as string]));
+  const titleByCourse = courses;
   const feedbackBy = new Map<string, PortfolioEntry["feedback"]>();
   for (const f of feedback.data ?? []) {
     const list = feedbackBy.get(f.submission_id) ?? [];

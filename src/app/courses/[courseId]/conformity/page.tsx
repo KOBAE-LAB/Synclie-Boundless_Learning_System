@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
+import { loadLessonCrumbs } from "@/lib/courses/series";
 import { Breadcrumbs, BackLink } from "@/components/breadcrumbs";
 
 // F20: ペルソナ設計と同調の計測。
@@ -87,7 +88,7 @@ export default async function ConformityPage({
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <Breadcrumbs trail={[{ label: "授業一覧", href: "/courses" }, { label: course.title, href: `/courses/${courseId}` }]} current="同調の計測" />
+      <Breadcrumbs trail={[...((await loadLessonCrumbs(admin, courseId))?.teacherTrail ?? [])]} current="同調の計測" />
       <h1 className="mt-2 text-2xl font-semibold text-ink">
         ペルソナ設計と同調の計測
       </h1>

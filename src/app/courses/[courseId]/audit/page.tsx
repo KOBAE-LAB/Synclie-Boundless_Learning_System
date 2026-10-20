@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { updateTurnAction } from "./actions";
+import { loadLessonCrumbs } from "@/lib/courses/series";
 import { Breadcrumbs, BackLink } from "@/components/breadcrumbs";
 
 // F15: 擬似メンバーの挙動の監査と修正。
@@ -88,7 +89,7 @@ export default async function PersonaAuditPage({
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <Breadcrumbs trail={[{ label: "授業一覧", href: "/courses" }, { label: course.title, href: `/courses/${courseId}` }]} current="発言の監査と修正" />
+      <Breadcrumbs trail={[...((await loadLessonCrumbs(admin, courseId))?.teacherTrail ?? [])]} current="発言の監査と修正" />
       <h1 className="mt-2 text-2xl font-semibold text-ink">
         擬似メンバーの挙動の監査と修正
       </h1>

@@ -1,3 +1,4 @@
+import { loadLessonLabels } from "@/lib/courses/series";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -23,11 +24,13 @@ export default async function LtiDeepLinkPage({
   const returnUrl = params.returnUrl ?? "";
 
   const admin = createAdminClient();
-  const { data: courses } = await admin
+  const { data: courseRows } = await admin
     .from("courses")
-    .select("id, title, subject")
+    .select("id, subject")
     .eq("owner_teacher_id", user.id)
     .order("created_at", { ascending: false });
+  const lessonLabels = await loadLessonLabels(admin, (courseRows ?? []).map((c) => c.id));
+  const courses = (courseRows ?? []).map((c) => ({ id: c.id, subject: c.subject, title: lessonLabels.get(c.id) ?? "" }));
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">

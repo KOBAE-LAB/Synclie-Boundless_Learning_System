@@ -833,6 +833,7 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
     (参加コード、列デフォルト式で新規作成時に自動生成)と`course_enrollments`
     (course_id+student_idの組、unique制約)を追加。既存の`learning_sessions`から
     参加登録済み扱いのバックフィルも行う(詳細は8章の`learn/`の説明を参照)
+  - `0039_course_series.sql` — 授業シリーズ(`course_series`)・`series_enrollments`・`courses.series_id/lesson_no/released`。既存の授業は同名シリーズの第1回に移し、`course_enrollments`・`courses.join_code`は廃止
   - `0038_step_video_file.sql` — インプットのステップに動画ファイル(`course_steps.video_path`)
   - `0037_learning_flow.sql` — 学習の流れ。`course_steps`(インプット/アウトプットのステップ)・`step_progress`・`courses.steps_in_order`
   - `0036_teacher_guidance.sql` — 教師ダッシュボードの「指導のヒント」(`teacher_guidance`、授業ごと最新1件)
@@ -860,6 +861,30 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
 - `scripts/dev/generate-lti-keys.mjs` — F17用: このツール自身のRSA署名鍵ペア(PKCS8 PEM)を
   生成し、`.env.local`に貼り付ける`LTI_TOOL_PRIVATE_KEY`/`LTI_TOOL_KEY_ID`を出力する
   (`node scripts/dev/generate-lti-keys.mjs`)。
+
+### 授業シリーズと授業回の階層(2026-10)
+
+「担当・履修する授業シリーズの登録と、各授業回の学習という階層が無い」という指摘を受けて追加した。
+**授業シリーズ(`course_series`、科目・講座)→ 授業回(`courses`、第1回・第2回…)**の2段にし、
+**履修(授業コード・申請・承認・直接登録、`series_enrollments`)だけをシリーズに持たせ、資料・ペルソナ・評価の観点・
+学習の流れ・議論・提出は、すべて授業回(`courses`)ごと**に持つ(利用者の判断。ペルソナ等を回ごとに作る分、設定の
+やり直しは要るが、回ごとに内容を変えやすい)。`courses`テーブルは「授業回」として使い、`series_id`・`lesson_no`
+(シリーズ内で一意)・`released`(公開済みか)を足した(`0039`。**授業シリーズ配下の授業回を指すときも、コード上の
+名前は`courseId`/`courses`のまま**)。`courses.owner_teacher_id`はシリーズの担当教師と同じ値で、所有者チェック
+(`assertOwnsCourse`)はこれまでどおり。シリーズ側は`assertOwnsSeries`(`src/lib/courses/series.ts`)。
+既存の授業は、同名のシリーズの「第1回(公開済み)」に自動で移した(参加コード・履修・記録はそのまま)。
+
+- **画面**: 教師は`/courses`=授業シリーズ一覧(作成)→`/series/[seriesId]`=授業回の一覧・作成(第N回、新しい回は
+  「準備中」)と履修登録(授業コード・承認待ち・直接登録)→`/courses/[courseId]`=授業回(ここで「学習者に公開する」。
+  公開するまで学習者には見えない)。学習者は`/learn`=履修中のシリーズ→`/learn/series/[seriesId]`=公開済みの
+  授業回の一覧(進み具合)→`/learn/[courseId]`=授業回の学習。ヘッダーの「授業シリーズ」は`/series`配下でも強調する
+  (`NavItem.alsoUnder`)。授業回の画面のパンくずは`loadLessonCrumbs`(「授業シリーズ一覧 › シリーズ › 第N回」)、
+  一覧や記録で回を名指すときは`loadLessonLabels`(「シリーズ名 第N回 名前」)を使うこと。
+- **ガード**: `isEnrolled`/`requireEnrollment`(`src/lib/courses/enrollment.ts`)は、授業回→シリーズの**承認済みの
+  履修**と、回が**公開済み**であることを確かめる(管理者の「学習者として表示」のテスト学習者だけは、公開前の回も
+  確認できる)。授業コードはシリーズのもの(`course_series.join_code`)。LTI経由の自動登録もシリーズに作る。
+- 旧`course_enrollments`と`courses.join_code`は廃止した(上の「`learn/`」の説明にある受講登録の記述は、今は
+  シリーズ単位として読み替えること)。
 
 ### 画面の文章と「流れ」の見せ方(2026-10)
 

@@ -47,11 +47,15 @@ export async function ensureTestStudentEnrolled(
   courseId: string,
 ): Promise<string> {
   const testStudentId = await getOrCreateTestStudent(admin, adminId);
+  const { data: lesson } = await admin.from("courses").select("series_id").eq("id", courseId).maybeSingle();
+  if (!lesson) {
+    throw new Error("授業が見つかりません。");
+  }
   const { error } = await admin
-    .from("course_enrollments")
+    .from("series_enrollments")
     .upsert(
-      { course_id: courseId, student_id: testStudentId, status: "approved" },
-      { onConflict: "course_id,student_id" },
+      { series_id: lesson.series_id, student_id: testStudentId, status: "approved" },
+      { onConflict: "series_id,student_id" },
     );
   if (error) {
     throw new Error(`テスト学習者の参加登録に失敗しました: ${error.message}`);

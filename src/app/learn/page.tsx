@@ -3,9 +3,7 @@ import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { requireConsent } from "@/lib/consent";
 
-// F01拡張(受講登録): 学習者には自分が授業コードで参加登録した授業だけを見せる
-// (以前は段階1の簡易実装として全授業を無条件表示していたが、どの生徒でもどの授業にも
-// 入れてしまう状態だったため、course_enrollments経由の絞り込みに直した)。
+// 学習者には、履修登録した授業シリーズだけを見せる(シリーズを選ぶと、公開されている授業回の一覧に進む)。
 export default async function LearnCoursesPage({
   searchParams,
 }: {
@@ -18,29 +16,35 @@ export default async function LearnCoursesPage({
   await requireConsent(admin, user.id);
 
   const { data: enrollments } = await admin
-    .from("course_enrollments")
-    .select("course_id, status")
+    .from("series_enrollments")
+    .select("series_id, status")
     .eq("student_id", user.id);
-  const enrolledCourseIds = (enrollments ?? []).filter((e) => e.status === "approved").map((e) => e.course_id);
-  const pendingCourseIds = (enrollments ?? []).filter((e) => e.status === "pending").map((e) => e.course_id);
+  const enrolledSeriesIds = (enrollments ?? []).filter((e) => e.status === "approved").map((e) => e.series_id);
+  const pendingSeriesIds = (enrollments ?? []).filter((e) => e.status === "pending").map((e) => e.series_id);
 
-  const { data: courses } =
-    enrolledCourseIds.length > 0
+  const { data: seriesRows } =
+    enrolledSeriesIds.length > 0
       ? await admin
-          .from("courses")
-          .select("id, title, subject, mode")
-          .in("id", enrolledCourseIds)
+          .from("course_series")
+          .select("id, title, subject")
+          .in("id", enrolledSeriesIds)
           .order("created_at", { ascending: false })
       : { data: [] };
-  const { data: pendingCourses } =
-    pendingCourseIds.length > 0
-      ? await admin.from("courses").select("id, title").in("id", pendingCourseIds)
+  const { data: pendingSeries } =
+    pendingSeriesIds.length > 0
+      ? await admin.from("course_series").select("id, title").in("id", pendingSeriesIds)
       : { data: [] };
 
-  const MODE_LABELS: Record<string, string> = {
-    group: "グループワーク",
-    solo_study: "独習",
-  };
+  // 各シリーズの、公開されている授業回の数(学習者が開ける回)。
+  const releasedCount = new Map<string, number>();
+  if (enrolledSeriesIds.length > 0) {
+    const { data: lessons } = await admin
+      .from("courses")
+      .select("series_id")
+      .in("series_id", enrolledSeriesIds)
+      .eq("released", true);
+    for (const l of lessons ?? []) releasedCount.set(l.series_id, (releasedCount.get(l.series_id) ?? 0) + 1);
+  }
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
@@ -50,13 +54,13 @@ export default async function LearnCoursesPage({
         href="/learn/join"
         className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-md border border-dashed border-line-strong px-4 py-3 text-sm hover:border-accent hover:bg-surface"
       >
-        <span className="font-medium text-ink">授業コードで授業に参加する</span>
+        <span className="font-medium text-ink">授業コードで履修登録する</span>
         <span className="text-ink-muted">先生から教わったコードを入力 →</span>
       </Link>
 
       {not_enrolled && (
         <p className="mt-4 rounded-md border border-warn bg-warn-soft px-4 py-3 text-sm text-warn">
-          その授業にはまだ参加登録されていません。担当の先生から授業コードをもらい、
+          その授業はまだ開けません(履修登録が未了、または公開前です)。履修登録は、担当の先生から授業コードをもらい、
           <Link href="/learn/join" className="mx-1 underline">
             こちら
           </Link>
@@ -66,15 +70,15 @@ export default async function LearnCoursesPage({
 
       {requested && (
         <p className="mt-4 rounded-md border border-line bg-surface px-4 py-3 text-sm text-ink-muted">
-          参加を申請しました。担当の先生が承認すると、授業が下の一覧に表示されます。
+          履修を申請しました。担当の先生が承認すると、下の一覧に表示されます。
         </p>
       )}
 
-      {(pendingCourses ?? []).length > 0 && (
+      {(pendingSeries ?? []).length > 0 && (
         <div className="mt-6">
-          <h2 className="text-xs font-medium text-ink-faint">承認待ちの授業</h2>
+          <h2 className="text-xs font-medium text-ink-faint">承認待ちのシリーズ</h2>
           <ul className="mt-2 space-y-1">
-            {(pendingCourses ?? []).map((c) => (
+            {(pendingSeries ?? []).map((c) => (
               <li key={c.id} className="text-sm text-ink-muted">
                 {c.title}(先生の承認を待っています)
               </li>
@@ -83,27 +87,29 @@ export default async function LearnCoursesPage({
         </div>
       )}
 
-      <h2 className="mt-8 text-sm font-medium text-ink">参加している授業</h2>
+      <h2 className="mt-8 text-sm font-medium text-ink">履修している授業シリーズ</h2>
       <ul className="mt-3 space-y-2">
-        {(courses ?? []).map((course) => (
-          <li key={course.id}>
+        {(seriesRows ?? []).map((series) => (
+          <li key={series.id}>
             <Link
-              href={`/learn/${course.id}`}
-              className="block rounded-md border border-line px-4 py-3 text-sm hover:bg-surface"
+              href={`/learn/series/${series.id}`}
+              className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-md border border-line px-4 py-3 text-sm hover:bg-surface"
             >
-              <span className="font-medium text-ink">{course.title}</span>
-              {course.subject && <span className="ml-2 text-ink-muted">({course.subject})</span>}
-              <span className="ml-2 text-xs text-ink-faint">[{MODE_LABELS[course.mode] ?? course.mode}]</span>
+              <span>
+                <span className="font-medium text-ink">{series.title}</span>
+                {series.subject && <span className="ml-2 text-ink-muted">({series.subject})</span>}
+              </span>
+              <span className="text-xs text-ink-muted">公開中 {releasedCount.get(series.id) ?? 0}回</span>
             </Link>
           </li>
         ))}
-        {(!courses || courses.length === 0) && (
+        {(seriesRows ?? []).length === 0 && (
           <li className="text-sm text-ink-muted">
-            まだ参加している授業がありません。先生から授業コードをもらったら
+            まだ履修している授業がありません。先生から授業コードをもらったら
             <Link href="/learn/join" className="mx-1 underline">
               こちら
             </Link>
-            から参加してください。
+            から履修登録してください。
           </li>
         )}
       </ul>

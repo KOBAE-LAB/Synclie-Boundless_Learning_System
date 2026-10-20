@@ -7,7 +7,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 
 // 自己登録(サインアップ)。AI呼び出しは課金されるため、誰でも自由に使える形にはしない:
 //  - 学習者: 教師が伝える授業コードが必要。登録しても教師が承認するまで授業に入れない
-//    (course_enrollments.status='pending'、承認までAIは呼べない)
+//    (series_enrollments.status='pending'、承認までAIは呼べない)
 //  - 教師: 登録できるが、管理者が承認するまでログインできない(profiles.approval_status='pending')
 // エラーはURLのクエリ(?error=)で画面に返す(入力内容そのものはURLに載せない)。
 
@@ -36,8 +36,8 @@ export async function signupStudentAction(formData: FormData) {
   if (!code) fail(path, "授業コードを入力してください。");
 
   const admin = createAdminClient();
-  const { data: course } = await admin.from("courses").select("id").eq("join_code", code).maybeSingle();
-  if (!course) fail(path, "その授業コードは見つかりません。担当の先生に確認してください。");
+  const { data: series } = await admin.from("course_series").select("id").eq("join_code", code).maybeSingle();
+  if (!series) fail(path, "その授業コードは見つかりません。担当の先生に確認してください。");
 
   const studentId = crypto.randomUUID();
   const { error } = await admin.from("profiles").insert({
@@ -52,8 +52,8 @@ export async function signupStudentAction(formData: FormData) {
   }
 
   const { error: enrollError } = await admin
-    .from("course_enrollments")
-    .insert({ course_id: course.id, student_id: studentId, status: "pending" });
+    .from("series_enrollments")
+    .insert({ series_id: series.id, student_id: studentId, status: "pending" });
   if (enrollError) {
     // 申請が作れないままアカウントだけ残らないように巻き戻す。
     await admin.from("profiles").delete().eq("id", studentId);

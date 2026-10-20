@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { generateStudentProfileSummary } from "@/lib/ai/student-profile";
 import { generateLearnerSuggestions } from "@/lib/ai/learner-suggestions";
 import { RATING_LABELS, readAssessment } from "@/lib/portfolio/assessment";
+import { loadLessonLabels } from "@/lib/courses/series";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -25,8 +26,7 @@ async function buildCrossCourseActivityLog(admin: AdminClient, studentId: string
   }
 
   const courseIds = [...new Set(submissions.map((s) => s.course_id))];
-  const { data: courseRows } = await admin.from("courses").select("id, title").in("id", courseIds);
-  const courseTitleById = new Map((courseRows ?? []).map((c) => [c.id, c.title]));
+  const courseTitleById = await loadLessonLabels(admin, courseIds);
 
   const submissionIds = submissions.map((s) => s.id);
 

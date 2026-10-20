@@ -9,8 +9,6 @@ import { parseCourseSettingsInput } from "@/lib/courses/settings";
 import { createAdminClient } from "@/lib/supabase/server";
 import { generateMaterialRag } from "@/lib/rag/generate";
 import { assertOwnsCourse } from "@/lib/courses/ownership";
-import { hashPassword } from "@/lib/auth/password";
-import { normalizeEmail, validateSignupFields } from "@/lib/auth/signup-validation";
 
 const MATERIAL_KINDS = ["syllabus", "pdf", "word", "ppt", "text", "video_subtitle", "url"] as const;
 type MaterialKind = (typeof MATERIAL_KINDS)[number];
@@ -215,41 +213,6 @@ export async function updateAutoDiscussionSettingsAction(courseId: string, formD
   revalidatePath(`/courses/${courseId}`);
 }
 
-// F01拡張(受講登録): 授業コードを再発行する(生徒に伝えたコードが漏れた・間違って
-// 別の生徒に伝えた、などの場合用)。既存の参加登録(course_enrollments)には影響しない。
-export async function regenerateJoinCodeAction(courseId: string) {
-  const { user } = await requireRole("teacher");
-  const admin = createAdminClient();
-  await assertOwnsCourse(admin, courseId, user.id);
-
-  const newCode = crypto.randomUUID().replace(/-/g, "").slice(0, 6).toUpperCase();
-  const { error } = await admin.from("courses").update({ join_code: newCode }).eq("id", courseId);
-  if (error) {
-    throw new Error(`コードの再発行に失敗しました: ${error.message}`);
-  }
-
-  revalidatePath(`/courses/${courseId}`);
-}
-
-// F01拡張(受講登録): 参加登録を取り消す(誤って参加した生徒を外す用)。
-// 対話ログ・提出物などの過去データは消さない(受講登録だけを外す)。
-export async function removeEnrollmentAction(courseId: string, studentId: string) {
-  const { user } = await requireRole("teacher");
-  const admin = createAdminClient();
-  await assertOwnsCourse(admin, courseId, user.id);
-
-  const { error } = await admin
-    .from("course_enrollments")
-    .delete()
-    .eq("course_id", courseId)
-    .eq("student_id", studentId);
-  if (error) {
-    throw new Error(`参加登録の削除に失敗しました: ${error.message}`);
-  }
-
-  revalidatePath(`/courses/${courseId}`);
-}
-
 // 管理者だけの動作確認機能: 自分の授業を「学習者として」開く。専用のテスト学習者
 // (src/lib/auth/view-as.ts)をこの授業の受講者にし、切り替え中の印のCookieを付けて、
 // 学習者の画面へ移る。管理者でなければ、授業の所有者でなければ、何も起きない。
@@ -268,83 +231,6 @@ export async function startStudentViewAction(courseId: string) {
     maxAge: 60 * 60 * 8, // 8時間で自動的に終わる
   });
   redirect(`/learn/${courseId}`);
-}
-
-// F01拡張(受講登録・承認制): 学習者が授業コードで申請した参加(status='pending')を承認する。
-// 承認するまでその学習者は授業画面に入れず、AIも呼べない。
-export async function approveEnrollmentAction(courseId: string, studentId: string) {
-  const { user } = await requireRole("teacher");
-  const admin = createAdminClient();
-  await assertOwnsCourse(admin, courseId, user.id);
-
-  const { error } = await admin
-    .from("course_enrollments")
-    .update({ status: "approved" })
-    .eq("course_id", courseId)
-    .eq("student_id", studentId)
-    .eq("status", "pending");
-  if (error) {
-    throw new Error(`承認に失敗しました: ${error.message}`);
-  }
-
-  revalidatePath(`/courses/${courseId}`);
-}
-
-// F01拡張(受講登録): 教師が学習者を直接登録する(承認の手間なしにその場で参加扱いになる)。
-// 学習者のアカウントがまだ無ければ、教師が決めた初期パスワードで作る
-// (教師から本人へ直接伝え、本人がログイン後に「パスワード変更」で変えてもらう想定)。
-// 既に同じメールアドレスの学習者がいれば、パスワードには触れずに参加登録だけ行う。
-export async function registerStudentAction(courseId: string, formData: FormData) {
-  const { user } = await requireRole("teacher");
-  const admin = createAdminClient();
-  await assertOwnsCourse(admin, courseId, user.id);
-
-  const fields = {
-    name: String(formData.get("name") ?? ""),
-    email: normalizeEmail(String(formData.get("email") ?? "")),
-    password: String(formData.get("password") ?? ""),
-  };
-
-  const { data: existing } = await admin
-    .from("profiles")
-    .select("id, role")
-    .eq("email", fields.email)
-    .maybeSingle();
-
-  let studentId: string;
-  if (existing) {
-    if (existing.role !== "student") {
-      throw new Error("そのメールアドレスは学習者以外のアカウントに使われています。");
-    }
-    studentId = existing.id;
-  } else {
-    const problem = validateSignupFields(fields);
-    if (problem) throw new Error(problem);
-
-    studentId = crypto.randomUUID();
-    const { error } = await admin.from("profiles").insert({
-      id: studentId,
-      email: fields.email,
-      password_hash: await hashPassword(fields.password),
-      role: "student",
-      display_name: fields.name.trim(),
-    });
-    if (error) {
-      throw new Error(`学習者の登録に失敗しました: ${error.message}`);
-    }
-  }
-
-  const { error: enrollError } = await admin
-    .from("course_enrollments")
-    .upsert(
-      { course_id: courseId, student_id: studentId, status: "approved" },
-      { onConflict: "course_id,student_id" },
-    );
-  if (enrollError) {
-    throw new Error(`参加登録に失敗しました: ${enrollError.message}`);
-  }
-
-  revalidatePath(`/courses/${courseId}`);
 }
 
 // F02: この授業でまだ知識ベース化されていない資料(pending/failed)をまとめて生成する。
@@ -367,5 +253,35 @@ export async function generateAllPendingRagAction(courseId: string) {
     }
   }
 
+  revalidatePath(`/courses/${courseId}`);
+}
+
+// 授業回: 学習者に公開する/準備中に戻す。公開するまで、学習者には見えない(履修していても開けない)。
+export async function setLessonReleasedAction(courseId: string, released: boolean) {
+  const { user } = await requireRole("teacher");
+  const admin = createAdminClient();
+  await assertOwnsCourse(admin, courseId, user.id);
+
+  const { error } = await admin.from("courses").update({ released }).eq("id", courseId);
+  if (error) {
+    throw new Error(`公開状態の変更に失敗しました: ${error.message}`);
+  }
+  revalidatePath(`/courses/${courseId}`);
+}
+
+// 授業回の名前の変更。
+export async function renameLessonAction(courseId: string, formData: FormData) {
+  const { user } = await requireRole("teacher");
+  const admin = createAdminClient();
+  await assertOwnsCourse(admin, courseId, user.id);
+
+  const title = String(formData.get("title") ?? "").trim().slice(0, 80);
+  if (!title) {
+    throw new Error("授業回の名前を入力してください。");
+  }
+  const { error } = await admin.from("courses").update({ title }).eq("id", courseId);
+  if (error) {
+    throw new Error(`名前の変更に失敗しました: ${error.message}`);
+  }
   revalidatePath(`/courses/${courseId}`);
 }

@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { updateFeedbackAction, sendGradeToLmsAction, saveTeacherAssessmentAction } from "./actions";
 import { RATING_LABELS, readAssessment } from "@/lib/portfolio/assessment";
 import { SubmitButton } from "@/components/submit-button";
+import { loadLessonCrumbs } from "@/lib/courses/series";
 import { Breadcrumbs, BackLink } from "@/components/breadcrumbs";
 
 interface SubmissionRow {
@@ -137,7 +138,7 @@ export default async function SubmissionsReviewPage({
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <Breadcrumbs trail={[{ label: "授業一覧", href: "/courses" }, { label: course.title, href: `/courses/${courseId}` }]} current="提出物とフィードバック" />
+      <Breadcrumbs trail={[...((await loadLessonCrumbs(admin, courseId))?.teacherTrail ?? [])]} current="提出物とフィードバック" />
       <h1 className="mt-2 text-2xl font-semibold text-ink">
         提出物とフィードバック
       </h1>

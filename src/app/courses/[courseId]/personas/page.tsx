@@ -19,6 +19,7 @@ import {
 } from "./actions";
 import { PersonaForm } from "./persona-form";
 import { assignPersonaTones, toneClass } from "@/lib/persona-tones";
+import { loadLessonCrumbs } from "@/lib/courses/series";
 import { Breadcrumbs, BackLink } from "@/components/breadcrumbs";
 
 type AvatarStatus = "pending" | "done" | "failed";
@@ -129,7 +130,7 @@ export default async function PersonasPage({
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <Breadcrumbs trail={[{ label: "授業一覧", href: "/courses" }, { label: course.title, href: `/courses/${courseId}` }]} current="ペルソナ設定" />
+      <Breadcrumbs trail={[...((await loadLessonCrumbs(admin, courseId))?.teacherTrail ?? [])]} current="ペルソナ設定" />
       <h1 className="mt-2 text-2xl font-semibold text-ink">
         ペルソナ設定
       </h1>

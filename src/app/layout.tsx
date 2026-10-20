@@ -33,7 +33,7 @@ const ROLE_LABELS: Record<string, string> = {
 // (各画面にリンクが散らばって並ぶのをやめた)。授業の配下のページでは「授業」が強調される。
 const NAV_ITEMS: Record<string, NavItem[]> = {
   teacher: [
-    { label: "授業", href: "/courses" },
+    { label: "授業シリーズ", href: "/courses", alsoUnder: ["/series"] },
     { label: "組織", href: "/organization" },
     { label: "共有ライブラリ", href: "/library" },
   ],
@@ -42,7 +42,7 @@ const NAV_ITEMS: Record<string, NavItem[]> = {
     { label: "学習ダッシュボード", href: "/learn/dashboard" },
     { label: "ポートフォリオ", href: "/learn/portfolio" },
     { label: "自分のデータ", href: "/learn/data" },
-    { label: "授業に参加", href: "/learn/join" },
+    { label: "履修登録", href: "/learn/join" },
   ],
 };
 

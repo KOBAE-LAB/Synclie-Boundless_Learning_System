@@ -5,35 +5,29 @@ import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 
-// F01: 授業(コース)の作成。
+// 授業シリーズ(科目・講座)の作成。履修登録(参加コード)の単位で、その中に授業回を重ねていく。
 // RLSが未整備の段階1では、role確認をアプリ側(requireRole)で行い、
-// 管理者クライアント(サービスロール)でDB操作する。RLSは今後のタスク。
-export async function createCourseAction(formData: FormData) {
+// 管理者クライアント(サービスロール)でDB操作する。
+export async function createSeriesAction(formData: FormData) {
   const session = await requireRole("teacher");
-  const title = String(formData.get("title") ?? "").trim();
-  const subject = String(formData.get("subject") ?? "").trim();
-  const mode = formData.get("mode") === "solo_study" ? "solo_study" : "group";
+  const title = String(formData.get("title") ?? "").trim().slice(0, 80);
+  const subject = String(formData.get("subject") ?? "").trim().slice(0, 40);
 
   if (!title) {
-    throw new Error("授業名を入力してください。");
+    throw new Error("シリーズの名前を入力してください。");
   }
 
   const admin = createAdminClient();
   const { data, error } = await admin
-    .from("courses")
-    .insert({
-      owner_teacher_id: session.user.id,
-      title,
-      subject: subject || null,
-      mode,
-    })
+    .from("course_series")
+    .insert({ owner_teacher_id: session.user.id, title, subject: subject || null })
     .select("id")
     .single();
 
   if (error) {
-    throw new Error(`授業の作成に失敗しました: ${error.message}`);
+    throw new Error(`授業シリーズの作成に失敗しました: ${error.message}`);
   }
 
   revalidatePath("/courses");
-  redirect(`/courses/${data.id}`);
+  redirect(`/series/${data.id}`);
 }

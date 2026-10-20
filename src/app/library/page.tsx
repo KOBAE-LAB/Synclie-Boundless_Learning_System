@@ -3,6 +3,7 @@ import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { requestCrossOrgAccessAction, duplicatePersonaAction, duplicateMaterialAction } from "./actions";
 import { SubmitButton } from "@/components/submit-button";
+import { loadLessonLabels } from "@/lib/courses/series";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 
 // F21: 教員協働のペルソナ・教材ライブラリ共有。
@@ -39,11 +40,13 @@ export default async function LibraryPage() {
     .maybeSingle();
   const myOrgId = myProfile?.organization_id ?? null;
 
-  const { data: myCourses } = await admin
+  const { data: myCourseRows } = await admin
     .from("courses")
-    .select("id, title")
+    .select("id")
     .eq("owner_teacher_id", user.id)
     .order("created_at", { ascending: false });
+  const myLessonLabels = await loadLessonLabels(admin, (myCourseRows ?? []).map((c) => c.id));
+  const myCourses = (myCourseRows ?? []).map((c) => ({ id: c.id, title: myLessonLabels.get(c.id) ?? "" }));
 
   const { data: sharedPersonas } = await admin
     .from("personas")
@@ -63,11 +66,12 @@ export default async function LibraryPage() {
   if (allCourseIds.length > 0) {
     const { data: courses } = await admin
       .from("courses")
-      .select("id, title, owner_teacher_id")
+      .select("id, owner_teacher_id")
       .in("id", allCourseIds);
+    const labels = await loadLessonLabels(admin, allCourseIds);
     for (const c of courses ?? []) {
       courseOwner.set(c.id, c.owner_teacher_id);
-      courseTitle.set(c.id, c.title);
+      courseTitle.set(c.id, labels.get(c.id) ?? "");
     }
   }
 
@@ -114,7 +118,7 @@ export default async function LibraryPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <Breadcrumbs trail={[{ label: "授業一覧", href: "/courses" }]} current="共有ライブラリ" />
+      <Breadcrumbs trail={[{ label: "授業シリーズ一覧", href: "/courses" }]} current="共有ライブラリ" />
       <h1 className="mt-3 text-2xl font-semibold text-ink">共有ライブラリ</h1>
       <p className="mt-1 text-sm text-ink-muted">
         他の教師が公開したペルソナ・教材(単元の対応表)を自分の授業に複製できる。同じ組織なら

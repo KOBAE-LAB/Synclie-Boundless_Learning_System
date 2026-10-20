@@ -13,6 +13,7 @@ import {
 } from "./actions";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { loadPortfolio } from "@/lib/portfolio/load";
+import { loadLessonLabels } from "@/lib/courses/series";
 import { summarizePortfolio } from "@/lib/portfolio/summary";
 
 type LearnerProfileStatus = "pending" | "processing" | "done" | "failed";
@@ -102,8 +103,9 @@ export default async function StudentDashboardPage() {
 
   const stats = new Map<string, CourseStat>();
   if (courseIds.length > 0) {
-    const { data: courses } = await admin.from("courses").select("id, title").in("id", courseIds);
-    for (const c of courses ?? []) {
+    const labels = await loadLessonLabels(admin, courseIds);
+    for (const [id, label] of labels) {
+      const c = { id, title: label };
       stats.set(c.id, {
         courseId: c.id,
         title: c.title,

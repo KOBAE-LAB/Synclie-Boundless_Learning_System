@@ -81,17 +81,21 @@ export async function getOrCreateSessionRow(
     if (linkedCourseId === courseId) ltiResourceLinkId = resourceLinkId;
   }
 
-  // F01拡張(受講登録): ページ側のrequireEnrollment()と同じ境界をサーバーアクション側にも
+  // 履修登録: ページ側のrequireEnrollment()と同じ境界をサーバーアクション側にも
   // 置く(ページを経由しない直接呼び出しへの防御)。LTI経由の起動はLMS側が既に履修者で
   // あることを保証しているとみなし、承認済みの参加登録が無ければここで自動的に作る。
   if (!(await isEnrolled(admin, courseId, studentId))) {
     if (ltiResourceLinkId) {
-      await admin
-        .from("course_enrollments")
-        .upsert(
-          { course_id: courseId, student_id: studentId, status: "approved" },
-          { onConflict: "course_id,student_id" },
-        );
+      // 授業回の公開状況は変えず、シリーズの履修だけを作る。
+      const { data: lesson } = await admin.from("courses").select("series_id").eq("id", courseId).maybeSingle();
+      if (lesson) {
+        await admin
+          .from("series_enrollments")
+          .upsert(
+            { series_id: lesson.series_id, student_id: studentId, status: "approved" },
+            { onConflict: "series_id,student_id" },
+          );
+      }
     } else {
       throw new Error("この授業への参加登録がありません。授業コードで申請し、先生の承認を受けてから発言してください。");
     }

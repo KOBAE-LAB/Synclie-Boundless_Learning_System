@@ -80,12 +80,14 @@ export function OutputStepCard({ courseId, step, isCurrent }: { courseId: string
 export async function InputStepView({
   admin,
   course,
+  trail,
   flow,
   step,
   studentId,
 }: {
   admin: AdminClient;
   course: { id: string; title: string };
+  trail: { label: string; href: string }[];
   flow: LearnerFlow;
   step: CourseStep;
   studentId: string;
@@ -143,7 +145,7 @@ export async function InputStepView({
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <Breadcrumbs trail={[{ label: "授業一覧", href: "/learn" }]} current={course.title} />
+      <Breadcrumbs trail={trail} current={course.title} />
       <h1 className="mt-3 text-2xl font-semibold text-ink">{course.title}</h1>
       <FlowStepper courseId={courseId} flow={flow} viewingId={step.id} />
 
@@ -270,7 +272,7 @@ export async function InputStepView({
         </form>
       )}
 
-      <BackLink href="/learn" label="授業一覧" />
+      <BackLink href={trail[trail.length - 1]?.href ?? "/learn"} label={trail[trail.length - 1]?.label ?? "授業一覧"} />
     </div>
   );
 }
