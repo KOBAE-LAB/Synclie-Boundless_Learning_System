@@ -299,6 +299,13 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
     `courses/[courseId]/students/actions.ts`の`buildActivityLog`(F09、授業単位)と同じ形の
     `buildCrossCourseActivityLog`を使うが、`course_id`で絞らず学習者の全提出物を束ねる点が違う。
     生成結果は`learner_profiles`/`learner_suggestions`(courseに紐づかない、学習者1人1行)に保存する
+    **「次の学びに向けて」(2026-10)**: 「学習者用ダッシュボードでは、次の学びに向けてどう努力すればよいかを
+    サジェストしてほしい」という要望を受け、F26の提案を努力の方向づけとして整理した。材料に
+    ポートフォリオの**自己評価・教師のコメント・AIジャッジ(非最終と明記)**も加え、プロンプトは
+    「小さく具体的な次の一歩」「点数や他者比較で励まさない」「自己評価・教師のコメントをAIの見方で
+    上書きしない」にした。各提案に「学習計画に取り入れる」ボタン(`addSuggestionToPlanAction`)があり、
+    取り入れた提案は`study_plan_items`に入る(提案の文面はクライアントから受けず、本人の保存済みの提案から
+    読む。AIが勝手に計画へ入れることはしない)
   - `src/app/learn/` — F05(擬似メンバー対話)。学習者向け。`page.tsx`は
     **受講登録(course_enrollments)している授業だけ**を一覧表示する。「教師が開設した
     授業コードと学習者をつなげる仕組みが無い」(段階1は全授業を無条件表示していた)という
@@ -500,6 +507,20 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
     ペルソナを「まだ分からない仲間」役として設定する(F03/F04)のも、説明の質への
     フィードバックをF07の観点(例: 根拠の明確さ・用語の正しさ・誤りの有無)で行うのも、
     どちらも既存の仕組みをそのまま使う運用上の使い分けであり、コード上の分岐は無い
+    - **教師ダッシュボードの「指導のヒント」(2026-10)**: 「教師ダッシュボードでは、学習者の学びをどう
+      ファシリテート・指導すればよいかをサジェストしてほしい」という要望。F14は数字を並べるだけで、
+      F11(個別最適化)は「擬似メンバーの設定を変える」提案だったため、**教師自身の行動**(声かけ・
+      問い・進め方)を提案する別機能にした(`src/lib/ai/teacher-guidance.ts`、`dashboard/actions.ts`の
+      `generateTeacherGuidanceAction`、保存先`teacher_guidance`(授業ごと最新1件、`0036`))。
+      授業全体の様子・次の授業でのファシリテーション(最大3つ)・次の活動/問い・個別に声をかけたい
+      学習者(最大4人)を返す。**教師が押したときだけ生成**(AI呼び出しを自動化しない)。
+      **AIには学習者の氏名を送らない**(「学習者A」の仮の呼び名で送り、`input.ts`の`mapIndividuals`/
+      `restoreNames`でサーバー側で実名に戻して保存する。作り話の呼び名は捨てる)。対象は
+      **データ利用に同意している学習者だけ**(撤回者・管理者のテスト学習者は除く)で、振り返りは
+      「教師に共有」されたものの「迷ったこと」だけを使う。入力の集計(`src/lib/teacher-guidance/stats.ts`の
+      `loadCourseStats`)はダッシュボード本体と共用。学習者が「自分のデータの全削除」をすると、関わった
+      授業のヒントは丸ごと消える(個別の文だけを除くのが難しいため。再生成できる)。
+      **提案にとどめ、最終判断は教師**(画面に明記)
     - `[courseId]/dashboard/` — F14(教師ダッシュボード)。「参加状況、つまずき、
       擬似メンバーの挙動を確認し、学級・個人の指導計画に活かす」(要件定義書4章)。
       新規のAI呼び出しは一切せず、既存の蓄積データ(dialogue_turns/submissions/
@@ -794,6 +815,8 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
     (参加コード、列デフォルト式で新規作成時に自動生成)と`course_enrollments`
     (course_id+student_idの組、unique制約)を追加。既存の`learning_sessions`から
     参加登録済み扱いのバックフィルも行う(詳細は8章の`learn/`の説明を参照)
+  - `0036_teacher_guidance.sql` — 教師ダッシュボードの「指導のヒント」(`teacher_guidance`、授業ごと最新1件)
+  - `0035_portfolio.sql` — ポートフォリオ。`portfolio_entries`に`submission_id`・`shared`・`updated_at`、`portfolio_share_links`(詳細は`learn/portfolio/`)
   - `0034_reasoning_depth.sql` — 擬似メンバーの発言を作るAIの推論の深さ(`courses.reasoning_depth`)
   - `0033_discussion_liveliness.sql` — 擬似メンバーの発言の活発さ(`courses.discussion_liveliness`)
   - `0032_session_end.sql` — 議論の「終わり」。`courses.time_limit_minutes`/`time_limit_policy`/

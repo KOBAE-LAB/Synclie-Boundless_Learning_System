@@ -87,6 +87,14 @@ export async function deleteMyDataAction() {
   await admin.from("handwriting_uploads").delete().eq("student_id", user.id);
   await admin.from("audio_uploads").delete().eq("student_id", user.id);
 
+  // 教師ダッシュボードの「指導のヒント」には、この学習者に触れた文が含まれうる。個別の文だけを
+  // 取り除くのは難しいため、関わった授業のヒントは丸ごと消す(教師はいつでも再生成できる)。
+  const { data: involvedCourses } = await admin.from("learning_sessions").select("course_id").eq("student_id", user.id);
+  const involvedCourseIds = [...new Set((involvedCourses ?? []).map((c) => c.course_id))];
+  if (involvedCourseIds.length > 0) {
+    await admin.from("teacher_guidance").delete().in("course_id", involvedCourseIds);
+  }
+
   if (sessionIds.length > 0) {
     await admin.from("dialogue_turns").delete().in("session_id", sessionIds);
   }

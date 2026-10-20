@@ -13,16 +13,16 @@ import { openai, MODEL_JUDGE } from "./openai";
 const LearnerSuggestionSchema = z.object({
   avoidMisconceptionQuestion: z
     .string()
-    .describe("これまでの誤解や行き詰まりを踏まえ、次に自分で確かめてみるとよい問い"),
+    .describe("これまでの誤解や行き詰まり、教師のコメントを踏まえ、次に自分で確かめてみるとよい問い(1文)"),
   inquiryThemeSuggestion: z
     .string()
     .describe("これまでの関心を踏まえた、次に探究してみるとよいテーマの提案"),
   selfRegulationTip: z
     .string()
-    .describe("対話や振り返りの中で、学習者自身が意識するとよい工夫(例: 根拠を先に整理してから発言する等)"),
+    .describe("次の議論から試せる、小さく具体的な工夫(例: 発言の前に根拠を1つ書き出す)。努力の向け方として書く(1〜2文)"),
   challengeLevelTip: z
     .string()
-    .describe("成果物の変化を踏まえた、次に挑戦するとよい難易度や進め方の目安"),
+    .describe("成果物の変化を踏まえた、次に挑戦するとよい難易度や進め方の目安。無理のない次の一歩として書く(1〜2文)"),
 });
 
 export type LearnerSuggestion = z.infer<typeof LearnerSuggestionSchema>;
@@ -33,9 +33,13 @@ export async function generateLearnerSuggestions(params: {
   summary: string;
 }): Promise<LearnerSuggestion> {
   const systemPrompt = `あなたは、学習者が複数の授業にわたって積み重ねてきた学びの記録をもとに、
-学習者自身が次に取り組むとよいことを提案するアシスタントです。これは学習者本人に直接示す
-提案であり、断定的な指示ではなく、学習者が自分で選べる形(「〜してみる」「〜という手もある」)
-で書いてください。特定の授業の教師や擬似メンバーの設定を変えるための提案ではありません。`;
+学習者自身が「次の学びに向けて、どのように努力すればよいか」を提案するアシスタントです。
+これは学習者本人に直接示す提案であり、断定的な指示ではなく、学習者が自分で選べる形
+(「〜してみる」「〜という手もある」)で書いてください。
+- すでにできていることを認めたうえで、次の一歩を、今日から始められる小さく具体的な行動にする。
+- 点数や他の人との比較で励まさない。AIジャッジなどの数値は材料で、学習者の力を決めるものではない。
+- 学習者自身の自己評価や教師のコメントがあれば、それを尊重し、AIの見方で上書きしない。
+- 特定の授業の教師や擬似メンバーの設定を変えるための提案ではありません。`;
 
   const response = await openai.responses.parse({
     model: MODEL_JUDGE,

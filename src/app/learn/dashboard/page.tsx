@@ -9,6 +9,7 @@ import {
   deleteStudyPlanItemAction,
   generateLearnerProfileAction,
   generateLearnerSuggestionsAction,
+  addSuggestionToPlanAction,
 } from "./actions";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 
@@ -193,14 +194,18 @@ export default async function StudentDashboardPage() {
       <p className="mt-1 text-sm text-ink-muted">
         すべての授業の学習状況をまとめて確認し、AIの提案や振り返りをもとに次の学習計画を立てる。
       </p>
+      <Link href="/learn/portfolio" className="mt-2 inline-block text-xs text-ink-muted hover:underline">
+        成果・フィードバック・自己評価をまとめて見る(ポートフォリオ)→
+      </Link>
 
       <div className="mt-6 rounded-lg border border-line p-5">
         <h2 className="text-sm font-medium text-ink">
-          横断的な学びの記録とAIフィードバック(F26)
+          次の学びに向けて(F26: 横断的な学びの記録とAIの提案)
         </h2>
         <p className="mt-1 text-xs text-ink-muted">
           すべての授業をまたいだ提出物・フィードバック・振り返りから、得意な点・課題・学習の流れ
-          をまとめ、次に取り組むとよいことを提案する。自分から求めたときだけ生成される。
+          をまとめ、次の学びに向けてどう努力するとよいかを提案する。自分から求めたときだけ生成される。
+          自己評価や先生のコメントも手がかりにする。AIの提案は材料で、取り入れるかどうかを決めるのはあなたです。
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <span className="text-xs text-ink-faint">
@@ -244,12 +249,29 @@ export default async function StudentDashboardPage() {
               </form>
 
               {learnerSuggestion && (
-                <div className="mt-2 space-y-1 text-xs text-ink-muted">
-                  <p>次に確かめてみるとよい問い: {learnerSuggestion.avoid_misconception_question}</p>
-                  <p>次の探究テーマの提案: {learnerSuggestion.inquiry_theme_suggestion}</p>
-                  <p>自分で意識するとよい工夫: {learnerSuggestion.self_regulation_tip}</p>
-                  <p>次に挑戦するとよい難易度の目安: {learnerSuggestion.challenge_level_tip}</p>
-                </div>
+                <ul className="mt-3 space-y-2 text-sm">
+                  {(
+                    [
+                      ["avoid_misconception_question", "次に確かめてみるとよい問い"],
+                      ["inquiry_theme_suggestion", "次の探究テーマの提案"],
+                      ["self_regulation_tip", "自分で意識するとよい工夫"],
+                      ["challenge_level_tip", "次に挑戦するとよい難易度の目安"],
+                    ] as const
+                  ).map(([kind, label]) => (
+                    <li key={kind} className="rounded-md border border-line px-3 py-2">
+                      <p className="text-xs font-medium text-ink-muted">{label}</p>
+                      <p className="mt-1">{learnerSuggestion[kind]}</p>
+                      <form action={addSuggestionToPlanAction.bind(null, kind)} className="mt-2">
+                        <SubmitButton
+                          pendingText="追加中…"
+                          className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface disabled:opacity-50"
+                        >
+                          学習計画に取り入れる
+                        </SubmitButton>
+                      </form>
+                    </li>
+                  ))}
+                </ul>
               )}
             </div>
           </div>

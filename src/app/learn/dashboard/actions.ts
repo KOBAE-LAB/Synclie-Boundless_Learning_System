@@ -5,6 +5,7 @@ import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { generateStudentProfileSummary } from "@/lib/ai/student-profile";
 import { generateLearnerSuggestions } from "@/lib/ai/learner-suggestions";
+import { RATING_LABELS, readAssessment } from "@/lib/portfolio/assessment";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -46,6 +47,19 @@ async function buildCrossCourseActivityLog(admin: AdminClient, studentId: string
     .in("submission_id", submissionIds);
   const reflectionBySubmission = new Map((reflectionRows ?? []).map((r) => [r.submission_id, r]));
 
+  // ポートフォリオの自己評価・教師のコメント、AIジャッジ(議論全体の評価。非最終)も、次の努力の手がかりにする。
+  const { data: entryRows } = await admin
+    .from("portfolio_entries")
+    .select("submission_id, self_assessment, teacher_assessment")
+    .eq("student_id", studentId)
+    .in("submission_id", submissionIds);
+  const entryBySubmission = new Map((entryRows ?? []).map((e) => [e.submission_id as string, e]));
+  const { data: judgmentRows } = await admin
+    .from("discussion_judgments")
+    .select("submission_id, logic_structure, evidence_quality, rebuttal_response, summary_comment")
+    .in("submission_id", submissionIds);
+  const judgmentBySubmission = new Map((judgmentRows ?? []).map((j) => [j.submission_id as string, j]));
+
   const sections = submissions.map((submission, index) => {
     const courseTitle = courseTitleById.get(submission.course_id) ?? "(不明な授業)";
     const lines = [
@@ -62,6 +76,22 @@ async function buildCrossCourseActivityLog(admin: AdminClient, studentId: string
     if (reflection) {
       lines.push(
         `振り返り: 学んだこと=${reflection.what_learned} / 迷ったこと=${reflection.what_confused} / 次にやりたいこと=${reflection.next_goal}`,
+      );
+    }
+
+    const entry = entryBySubmission.get(submission.id);
+    const self = readAssessment(entry?.self_assessment);
+    if (self) {
+      lines.push(`本人の自己評価: ${self.rating ? RATING_LABELS[self.rating] : "(段階なし)"} ${self.comment}`.trim());
+    }
+    const teacher = readAssessment(entry?.teacher_assessment);
+    if (teacher) {
+      lines.push(`教師のコメント: ${teacher.rating ? `${RATING_LABELS[teacher.rating]} ` : ""}${teacher.comment}`.trim());
+    }
+    const judgment = judgmentBySubmission.get(submission.id);
+    if (judgment) {
+      lines.push(
+        `AIジャッジ(非最終・材料): 論理構成${judgment.logic_structure}/5・根拠の質${judgment.evidence_quality}/5・反論への応答${judgment.rebuttal_response}/5 ${judgment.summary_comment}`,
       );
     }
 
@@ -150,6 +180,49 @@ export async function generateLearnerSuggestionsAction() {
     throw new Error(`提案の保存に失敗しました: ${error.message}`);
   }
 
+  revalidatePath("/learn/dashboard");
+}
+
+const SUGGESTION_PLAN_PREFIX = {
+  avoid_misconception_question: "確かめてみる問い",
+  inquiry_theme_suggestion: "探究してみるテーマ",
+  self_regulation_tip: "意識する工夫",
+  challenge_level_tip: "挑戦してみること",
+} as const;
+
+// AIの提案を、自分の学習計画(F23)に取り入れる。提案の文面はクライアントから受け取らず、
+// 本人の保存済みの提案から読む(取り入れるか決めるのは本人。AIが勝手に計画に入れることはしない)。
+export async function addSuggestionToPlanAction(kind: keyof typeof SUGGESTION_PLAN_PREFIX) {
+  const { user } = await requireRole("student");
+  if (!(kind in SUGGESTION_PLAN_PREFIX)) {
+    throw new Error("提案の種類が不正です。");
+  }
+  const admin = createAdminClient();
+  const { data: row } = await admin
+    .from("learner_suggestions")
+    .select("avoid_misconception_question, inquiry_theme_suggestion, self_regulation_tip, challenge_level_tip")
+    .eq("student_id", user.id)
+    .maybeSingle();
+  const text = row?.[kind];
+  if (!text) {
+    throw new Error("提案が見つかりません。");
+  }
+  const content = `【${SUGGESTION_PLAN_PREFIX[kind]}】${text}`;
+
+  // 同じ提案を二重に入れない(未完了のものが既にあれば何もしない)。
+  const { data: existing } = await admin
+    .from("study_plan_items")
+    .select("id")
+    .eq("student_id", user.id)
+    .eq("content", content)
+    .eq("done", false)
+    .maybeSingle();
+  if (!existing) {
+    const { error } = await admin.from("study_plan_items").insert({ student_id: user.id, content });
+    if (error) {
+      throw new Error(`学習計画への追加に失敗しました: ${error.message}`);
+    }
+  }
   revalidatePath("/learn/dashboard");
 }
 
