@@ -1,36 +1,39 @@
 @import "tailwindcss";
 
 /*
- * 配色は姉妹アプリ「Synclie - Share」(KOBAE-LABの色)に合わせてある。
- * 研究室のロゴ(ヘルメットの黄・深紅のリング)を主軸に、黒基調のダークテーマを既定にする
- * (教室のプロジェクタでは明るい地だと周りが見えにくくなるため)。
- * 値は synclie-share の src/app/globals.css と同じにしてあるので、
- * 配色を変える時は両方のアプリで揃えて直すこと。
+ * 配色: 白背景の明るいテーマ(2026-10に、黒基調のダークテーマから変更した)。
+ * 「明るい雰囲気で学習できるように」という要望による。ブランドの深紅(ロゴのリング)を
+ * アクセントに、ヘルメットの黄は警告・強調に使う。文字と背景のコントラストは、本文で
+ * 約12:1、補足の文字(ink-faint)でも4.5:1以上にしてある(WCAG AA)。
+ *
+ * 注意: 姉妹アプリ「Synclie - Share」(src/app/globals.css)は黒基調のままで、もう値が揃っていない。
+ * 以前は「配色を変える時は両方のアプリで揃えること」としていたが、このアプリは学習者が
+ * 長く読み書きする画面が中心のため、読みやすさを優先して明るくした。揃えるかは別途判断すること。
  */
 @theme {
-  --color-canvas: #0f0f11; /* ページの地。ロゴ内側の黒 */
-  --color-surface: #1b1b1f; /* カード */
-  --color-surface-raised: #26262b; /* 入力欄など一段上げる面 */
-  --color-line: #34343a;
-  --color-line-strong: #56565f;
+  --color-canvas: #ffffff; /* ページの地 */
+  --color-surface: #f6f3f1; /* カード・吹き出しの下地(わずかに温かい灰色) */
+  --color-surface-raised: #ffffff; /* 入力欄など。白地+枠線で、押せる・書ける面だと分かるように */
+  --color-line: #e2dcd8;
+  --color-line-strong: #bdb4ae;
 
-  --color-ink: #f5f2ef; /* 本文 */
-  --color-ink-muted: #c3bdb8;
-  --color-ink-faint: #948e88;
+  --color-ink: #231f1d; /* 本文 */
+  --color-ink-muted: #5a524d;
+  --color-ink-faint: #766e68; /* 白地で4.5:1以上 */
 
-  --color-accent: #c07772; /* 文字・枠線・選択中の輪郭 */
-  --color-accent-fill: #a81c1c; /* 塗りボタンの地。ロゴの深紅そのもの */
-  --color-accent-fill-hover: #c42525;
+  --color-accent: #a81c1c; /* 文字・枠線・選択中の輪郭。ロゴの深紅 */
+  --color-accent-fill: #a81c1c; /* 塗りボタンの地(白文字) */
+  --color-accent-fill-hover: #8c1515;
   --color-accent-dark: #7c1414;
-  --color-accent-soft: #2a1315; /* 淡い下地 */
+  --color-accent-soft: #fbeceb; /* 淡い下地 */
 
-  --color-danger: #f5786c;
-  --color-danger-soft: #2c1512;
-  --color-success: #5fcf92;
-  --color-success-soft: #12271c;
-  --color-warn: #f5c518; /* ヘルメットの黄 */
-  --color-warn-soft: #2a2310;
-  --color-highlight: #f5c518;
+  --color-danger: #b42318;
+  --color-danger-soft: #fdecea;
+  --color-success: #17794a;
+  --color-success-soft: #e5f4ec;
+  --color-warn: #7a4f00; /* 警告の文字・枠線(淡い黄の下地の上で読める濃い琥珀) */
+  --color-warn-soft: #fff4cc;
+  --color-highlight: #f5c518; /* ヘルメットの黄 */
 
   --font-sans:
     "Hiragino Kaku Gothic ProN", "Hiragino Sans", "ヒラギノ角ゴ ProN W3",
@@ -39,13 +42,20 @@
 }
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
+}
+
+/* 文字の大きさ: ブラウザ標準(16px)の約112%。Tailwindのtext-sm等はrem基準なので、
+   画面全体の文字・余白がそろって、少し大きくなる。px指定の文字サイズは使わないこと。 */
+html {
+  font-size: 112.5%;
 }
 
 body {
   background: var(--color-canvas);
   color: var(--color-ink);
   font-family: var(--font-sans);
+  line-height: 1.7;
 }
 
 /* 操作したことが必ず分かるように、フォーカスリングはブランドカラーで強調する(F18)。 */
@@ -106,10 +116,10 @@ body {
 @keyframes speaking-pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(95, 207, 146, 0.45);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--tone, #17794a) 45%, transparent);
   }
   50% {
-    box-shadow: 0 0 0 5px rgba(95, 207, 146, 0);
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--tone, #17794a) 0%, transparent);
   }
 }
 .persona-tile-speaking {
@@ -119,30 +129,30 @@ body {
 /*
  * 擬似メンバーごとの色(src/lib/persona-tones.ts が割り当てる)。誰の発言かを、吹き出しの左の帯・
  * 名前の色・映像タイルの枠で見分けやすくする。学習者本人の吹き出し(ブランドの深紅)や、
- * 警告の黄色と取り違えにくい、青・緑・紫・青緑・橙・桃を使う。暗い背景で読める明るさにしてある。
+ * 警告の黄色と取り違えにくい、青・緑・紫・青緑・橙・桃を使う。
+ * --tone は帯・枠・丸など「面」の色、--tone-text は名前など「文字」の色(白地で4.5:1以上になる濃さ)。
  */
-.tone-0 { --tone: #6aaeff; }
-.tone-1 { --tone: #62d49b; }
-.tone-2 { --tone: #b896ff; }
-.tone-3 { --tone: #45d6cc; }
-.tone-4 { --tone: #ff9d66; }
-.tone-5 { --tone: #ff8fc2; }
-.tone-neutral { --tone: #a39d98; }
+.tone-0 { --tone: #3b82f6; --tone-text: #1d4ed8; }
+.tone-1 { --tone: #22a06b; --tone-text: #166534; }
+.tone-2 { --tone: #8b5cf6; --tone-text: #6d28d9; }
+.tone-3 { --tone: #14b8a6; --tone-text: #0f766e; }
+.tone-4 { --tone: #f97316; --tone-text: #b45309; }
+.tone-5 { --tone: #ec4899; --tone-text: #be185d; }
+.tone-neutral { --tone: #8a827c; --tone-text: #5a524d; }
 
 .persona-bubble {
-  background: color-mix(in srgb, var(--tone) 13%, var(--color-surface));
+  background: color-mix(in srgb, var(--tone) 11%, var(--color-canvas));
   border-left: 4px solid var(--tone);
 }
 .persona-name {
-  color: var(--tone);
+  color: var(--tone-text);
 }
 .persona-ring {
   box-shadow: 0 0 0 2px var(--tone);
 }
 .persona-chip {
-  background: color-mix(in srgb, var(--tone) 22%, #000);
+  background: color-mix(in srgb, var(--tone) 70%, #000);
   color: #fff;
-  border: 1px solid var(--tone);
 }
 .persona-dot {
   background: var(--tone);

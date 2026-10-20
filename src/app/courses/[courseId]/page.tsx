@@ -70,7 +70,7 @@ function MenuCard({
       <span className="flex items-center gap-2 text-sm font-medium text-ink">
         {title}
         {badge && (
-          <span className="rounded-full bg-accent-soft px-2 py-0.5 text-[10px] font-medium text-accent">{badge}</span>
+          <span className="rounded-full bg-accent-soft px-2 py-0.5 text-[0.6875rem] font-medium text-accent">{badge}</span>
         )}
       </span>
       <span className="text-xs leading-5 text-ink-muted">{description}</span>

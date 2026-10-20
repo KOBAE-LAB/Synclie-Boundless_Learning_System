@@ -82,7 +82,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           </div>
         )}
         {user && (
-          <header className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-2">
+          <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-t-[3px] border-line border-t-accent-fill px-4 py-2">
             <Link
               href={ROLE_HOME_HREF[navRole] ?? "/"}
               className="flex items-center gap-2 text-sm font-semibold text-ink"

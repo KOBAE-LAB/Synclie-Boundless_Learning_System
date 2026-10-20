@@ -539,18 +539,17 @@ export default async function LearnCourseSessionPage({
                       className="avatar-idle absolute inset-x-0 bottom-0 h-[57%] w-full object-contain object-bottom"
                     />
                   ) : (
-                    <span
-                      aria-hidden="true"
-                      className="persona-name absolute inset-0 flex items-center justify-center text-5xl font-semibold opacity-80"
-                    >
-                      {persona.name.slice(0, 1)}
+                    <span className="absolute inset-0 flex items-center justify-center" aria-hidden="true">
+                      <span className="persona-chip flex aspect-square h-1/2 items-center justify-center rounded-full text-[clamp(1rem,4vw,1.75rem)] font-semibold shadow-md">
+                        {persona.name.slice(0, 1)}
+                      </span>
                     </span>
                   )}
                   <span className="persona-chip absolute bottom-2 left-2 max-w-[85%] truncate rounded px-2 py-0.5 text-xs font-medium">
                     {persona.name}
                   </span>
                   {isSpeaker && (
-                    <span className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white">
+                    <span className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[0.6875rem] font-medium text-white">
                       <span className="persona-dot h-1.5 w-1.5 rounded-full" aria-hidden="true" />
                       発言中
                     </span>

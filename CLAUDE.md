@@ -133,11 +133,16 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
 
 ## 7. 技術スタック(段階1)
 
-- **配色・ロゴ**: 姉妹アプリ「Synclie - Share」(同じKOBAE-LABブランド)に合わせてある。
-  `src/app/globals.css`の`@theme`ブロック(canvas/surface/ink/accent/danger/success/warn等の
-  トークン)は`synclie-share`の`src/app/globals.css`と値を揃えているので、**配色を変える時は
-  両方のアプリで揃えて直すこと**。黒基調のダークテーマを既定にしている(教室のプロジェクタでは
-  明るい地だと周りが見えにくくなるため。ライト/ダーク自動切替はやめ、単一テーマにした)。
+- **配色・ロゴ**: **白背景の明るいテーマ**(2026-10に変更。「明るい雰囲気で学習できるように」という
+  要望)。ブランドの深紅(ロゴのリング)をアクセント、ヘルメットの黄を警告・強調に使う。
+  `src/app/globals.css`の`@theme`ブロックのトークン(canvas/surface/ink/accent/danger/success/warn等)
+  を変えれば、画面全体の配色が変わる(色を直接書かず、必ずトークンを使うこと)。文字・背景の
+  コントラストは白地で4.5:1以上(WCAG AA)。**文字の大きさ**は`html { font-size: 112.5% }`
+  (標準の約112%)で、Tailwindのrem基準の文字・余白がそろって大きくなる(**px指定の文字サイズは
+  使わず、remを使うこと**)。以前は黒基調のダークテーマで姉妹アプリ「Synclie - Share」と値を
+  揃えていたが、学習者が長く読み書きする画面が中心のため、読みやすさを優先して明るくした。
+  姉妹アプリは黒基調のままで、もう揃っていない(揃えるかは別途判断)。教室のプロジェクタで
+  明るすぎる場合の暗いテーマへの切り替えは、今は用意していない。ライト/ダーク自動切替はしない。
   ロゴ(`public/logo.png`・`src/app/icon.png`、KOBAE-LABのマスコット)は
   `src/app/layout.tsx`のヘッダーと`src/app/login/page.tsx`に配置している
 - **フロントエンド/バックエンド**: Next.js (TypeScript, App Router)。API RoutesとServer Actionsを併用。
