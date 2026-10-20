@@ -50,6 +50,33 @@ const RAG_STATUS_STYLES: Record<string, string> = {
   failed: "bg-danger-soft text-danger",
 };
 
+function MenuCard({
+  href,
+  title,
+  description,
+  badge,
+}: {
+  href: string;
+  title: string;
+  description: string;
+  badge?: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="flex flex-col gap-1 rounded-lg border border-line bg-surface p-4 transition-colors hover:border-accent hover:bg-surface-raised"
+    >
+      <span className="flex items-center gap-2 text-sm font-medium text-ink">
+        {title}
+        {badge && (
+          <span className="rounded-full bg-accent-soft px-2 py-0.5 text-[10px] font-medium text-accent">{badge}</span>
+        )}
+      </span>
+      <span className="text-xs leading-5 text-ink-muted">{description}</span>
+    </Link>
+  );
+}
+
 export default async function CourseDetailPage({
   params,
 }: {
@@ -121,67 +148,61 @@ export default async function CourseDetailPage({
       <h1 className="text-2xl font-semibold text-ink">{course.title}</h1>
       {course.subject && <p className="mt-1 text-sm text-ink-muted">{course.subject}</p>}
 
-      <Link
-        href={`/courses/${courseId}/dashboard`}
-        className="mt-4 inline-block text-sm text-ink-muted hover:underline"
-      >
-        教師ダッシュボード(F14)→
-      </Link>
-      <br />
-      <Link
-        href={`/courses/${courseId}/personas`}
-        className="mt-1 inline-block text-sm text-ink-muted hover:underline"
-      >
-        ペルソナ設定(F03/F04)→
-      </Link>
-      <br />
-      {canViewAsStudent && (
-        <form action={boundStartStudentViewAction} className="mt-1">
-          <button type="submit" className="text-sm text-ink-muted hover:underline">
-            学習者として表示(動作確認・管理者のみ)→
-          </button>
-        </form>
-      )}
-      <Link
-        href={`/courses/${courseId}/criteria`}
-        className="mt-1 inline-block text-sm text-ink-muted hover:underline"
-      >
-        評価の観点(F07)→
-      </Link>
-      <br />
-      <Link
-        href={`/courses/${courseId}/submissions`}
-        className="mt-1 inline-block text-sm text-ink-muted hover:underline"
-      >
-        提出物とフィードバック(F06/F07)→
-      </Link>
-      <br />
-      <Link
-        href={`/courses/${courseId}/students`}
-        className="mt-1 inline-block text-sm text-ink-muted hover:underline"
-      >
-        学習者プロファイル(F09)→
-      </Link>
-      <br />
-      <Link
-        href={`/courses/${courseId}/conformity`}
-        className="mt-1 inline-block text-sm text-ink-muted hover:underline"
-      >
-        ペルソナ設計と同調の計測(F20)→
-      </Link>
-      <br />
-      <Link
-        href={`/courses/${courseId}/audit`}
-        className="mt-1 inline-block text-sm text-ink-muted hover:underline"
-      >
-        擬似メンバーの発言の監査と修正(F15)→
-      </Link>
-      <p className="mt-1 text-sm text-ink-muted">
-        学習者ビュー(F05): 生徒アカウントでログインし
-        <Link href={`/learn/${courseId}`} className="mx-1 hover:underline">
-          /learn/{courseId}
-        </Link>
-        を開くと擬似メンバーと議論できる
+      {/* この授業でできること。文字だけのリンクの羅列だと、何があるか・どれから触ればよいかが
+          分かりにくいため、説明つきのカードにして、よく使う順に並べる。 */}
+      <nav aria-label="この授業のメニュー" className="mt-6 grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-3">
+        <MenuCard
+          href={`/courses/${courseId}/personas`}
+          title="ペルソナ設定"
+          description="擬似メンバーの作成・AIによる案・承認して「使用中」にする"
+          badge="まず設定"
+        />
+        <MenuCard
+          href={`/courses/${courseId}/dashboard`}
+          title="教師ダッシュボード"
+          description="参加状況・つまずき・擬似メンバーの挙動をまとめて確認"
+        />
+        <MenuCard
+          href={`/courses/${courseId}/submissions`}
+          title="提出物とフィードバック"
+          description="学習者の成果と、AIのフィードバックの確認・修正"
+        />
+        <MenuCard
+          href={`/courses/${courseId}/criteria`}
+          title="評価の観点"
+          description="フィードバックの観点(例: 根拠の明確さ)を設定"
+        />
+        <MenuCard
+          href={`/courses/${courseId}/students`}
+          title="学習者プロファイル"
+          description="学習者ごとの得意・課題と、個別最適化の提案"
+        />
+        <MenuCard
+          href={`/courses/${courseId}/conformity`}
+          title="同調の計測"
+          description="擬似メンバーが根拠なく同調した割合を、ペルソナ別に確認"
+        />
+        <MenuCard
+          href={`/courses/${courseId}/audit`}
+          title="発言の監査と修正"
+          description="擬似メンバーの発言を確認し、不適切な内容を修正"
+        />
+        {canViewAsStudent && (
+          <form action={boundStartStudentViewAction} className="contents">
+            <button
+              type="submit"
+              className="flex flex-col gap-1 rounded-lg border border-dashed border-line-strong p-4 text-left transition-colors hover:border-accent hover:bg-surface"
+            >
+              <span className="text-sm font-medium text-ink">学習者として表示 →</span>
+              <span className="text-xs leading-5 text-ink-muted">
+                動作確認用(管理者のみ)。テスト学習者として、学習者の画面を試せます
+              </span>
+            </button>
+          </form>
+        )}
+      </nav>
+      <p className="mt-2 text-xs text-ink-faint">
+        学習者は、ログイン後の授業一覧(参加が承認された授業)から、この授業を開きます。
       </p>
 
       <form action={boundUpdateCourseSettingsAction} className="mt-8 space-y-4 rounded-lg border border-line p-5">

@@ -18,11 +18,13 @@ import {
   type PersonaStatus,
 } from "./actions";
 import { PersonaForm } from "./persona-form";
+import { assignPersonaTones, toneClass } from "@/lib/persona-tones";
 
 type AvatarStatus = "pending" | "done" | "failed";
 
 interface PersonaRow {
   id: string;
+  created_at?: string;
   name: string;
   tier: string;
   status: PersonaStatus;
@@ -92,7 +94,7 @@ export default async function PersonasPage({
 
   const { data: personas } = await admin
     .from("personas")
-    .select("id, name, tier, status, profile, origin_note, shared_at, avatar_id, avatar_status, avatar_error")
+    .select("id, name, tier, status, profile, origin_note, shared_at, avatar_id, avatar_status, avatar_error, created_at")
     .eq("course_id", courseId)
     .order("created_at", { ascending: false });
 
@@ -112,6 +114,10 @@ export default async function PersonasPage({
 
   const rows = (personas ?? []) as PersonaRow[];
   const activeCount = rows.filter((p) => p.status === "active").length;
+  // ペルソナごとの色(学習者の画面の吹き出し・映像タイルと同じ。作成順で割り当てる)
+  const personaTones = assignPersonaTones(
+    [...rows].sort((a, b) => (a.created_at ?? "").localeCompare(b.created_at ?? "")).map((p) => p.id),
+  );
   const boundCreateAction = createPersonaAction.bind(null, courseId);
   const boundGenerateEvolvedAction = generateEvolvedPersonasAction.bind(null, courseId);
   const boundRecommendDraftsAction = recommendPersonaDraftsAction.bind(null, courseId);
@@ -212,51 +218,10 @@ export default async function PersonasPage({
         </form>
       </div>
 
-      <div className="mt-6 rounded-lg border border-line p-5">
-        <h2 className="mb-4 text-sm font-medium text-ink">
-          新しいペルソナを作成
-        </h2>
-        <PersonaForm action={boundCreateAction} submitLabel="作成する" />
-      </div>
-
-      <div className="mt-6 rounded-lg border border-line p-5">
-        <h2 className="text-sm font-medium text-ink">
-          学習進化型ペルソナ(F10)
-        </h2>
-        <p className="mt-1 text-sm text-ink-muted">
-          同意済みの学習者の発言・成果・振り返りから、論点・誤概念・有効な問いを抽出し、
-          3〜5個の役割プロファイルを下書き(下書き状態)として提案する。特定の学習者の発言だと
-          推測されないよう、同意済みの学習者が一定数(3人)集まるまでは生成できない。
-          提案されたペルソナは、他のペルソナと同様に確認・編集してから承認・有効化すること。
-        </p>
-        <form action={boundGenerateEvolvedAction} className="mt-3">
-          <SubmitButton
-            pendingText="生成中…"
-            className="rounded-md border border-line px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface disabled:opacity-50"
-          >
-            学習進化型ペルソナを生成する
-          </SubmitButton>
-        </form>
-
-        {corpusEntries && corpusEntries.length > 0 && (
-          <details className="mt-4">
-            <summary className="cursor-pointer text-xs text-ink-muted">
-              抽出された論点・誤概念・有効な問い({corpusEntries.length}件)
-            </summary>
-            <ul className="mt-2 space-y-2 text-xs text-ink-muted">
-              {(corpusEntries as CorpusEntryRow[]).map((entry) => (
-                <li key={entry.id} className="rounded-md border border-line p-2">
-                  <p>論点: {entry.topic}</p>
-                  {entry.misconception && <p>誤概念: {entry.misconception}</p>}
-                  {entry.effective_question && <p>有効な問い: {entry.effective_question}</p>}
-                </li>
-              ))}
-            </ul>
-          </details>
-        )}
-      </div>
-
-      <ul className="mt-8 space-y-2">
+      <h2 className="mt-8 text-sm font-medium text-ink">
+        この授業のペルソナ({rows.length}体)
+      </h2>
+      <ul className="mt-3 space-y-2">
         {rows.map((persona) => {
           const boundDeleteAction = deletePersonaAction.bind(null, courseId, persona.id);
           const boundApproveAction = approvePersonaAction.bind(null, courseId, persona.id);
@@ -275,7 +240,8 @@ export default async function PersonasPage({
           return (
             <li
               key={persona.id}
-              className="rounded-md border border-line px-4 py-3 text-sm"
+              className={`rounded-md border border-l-4 border-line bg-surface px-4 py-3 text-sm ${toneClass(personaTones[persona.id])}`}
+              style={{ borderLeftColor: "var(--tone)" }}
             >
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <Link
@@ -293,9 +259,9 @@ export default async function PersonasPage({
                   ) : (
                     <span
                       aria-hidden="true"
-                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface text-xs text-ink-faint"
+                      className="persona-chip flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold"
                     >
-                      ?
+                      {persona.name.slice(0, 1)}
                     </span>
                   )}
                   <span className="min-w-0">
@@ -434,6 +400,54 @@ export default async function PersonasPage({
           <li className="text-sm text-ink-muted">まだペルソナがありません。上のフォームから作成してください。</li>
         )}
       </ul>
+
+      <details className="mt-6 rounded-lg border border-line p-5">
+        <summary className="cursor-pointer text-sm font-medium text-ink">
+          ペルソナを手動で作成する
+        </summary>
+        <div className="mt-4">
+          <PersonaForm action={boundCreateAction} submitLabel="作成する" />
+        </div>
+      </details>
+
+      <details className="mt-3 rounded-lg border border-line p-5">
+        <summary className="cursor-pointer text-sm font-medium text-ink">
+          学習進化型ペルソナ(F10)
+        </summary>
+        <p className="mt-1 text-sm text-ink-muted">
+          同意済みの学習者の発言・成果・振り返りから、論点・誤概念・有効な問いを抽出し、
+          3〜5個の役割プロファイルを下書き(下書き状態)として提案する。特定の学習者の発言だと
+          推測されないよう、同意済みの学習者が一定数(3人)集まるまでは生成できない。
+          提案されたペルソナは、他のペルソナと同様に確認・編集してから承認・有効化すること。
+        </p>
+        <form action={boundGenerateEvolvedAction} className="mt-3">
+          <SubmitButton
+            pendingText="生成中…"
+            className="rounded-md border border-line px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface disabled:opacity-50"
+          >
+            学習進化型ペルソナを生成する
+          </SubmitButton>
+        </form>
+
+        {corpusEntries && corpusEntries.length > 0 && (
+          <details className="mt-4">
+            <summary className="cursor-pointer text-xs text-ink-muted">
+              抽出された論点・誤概念・有効な問い({corpusEntries.length}件)
+            </summary>
+            <ul className="mt-2 space-y-2 text-xs text-ink-muted">
+              {(corpusEntries as CorpusEntryRow[]).map((entry) => (
+                <li key={entry.id} className="rounded-md border border-line p-2">
+                  <p>論点: {entry.topic}</p>
+                  {entry.misconception && <p>誤概念: {entry.misconception}</p>}
+                  {entry.effective_question && <p>有効な問い: {entry.effective_question}</p>}
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+      </details>
+
+
     </div>
   );
 }

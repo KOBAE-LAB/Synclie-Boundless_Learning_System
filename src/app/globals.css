@@ -115,3 +115,35 @@ body {
 .persona-tile-speaking {
   animation: speaking-pulse 1.8s ease-in-out infinite;
 }
+
+/*
+ * 擬似メンバーごとの色(src/lib/persona-tones.ts が割り当てる)。誰の発言かを、吹き出しの左の帯・
+ * 名前の色・映像タイルの枠で見分けやすくする。学習者本人の吹き出し(ブランドの深紅)や、
+ * 警告の黄色と取り違えにくい、青・緑・紫・青緑・橙・桃を使う。暗い背景で読める明るさにしてある。
+ */
+.tone-0 { --tone: #6aaeff; }
+.tone-1 { --tone: #62d49b; }
+.tone-2 { --tone: #b896ff; }
+.tone-3 { --tone: #45d6cc; }
+.tone-4 { --tone: #ff9d66; }
+.tone-5 { --tone: #ff8fc2; }
+.tone-neutral { --tone: #a39d98; }
+
+.persona-bubble {
+  background: color-mix(in srgb, var(--tone) 13%, var(--color-surface));
+  border-left: 4px solid var(--tone);
+}
+.persona-name {
+  color: var(--tone);
+}
+.persona-ring {
+  box-shadow: 0 0 0 2px var(--tone);
+}
+.persona-chip {
+  background: color-mix(in srgb, var(--tone) 22%, #000);
+  color: #fff;
+  border: 1px solid var(--tone);
+}
+.persona-dot {
+  background: var(--tone);
+}

@@ -10,6 +10,7 @@ import { ChatComposer } from "@/components/chat-composer";
 import { AutoDiscussionTimer } from "@/components/auto-discussion-timer";
 import { SessionControls } from "@/components/session-controls";
 import { getTimeStatus } from "@/lib/learn/session-end";
+import { assignPersonaTones, toneClass } from "@/lib/persona-tones";
 import {
   submitOutcomeAction,
   generateFeedbackAction,
@@ -186,7 +187,11 @@ export default async function LearnCourseSessionPage({
     // F25: この授業のペルソナ(使用中のものを対話の相手として画面上部に大きめのアバターで
     // 常に見せる。発言ログ中のペルソナ(既にactiveでなくなった場合を含む)も名前・アバターの
     // 解決に使うため、ステータスを問わず全部まとめて1回で引く。授業のペルソナは数件程度)。
-    admin.from("personas").select("id, name, avatar_id, status").eq("course_id", courseId),
+    admin
+      .from("personas")
+      .select("id, name, avatar_id, status, created_at")
+      .eq("course_id", courseId)
+      .order("created_at", { ascending: true }),
     // アバター候補は全授業共通で十数件しかないため、必要分を絞らず全部引く(往復を1回減らせる)。
     admin.from("avatar_options").select("id, file_path"),
     // F11: 教師が採用した個別最適化の提案のうち、探究テーマの提案だけは学習者にも見せる
@@ -295,6 +300,8 @@ export default async function LearnCourseSessionPage({
 
   const personaNames = new Map<string, string>();
   const personaAvatarPaths = new Map<string, string>();
+  // 擬似メンバーごとの色(吹き出し・映像タイル・名前)。作成順で割り当てるので、いつ見ても同じ人は同じ色。
+  const personaTones = assignPersonaTones((coursePersonaRows ?? []).map((p) => p.id));
   const activePersonas = (coursePersonaRows ?? []).filter((p) => p.status === "active");
   const activePersonaCount = activePersonas.length;
   const avatarPathById = new Map((avatarOptionRows ?? []).map((o) => [o.id, o.file_path]));
@@ -492,7 +499,11 @@ export default async function LearnCourseSessionPage({
               使わず、既存のイラスト画像(F25、都度生成はしない)をそのまま使う。 */}
           <div
             className={`mx-auto grid gap-3 ${
-              activePersonas.length === 1 ? "max-w-sm grid-cols-1" : "max-w-xl grid-cols-2"
+              activePersonas.length === 1
+                ? "max-w-sm grid-cols-1"
+                : activePersonas.length === 2 || activePersonas.length === 4
+                  ? "max-w-xl grid-cols-2"
+                  : "max-w-2xl grid-cols-3"
             }`}
           >
             {activePersonas.map((persona) => {
@@ -502,13 +513,12 @@ export default async function LearnCourseSessionPage({
               const isSpeaker =
                 persona.id === lastPersonaSpeakerId ||
                 (!lastPersonaSpeakerId && persona.id === activePersonas[0].id);
-              const ringClass = isSpeaker
-                ? "ring-2 ring-success persona-tile-speaking"
-                : "ring-1 ring-line";
+              // 発言中のメンバーは、そのメンバーの色の枠で示す(誰が話しているかを色でも見分けられる)。
+              const ringClass = isSpeaker ? "persona-ring persona-tile-speaking" : "ring-1 ring-line";
               return (
                 <div
                   key={persona.id}
-                  className={`relative aspect-video overflow-hidden rounded-lg bg-canvas ${ringClass}`}
+                  className={`relative aspect-video overflow-hidden rounded-lg bg-canvas ${toneClass(personaTones[persona.id])} ${ringClass}`}
                 >
                   {/* 背景(部屋)レイヤー */}
                   <img
@@ -529,17 +539,17 @@ export default async function LearnCourseSessionPage({
                   ) : (
                     <span
                       aria-hidden="true"
-                      className="absolute inset-0 flex items-center justify-center text-4xl text-ink-faint"
+                      className="persona-name absolute inset-0 flex items-center justify-center text-5xl font-semibold opacity-80"
                     >
-                      ?
+                      {persona.name.slice(0, 1)}
                     </span>
                   )}
-                  <span className="absolute bottom-2 left-2 rounded bg-black/60 px-2 py-0.5 text-xs font-medium text-white">
+                  <span className="persona-chip absolute bottom-2 left-2 max-w-[85%] truncate rounded px-2 py-0.5 text-xs font-medium">
                     {persona.name}
                   </span>
                   {isSpeaker && (
-                    <span className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-success">
-                      <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden="true" />
+                    <span className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white">
+                      <span className="persona-dot h-1.5 w-1.5 rounded-full" aria-hidden="true" />
                       発言中
                     </span>
                   )}
@@ -548,10 +558,14 @@ export default async function LearnCourseSessionPage({
             })}
           </div>
           {/* ビデオ会議アプリのライブキャプション欄のように、直近の発言をテキストでも見せる。 */}
-          <div className="mt-2 rounded-md border border-line bg-surface px-4 py-3 text-sm">
+          <div
+            className={`mt-2 rounded-md px-4 py-3 text-sm ${
+              lastPersonaTurn ? `persona-bubble ${toneClass(personaTones[lastPersonaTurn.persona_id ?? ""])}` : "border border-line bg-surface"
+            }`}
+          >
             {lastPersonaTurn ? (
               <>
-                <span className="font-semibold text-accent">
+                <span className="persona-name font-semibold">
                   {personaNames.get(lastPersonaTurn.persona_id ?? "") ?? "擬似メンバー"}:{" "}
                 </span>
                 {lastPersonaTurn.auto_generated && (
@@ -566,6 +580,58 @@ export default async function LearnCourseSessionPage({
         </div>
       )}
 
+      <h2 className="mt-8 text-sm font-medium text-ink">これまでのやり取り</h2>
+      <div className="mt-2 space-y-4">
+        {turns.map((turn) => {
+          if (turn.speaker_type === "student") {
+            return (
+              <div key={turn.id} className="text-right">
+                <div className="inline-block max-w-[88%] rounded-lg bg-accent-fill px-4 py-2 text-left text-sm leading-7 text-white">
+                  {turn.source_kind === "handwriting" && (
+                    <p className="mb-1 text-xs text-ink-faint">[手書きから変換]</p>
+                  )}
+                  {turn.source_kind === "audio" && <p className="mb-1 text-xs text-ink-faint">[音声から変換]</p>}
+                  <p className="whitespace-pre-wrap">{turn.content}</p>
+                </div>
+              </div>
+            );
+          }
+
+          const avatarPath = turn.persona_id ? personaAvatarPaths.get(turn.persona_id) : undefined;
+          const personaName = turn.persona_id ? (personaNames.get(turn.persona_id) ?? "擬似メンバー") : "擬似メンバー";
+          return (
+            <div key={turn.id} className={`flex items-end gap-2 ${toneClass(turn.persona_id ? personaTones[turn.persona_id] : undefined)}`}>
+              {avatarPath ? (
+                <img src={avatarPath} alt="" width={40} height={40} className="h-9 w-9 shrink-0 rounded-full" />
+              ) : (
+                <span
+                  aria-hidden="true"
+                  className="persona-chip flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold"
+                >
+                  {personaName.slice(0, 1)}
+                </span>
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="persona-name mb-1 text-xs font-semibold">
+                  {personaName}(AI)
+                  {turn.auto_generated && <span className="ml-1 text-ink-faint">・自動継続</span>}
+                </p>
+                <div className="persona-bubble inline-block rounded-lg px-4 py-2 text-left text-sm leading-7 text-ink">
+                  {turn.source_kind === "handwriting" && (
+                    <p className="mb-1 text-xs text-ink-faint">[手書きから変換]</p>
+                  )}
+                  {turn.source_kind === "audio" && <p className="mb-1 text-xs text-ink-faint">[音声から変換]</p>}
+                  <p className="whitespace-pre-wrap">{turn.content}</p>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+        {turns.length === 0 && (
+          <p className="text-sm text-ink-muted">まだ発言がありません。下から発言してみましょう。</p>
+        )}
+      </div>
+
       {inputLocked ? (
         <p className="mt-6 rounded-md border border-line bg-surface px-4 py-3 text-sm text-ink-muted">
           {ended
@@ -577,49 +643,55 @@ export default async function LearnCourseSessionPage({
           courseId={courseId}
           turnCount={turns.length}
           personaAvatars={Object.fromEntries(personaAvatarPaths)}
+          personaTones={personaTones}
         />
       )}
 
       {/* 議論が終わった後は、手書き・音声での発言も受け付けない(終了後は、まとめと成果の提出だけ) */}
       {!inputLocked && (
         <>
-      <form action={boundUploadHandwritingAction} className="mt-3 flex flex-wrap items-center gap-2">
-        <label className="text-xs text-ink-muted">
-          手書きで発言する(F12):
-          <input
-            name="image"
-            type="file"
-            accept="image/*"
-            required
-            className="ml-2 max-w-[10rem] text-xs text-ink"
-          />
-        </label>
-        <SubmitButton
-          pendingText="読み取り中…"
-          className="shrink-0 rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface disabled:opacity-50"
-        >
-          画像を読み取る
-        </SubmitButton>
-      </form>
+      <details className="mt-3 rounded-md border border-line px-4 py-3 text-sm">
+        <summary className="cursor-pointer text-xs font-medium text-ink-muted">
+          手書き・音声で発言する(F12/F13)
+        </summary>
+        <form action={boundUploadHandwritingAction} className="mt-3 flex flex-wrap items-center gap-2">
+          <label className="text-xs text-ink-muted">
+            手書きで発言する(F12)
+            <input
+              name="image"
+              type="file"
+              accept="image/*"
+              required
+              className="ml-2 max-w-[14rem] text-xs text-ink-muted file:mr-2 file:cursor-pointer file:rounded-md file:border file:border-line file:bg-surface-raised file:px-2.5 file:py-1 file:text-xs file:font-medium file:text-ink hover:file:bg-surface"
+            />
+          </label>
+          <SubmitButton
+            pendingText="読み取り中…"
+            className="shrink-0 rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface disabled:opacity-50"
+          >
+            画像を読み取る
+          </SubmitButton>
+        </form>
 
-      <form action={boundUploadAudioAction} className="mt-3 flex flex-wrap items-center gap-2">
-        <label className="text-xs text-ink-muted">
-          音声で発言する(F13):
-          <input
-            name="audio"
-            type="file"
-            accept="audio/*"
-            required
-            className="ml-2 max-w-[10rem] text-xs text-ink"
-          />
-        </label>
-        <SubmitButton
-          pendingText="文字起こし中…"
-          className="shrink-0 rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface disabled:opacity-50"
-        >
-          音声を文字起こしする
-        </SubmitButton>
-      </form>
+        <form action={boundUploadAudioAction} className="mt-3 flex flex-wrap items-center gap-2">
+          <label className="text-xs text-ink-muted">
+            音声で発言する(F13)
+            <input
+              name="audio"
+              type="file"
+              accept="audio/*"
+              required
+              className="ml-2 max-w-[14rem] text-xs text-ink-muted file:mr-2 file:cursor-pointer file:rounded-md file:border file:border-line file:bg-surface-raised file:px-2.5 file:py-1 file:text-xs file:font-medium file:text-ink hover:file:bg-surface"
+            />
+          </label>
+          <SubmitButton
+            pendingText="文字起こし中…"
+            className="shrink-0 rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface disabled:opacity-50"
+          >
+            音声を文字起こしする
+          </SubmitButton>
+        </form>
+      </details>
 
       {pendingAudioUploads.length > 0 && (
         <ul className="mt-4 space-y-3">
@@ -760,58 +832,6 @@ export default async function LearnCourseSessionPage({
       )}
         </>
       )}
-
-      <h2 className="mt-8 text-xs font-medium text-ink-faint">これまでのやり取り</h2>
-      <div className="mt-2 space-y-4">
-        {turns.map((turn) => {
-          if (turn.speaker_type === "student") {
-            return (
-              <div key={turn.id} className="text-right">
-                <div className="inline-block max-w-[75%] rounded-lg bg-accent-fill px-4 py-2 text-left text-sm text-white">
-                  {turn.source_kind === "handwriting" && (
-                    <p className="mb-1 text-xs text-ink-faint">[手書きから変換]</p>
-                  )}
-                  {turn.source_kind === "audio" && <p className="mb-1 text-xs text-ink-faint">[音声から変換]</p>}
-                  <p className="whitespace-pre-wrap">{turn.content}</p>
-                </div>
-              </div>
-            );
-          }
-
-          const avatarPath = turn.persona_id ? personaAvatarPaths.get(turn.persona_id) : undefined;
-          const personaName = turn.persona_id ? (personaNames.get(turn.persona_id) ?? "擬似メンバー") : "擬似メンバー";
-          return (
-            <div key={turn.id} className="flex items-end gap-2">
-              {avatarPath ? (
-                <img src={avatarPath} alt="" width={40} height={40} className="h-10 w-10 shrink-0 rounded-full" />
-              ) : (
-                <span
-                  aria-hidden="true"
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-surface text-xs text-ink-faint"
-                >
-                  ?
-                </span>
-              )}
-              <div className="max-w-[75%]">
-                <p className="mb-1 text-xs font-medium text-ink-muted">
-                  {personaName}(AI)
-                  {turn.auto_generated && <span className="ml-1 text-ink-faint">・自動継続</span>}
-                </p>
-                <div className="inline-block rounded-lg bg-surface px-4 py-2 text-left text-sm text-ink">
-                  {turn.source_kind === "handwriting" && (
-                    <p className="mb-1 text-xs text-ink-faint">[手書きから変換]</p>
-                  )}
-                  {turn.source_kind === "audio" && <p className="mb-1 text-xs text-ink-faint">[音声から変換]</p>}
-                  <p className="whitespace-pre-wrap">{turn.content}</p>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-        {turns.length === 0 && (
-          <p className="text-sm text-ink-muted">まだ発言がありません。下から発言してみましょう。</p>
-        )}
-      </div>
 
       <div className="mt-12 border-t border-line pt-8" id="submit-outcome">
         <h2 className="text-sm font-medium text-ink">

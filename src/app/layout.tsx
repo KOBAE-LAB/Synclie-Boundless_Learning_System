@@ -50,8 +50,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         {viewingAsStudent && (
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-warn bg-warn-soft px-4 py-2 text-sm text-warn">
             <span>
-              <strong>学習者として表示中</strong>(テスト学習者としての動作確認です。ここでの発言・提出は、
-              あなた自身のデータとは別に記録されます)
+              <strong>学習者として表示中</strong>(動作確認。発言・提出は、テスト学習者のデータとして記録されます)
             </span>
             <form action={stopStudentViewAction}>
               <button
