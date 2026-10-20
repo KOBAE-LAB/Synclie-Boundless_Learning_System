@@ -17,6 +17,7 @@ import { openai, MODEL_PERSONA } from "./openai";
 import { extractPartialSceneMessages } from "./partial-json";
 import { isPersonaMentioned } from "@/lib/persona-mention";
 import type { ChatTurn } from "./persona";
+import { THINKING_DEPTH_GUIDANCE, type ThinkingDepth } from "@/lib/persona-traits";
 
 export const LIVELINESS = {
   quiet: { label: "控えめ(最大2発言)", maxMessages: 2 },
@@ -39,6 +40,8 @@ export interface ScenePersona {
   speakingFrequency: string;
   teachingDegree: string;
   interventionCondition: string;
+  // 考え方の深さ(発言の中身と文量に効く)。返答のテンポは画面での出方だけの設定なので、ここには含めない
+  thinkingDepth: ThinkingDepth;
 }
 
 export interface SceneMessage {
@@ -58,6 +61,8 @@ export interface SceneParams {
   calledOut: string[];
   // 学習者が少し黙っている間の、擬似メンバーからの継続の場面か
   silence?: boolean;
+  // 授業の設定(推論の深さ)。未指定ならモデルの既定。
+  reasoningEffort?: "low" | "high";
 }
 
 export function buildSceneSystemPrompt(params: SceneParams): string {
@@ -70,7 +75,8 @@ export function buildSceneSystemPrompt(params: SceneParams): string {
 - 目標: ${p.goal || "(未設定)"}
 - 発言頻度: ${p.speakingFrequency || "普通"}
 - 教える度合い: ${p.teachingDegree || "問い返すのみ"}
-- 介入の条件: ${p.interventionCondition || "(特になし)"}`,
+- 介入の条件: ${p.interventionCondition || "(特になし)"}
+- 考え方: ${THINKING_DEPTH_GUIDANCE[p.thinkingDepth]}`,
     )
     .join("\n\n");
 
@@ -105,7 +111,7 @@ ${params.turnGuidance ? `\n# 今回の発言に対する補足\n${params.turnGui
 - 学習者の意見にも、他のメンバーの意見にも、根拠なく同調しない。「新しい根拠」または「具体的な事例」が示された時に限り、立場を少し譲歩してよい。それ以外は、自分の立場を保つ。
 - 答えを直接教えず、学習者自身に考えさせる問いを混ぜる(「教える度合い」が許す範囲で)。
 - 履歴で、自分や他のメンバーが既に述べた内容(同じ問い・同じ指摘)を、言い換えて繰り返さない。新しい観点・根拠・具体的な問いを必ず加える。
-- 各発言は、そのメンバーの口調で、2〜3文程度に収める。
+- 各発言は、そのメンバーの口調で、そのメンバーの「考え方」に合った長さ(直感的なら短く、じっくり論理的なら少し丁寧に)に収める。
 
 # 出力
 - speaker: 上の「参加している擬似メンバー」の名前そのまま
@@ -170,6 +176,7 @@ export async function askScene(
     model: MODEL_PERSONA,
     input: [{ role: "system", content: buildSceneSystemPrompt(params) }, ...history],
     text: { format: zodTextFormat(SceneSchema, "persona_scene") },
+    ...(params.reasoningEffort ? { reasoning: { effort: params.reasoningEffort } } : {}),
   });
 
   let accumulated = "";

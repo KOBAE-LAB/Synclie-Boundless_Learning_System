@@ -11,7 +11,7 @@ import { recognizeHandwriting } from "@/lib/ai/handwriting";
 import { transcribeAudio } from "@/lib/ai/audio";
 import { AUTO_CONTINUE_CAP } from "@/lib/discussion-tempo";
 import { COOLDOWN_AFTER_DISMISS_TURNS } from "@/lib/learn/session-end";
-import { buildCourseContext } from "@/lib/courses/settings";
+import { buildCourseContext, reasoningEffortFor } from "@/lib/courses/settings";
 import { askScene } from "@/lib/ai/persona-scene";
 import {
   HISTORY_LIMIT,
@@ -44,7 +44,7 @@ export async function autoContinueDiscussionAction(courseId: string) {
 
   const { data: course } = await admin
     .from("courses")
-    .select("auto_discussion_tempo_seconds, title, objective, learner_level, discussion_style")
+    .select("auto_discussion_tempo_seconds, title, objective, learner_level, discussion_style, reasoning_depth")
     .eq("id", courseId)
     .maybeSingle();
   if (!course) return;
@@ -140,6 +140,7 @@ export async function autoContinueDiscussionAction(courseId: string) {
           maxMessages: 2,
           calledOut: [],
           silence: true,
+          reasoningEffort: reasoningEffortFor(course.reasoning_depth),
         },
         history,
         toScenePersona(persona),
@@ -149,7 +150,7 @@ export async function autoContinueDiscussionAction(courseId: string) {
         personaIdsToSave.push(m.personaId);
       }
     } else {
-      const result = await askPersona(personaProfile, history);
+      const result = await askPersona(personaProfile, history, reasoningEffortFor(course.reasoning_depth));
       replies = [result.reply];
       personaIdsToSave.push(persona.id);
     }

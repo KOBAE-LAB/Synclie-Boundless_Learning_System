@@ -24,6 +24,7 @@ import {
   LEARNER_LEVELS,
   TIME_LIMIT_OPTIONS,
   TIME_LIMIT_POLICIES,
+  REASONING_DEPTHS,
 } from "@/lib/courses/settings";
 import { LIVELINESS } from "@/lib/ai/persona-scene";
 
@@ -90,7 +91,7 @@ export default async function CourseDetailPage({
   const { data: course } = await admin
     .from("courses")
     .select(
-      "id, title, subject, owner_teacher_id, join_code, auto_discussion_tempo_seconds, auto_discussion_affects_evaluation, objective, learner_level, discussion_style, ai_member_count, discussion_liveliness, time_limit_minutes, time_limit_policy, time_limit_affects_evaluation, ai_close_suggestion",
+      "id, title, subject, owner_teacher_id, join_code, auto_discussion_tempo_seconds, auto_discussion_affects_evaluation, objective, learner_level, discussion_style, ai_member_count, discussion_liveliness, reasoning_depth, time_limit_minutes, time_limit_policy, time_limit_affects_evaluation, ai_close_suggestion",
     )
     .eq("id", courseId)
     .maybeSingle();
@@ -257,6 +258,30 @@ export default async function CourseDetailPage({
             学習者の発言のあと、擬似メンバーが続けて何発言まで話してよいかの上限です(擬似メンバーが2人以上いる
             授業のとき)。誰が話すかは、各メンバーの性格・視点・発言頻度・介入の条件から、AIが場面ごとに
             決めます。メンバー同士で議論することもあり、最後は学習者に話を返します。
+          </p>
+        </div>
+
+        <div className="space-y-1 border-t border-line pt-4">
+          <label htmlFor="course-reasoning" className="text-sm font-medium text-ink">
+            AIの推論の深さ
+          </label>
+          <select
+            id="course-reasoning"
+            name="reasoningDepth"
+            defaultValue={course.reasoning_depth ?? "standard"}
+            className="w-full max-w-md rounded-md border border-line bg-surface-raised px-3 py-2 text-sm"
+          >
+            {Object.entries(REASONING_DEPTHS).map(([key, label]) => (
+              <option key={key} value={key}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-ink-muted">
+            擬似メンバーの発言を作るAIが、どれだけ深く考えるかの設定です。深いほど的確になる可能性がありますが、
+            返答が遅く、費用も増えます。浅くしても、実際の速さは思ったほど変わらないことがあります。
+            論証評価(同調の計測)や、議論のまとめなどには適用されません(いつも同じ条件で計測するため)。
+            ペルソナごとの個性は、各ペルソナの「考え方の深さ」「返答のテンポ」で設定します。
           </p>
         </div>
 

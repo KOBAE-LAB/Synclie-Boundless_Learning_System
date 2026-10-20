@@ -83,9 +83,11 @@ export interface PersonaReply {
   conceded: boolean;
 }
 
+// reasoningEffort: 授業の設定(推論の深さ)。未指定ならモデルの既定。
 export async function askPersona(
   persona: PersonaProfile,
   history: ChatTurn[],
+  reasoningEffort?: "low" | "high",
 ): Promise<PersonaReply> {
   const response = await openai.responses.parse({
     model: MODEL_PERSONA,
@@ -94,6 +96,7 @@ export async function askPersona(
       ...history,
     ],
     text: { format: zodTextFormat(PersonaReplySchema, "persona_reply") },
+    ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
   });
 
   return response.output_parsed as PersonaReply;
@@ -108,6 +111,7 @@ export async function askPersonaStream(
   persona: PersonaProfile,
   history: ChatTurn[],
   onReplyText: (replySoFar: string) => void,
+  reasoningEffort?: "low" | "high",
 ): Promise<PersonaReply> {
   const stream = openai.responses.stream({
     model: MODEL_PERSONA,
@@ -116,6 +120,7 @@ export async function askPersonaStream(
       ...history,
     ],
     text: { format: zodTextFormat(PersonaReplySchema, "persona_reply") },
+    ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
   });
 
   let accumulated = "";

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCourseContext, parseCourseSettingsInput } from "./settings";
+import { buildCourseContext, parseCourseSettingsInput, reasoningEffortFor } from "./settings";
 
 describe("parseCourseSettingsInput", () => {
   const base = { objective: "", learnerLevel: "", discussionStyle: "", aiMemberCount: "" };
@@ -78,6 +78,19 @@ describe("parseCourseSettingsInput", () => {
     expect(parse("normal")).toBe("normal");
     expect(parse("wild")).toBe("normal");
     expect(parse()).toBe("normal");
+  });
+
+  it("推論の深さ: fast/deepだけを受け付け、それ以外は標準。OpenAIの指定は標準なら出さない", () => {
+    const parse = (v?: string) => parseCourseSettingsInput({ ...base, reasoningDepth: v }).reasoning_depth;
+    expect(parse("fast")).toBe("fast");
+    expect(parse("deep")).toBe("deep");
+    expect(parse("standard")).toBe("standard");
+    expect(parse("max")).toBe("standard");
+    expect(parse()).toBe("standard");
+    expect(reasoningEffortFor("fast")).toBe("low");
+    expect(reasoningEffortFor("deep")).toBe("high");
+    expect(reasoningEffortFor("standard")).toBeUndefined();
+    expect(reasoningEffortFor(null)).toBeUndefined();
   });
 
   it("AIによるまとめの提案は、明示的にオフにした時だけオフ", () => {

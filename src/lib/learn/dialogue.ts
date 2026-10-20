@@ -10,8 +10,9 @@ import { askScene, maxMessagesFor, type ScenePersona } from "@/lib/ai/persona-sc
 import { evaluateArgument } from "@/lib/ai/argument-evaluation";
 import { isEnrolled } from "@/lib/courses/enrollment";
 import { isPersonaMentioned } from "@/lib/persona-mention";
-import { buildCourseContext } from "@/lib/courses/settings";
+import { buildCourseContext, reasoningEffortFor } from "@/lib/courses/settings";
 import { judgeDiscussionState } from "@/lib/ai/discussion-wrapup";
+import { THINKING_DEPTH_GUIDANCE, normalizeThinkingDepth } from "@/lib/persona-traits";
 import { getTimeStatus, shouldJudgeDiscussionState } from "@/lib/learn/session-end";
 
 export type AdminClient = ReturnType<typeof createAdminClient>;
@@ -35,6 +36,8 @@ export interface ActivePersonaRow {
     speakingFrequency?: string;
     teachingDegree?: string;
     interventionCondition?: string;
+    thinkingDepth?: string;
+    replyTempo?: string;
   } | null;
 }
 
@@ -194,6 +197,7 @@ export function buildBehaviorNotes(rules: ActivePersonaRow["behavior_rules"]): s
   if (rules.speakingFrequency) lines.push(`- 発言頻度: ${rules.speakingFrequency}`);
   if (rules.teachingDegree) lines.push(`- 教える度合い: ${rules.teachingDegree}`);
   if (rules.interventionCondition) lines.push(`- 介入の条件: ${rules.interventionCondition}`);
+  lines.push(`- 考え方: ${THINKING_DEPTH_GUIDANCE[normalizeThinkingDepth(rules.thinkingDepth)]}`);
   return lines.length > 0 ? lines.join("\n") : undefined;
 }
 
@@ -212,6 +216,7 @@ export function toScenePersona(p: ActivePersonaRow): ScenePersona {
     speakingFrequency: p.behavior_rules?.speakingFrequency ?? "普通",
     teachingDegree: p.behavior_rules?.teachingDegree ?? "問い返すのみ",
     interventionCondition: p.behavior_rules?.interventionCondition ?? "",
+    thinkingDepth: normalizeThinkingDepth(p.behavior_rules?.thinkingDepth),
   };
 }
 
@@ -236,7 +241,7 @@ export async function postStudentMessageAndRespond(
   const [{ data: course }, session] = await Promise.all([
     admin
       .from("courses")
-      .select("id, title, objective, learner_level, discussion_style, time_limit_minutes, time_limit_policy, ai_close_suggestion, discussion_liveliness")
+      .select("id, title, objective, learner_level, discussion_style, time_limit_minutes, time_limit_policy, ai_close_suggestion, discussion_liveliness, reasoning_depth")
       .eq("id", courseId)
       .maybeSingle(),
     getOrCreateSessionRow(admin, courseId, studentId),
@@ -452,6 +457,7 @@ export async function postStudentMessageAndRespond(
   }
   const replies: Reply[] = [];
   const onEvent = options.onEvent;
+  const reasoningEffort = reasoningEffortFor(course.reasoning_depth);
   const activeMembers = [persona, ...others];
 
   try {
@@ -464,6 +470,7 @@ export async function postStudentMessageAndRespond(
           turnGuidance: guidanceLines.length > 0 ? guidanceLines.join("\n") : undefined,
           maxMessages: maxMessagesFor(course.discussion_liveliness),
           calledOut: activeMembers.filter((p) => isPersonaMentioned(p.name, message)).map((p) => p.name),
+          reasoningEffort,
         },
         history,
         toScenePersona(persona),
@@ -472,8 +479,8 @@ export async function postStudentMessageAndRespond(
       for (const m of sceneMessages) replies.push({ personaId: m.personaId, text: m.reply, conceded: m.conceded });
     } else {
       const result = onEvent
-        ? await askPersonaStream(personaProfile, history, (text) => onEvent({ type: "reply", text }))
-        : await askPersona(personaProfile, history);
+        ? await askPersonaStream(personaProfile, history, (text) => onEvent({ type: "reply", text }), reasoningEffort)
+        : await askPersona(personaProfile, history, reasoningEffort);
       replies.push({ personaId: persona.id, text: result.reply, conceded: result.conceded });
     }
   } catch (err) {

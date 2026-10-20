@@ -176,6 +176,7 @@ export async function updateCourseSettingsAction(courseId: string, formData: For
     discussionStyle: String(formData.get("discussionStyle") ?? ""),
     aiMemberCount: String(formData.get("aiMemberCount") ?? ""),
     discussionLiveliness: String(formData.get("discussionLiveliness") ?? ""),
+    reasoningDepth: String(formData.get("reasoningDepth") ?? ""),
     timeLimitMinutes: String(formData.get("timeLimitMinutes") ?? ""),
     timeLimitPolicy: String(formData.get("timeLimitPolicy") ?? ""),
     timeLimitAffectsEvaluation: formData.get("timeLimitAffectsEvaluation") === "on",

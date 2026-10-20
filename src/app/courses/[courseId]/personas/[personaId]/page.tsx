@@ -15,6 +15,8 @@ interface PersonaRow {
     speakingFrequency?: string;
     teachingDegree?: string;
     interventionCondition?: string;
+    thinkingDepth?: string;
+    replyTempo?: string;
   } | null;
 }
 
@@ -58,6 +60,8 @@ export default async function EditPersonaPage({
     speakingFrequency: persona.behavior_rules?.speakingFrequency,
     teachingDegree: persona.behavior_rules?.teachingDegree,
     interventionCondition: persona.behavior_rules?.interventionCondition,
+    thinkingDepth: persona.behavior_rules?.thinkingDepth,
+    replyTempo: persona.behavior_rules?.replyTempo,
   };
 
   const boundUpdateAction = updatePersonaAction.bind(null, courseId, personaId);

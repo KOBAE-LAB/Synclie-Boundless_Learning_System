@@ -345,6 +345,23 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
     採用しなかった(F20の計測の精度に直結するため)。**論証評価と返答を同時に実行する案**は、
     評価結果をペルソナへの指示に使う設計(F20)を変えるため、実時間は約3〜5秒縮むが
     採用していない(研究設計の判断が要る)。
+    **ペルソナの「考え方の深さ」「返答のテンポ」と、AIの「推論の深さ」(2026-10)**: 「ペルソナの思考
+    レベルやレスポンス速度も設定で変えられるように」という要望。3つの設定を分けて持つ。
+    (1)**考え方の深さ**(ペルソナごと、直感的/標準/じっくり論理的): `personas.behavior_rules.thinkingDepth`
+    (jsonbなので列の追加は不要。未設定は標準)。**AIの素の性能は変えず**、そのペルソナの考え方・文量の
+    指示(`persona-traits.ts`の`THINKING_DEPTH_GUIDANCE`)として、場面生成と1人用のプロンプトに入る。
+    (2)**返答のテンポ**(ペルソナごと、すばやい/ふつう/ゆっくり): `behavior_rules.replyTempo`。
+    **画面での出方だけ**の個性(返答が出るまでの「入力中…」の間と、文字の出る速さ。ふつう=0.5秒+80字/秒、
+    ゆっくり=1.5秒+30字/秒)で、**AIの実際の生成速度は変わらない**。`computePacing`(純粋関数、
+    テストあり)が経過時間から表示を決め、`ChatComposer`は返答を出し終えてから画面を更新する
+    (途中で切れないように)。複数人の場面は順番に出す。サーバーに保存される会話は、テンポに
+    関係なく即座に全文が入る。(3)**AIの推論の深さ**(授業ごと、速さ優先/標準/じっくり、
+    `courses.reasoning_depth`、`0034`): 擬似メンバーの発言を作る呼び出しの`reasoning.effort`
+    (low/標準=指定なし/high)。**論証評価・議論のまとめ・状態判定には適用しない**(研究の計測や
+    補助を、いつも同じ条件にするため)。複数人の場面は1回の生成なので、人ごとには分けられない
+    (授業単位)。実測では、深さを変えても応答時間はほとんど変わらなかった(標準3.6秒/浅く2.6秒/
+    深く3.3秒)ため、「速さ優先にすれば速くなる」とは言えない。AIによるペルソナ案は、メンバーごとに
+    この2つを変えた個性で提案する。
     **学習画面のUI整理(2026-10)**: 「各ペルソナの吹き出しの色を変えたい。UI全体を見やすく・操作しやすく」
     という要望を受けて整理した。(1)**擬似メンバーごとの色**(`src/lib/persona-tones.ts`の
     `assignPersonaTones`/`toneClass`、`globals.css`の`.tone-0〜5`・`.persona-bubble`/`.persona-name`/
@@ -763,6 +780,7 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
     (参加コード、列デフォルト式で新規作成時に自動生成)と`course_enrollments`
     (course_id+student_idの組、unique制約)を追加。既存の`learning_sessions`から
     参加登録済み扱いのバックフィルも行う(詳細は8章の`learn/`の説明を参照)
+  - `0034_reasoning_depth.sql` — 擬似メンバーの発言を作るAIの推論の深さ(`courses.reasoning_depth`)
   - `0033_discussion_liveliness.sql` — 擬似メンバーの発言の活発さ(`courses.discussion_liveliness`)
   - `0032_session_end.sql` — 議論の「終わり」。`courses.time_limit_minutes`/`time_limit_policy`/
     `time_limit_affects_evaluation`/`ai_close_suggestion`、`learning_sessions.end_reason`/

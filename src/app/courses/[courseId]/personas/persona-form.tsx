@@ -1,3 +1,5 @@
+import { THINKING_DEPTHS, REPLY_TEMPOS } from "@/lib/persona-traits";
+
 // F03: ペルソナ設定フォーム。作成・編集の両方で使う共通コンポーネント。
 // 要件定義書5章「擬似メンバーの構造」の4要素のうち、知識源(授業RAG)は
 // course_id経由で暗黙に決まるため、ここではプロフィール/立場と目標/行動ルールのみ入力する。
@@ -13,6 +15,8 @@ export interface PersonaFormValues {
   speakingFrequency: string;
   teachingDegree: string;
   interventionCondition: string;
+  thinkingDepth: string;
+  replyTempo: string;
 }
 
 const inputClassName =
@@ -150,6 +154,41 @@ export function PersonaForm({
           <option value="ヒントを出す">教える度合い: ヒントを出す</option>
           <option value="直接説明する">教える度合い: 直接説明する</option>
         </select>
+        <label htmlFor="persona-thinking-depth" className="sr-only">
+          考え方の深さ
+        </label>
+        <select
+          id="persona-thinking-depth"
+          name="thinkingDepth"
+          defaultValue={v.thinkingDepth ?? "標準"}
+          className={inputClassName}
+        >
+          {THINKING_DEPTHS.map((d) => (
+            <option key={d} value={d}>
+              考え方の深さ: {d}
+              {d === "直感的" ? "(印象や経験から、短く素早く)" : d === "じっくり論理的" ? "(前提・根拠・反例を分けて、筋道立てて)" : ""}
+            </option>
+          ))}
+        </select>
+        <label htmlFor="persona-reply-tempo" className="sr-only">
+          返答のテンポ
+        </label>
+        <select
+          id="persona-reply-tempo"
+          name="replyTempo"
+          defaultValue={v.replyTempo ?? "ふつう"}
+          className={inputClassName}
+        >
+          {REPLY_TEMPOS.map((t) => (
+            <option key={t} value={t}>
+              返答のテンポ: {t}
+              {t === "すばやい" ? "(すぐ答える)" : t === "ゆっくり" ? "(間をおいて、ゆっくり答える)" : ""}
+            </option>
+          ))}
+        </select>
+        <p className="text-xs text-ink-muted">
+          「返答のテンポ」は、返答が画面に出るまでの間と、文字の出る速さの個性です(AIの実際の生成速度は変わりません)。
+        </p>
         <label htmlFor="persona-intervention-condition" className="sr-only">
           介入の条件
         </label>

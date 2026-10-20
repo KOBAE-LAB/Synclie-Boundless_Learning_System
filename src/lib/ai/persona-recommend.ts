@@ -9,6 +9,7 @@ import { z } from "zod";
 import { zodTextFormat } from "openai/helpers/zod";
 import { openai, MODEL_PERSONA } from "./openai";
 import { DISCUSSION_STYLES, isDiscussionStyle, type CourseSettings } from "@/lib/courses/settings";
+import { THINKING_DEPTHS, REPLY_TEMPOS } from "@/lib/persona-traits";
 
 export const MAX_RECOMMEND_COUNT = 5;
 const MAX_MATERIAL_CHARS = 6000;
@@ -24,6 +25,12 @@ const PersonaDraftSchema = z.object({
   speakingFrequency: z.enum(["控えめ", "普通", "積極的"]),
   teachingDegree: z.enum(["問い返すのみ", "ヒントを出す", "直接説明する"]),
   interventionCondition: z.string().describe("介入の条件(空でもよい)"),
+  thinkingDepth: z
+    .enum(THINKING_DEPTHS)
+    .describe("考え方の深さ。直感的=印象や経験から短く素早く / 標準 / じっくり論理的=前提・根拠・反例を分けて筋道立てて"),
+  replyTempo: z
+    .enum(REPLY_TEMPOS)
+    .describe("返答のテンポ(画面での出方)。すばやい=即答タイプ / ふつう / ゆっくり=間をおいて考え込むタイプ"),
   rationale: z.string().describe("教師に向けた、このペルソナを提案する理由(1〜2文)"),
 });
 
@@ -82,6 +89,7 @@ ${material || "(資料はまだ登録されていない)"}
 - ${style ? style.recommendation : "メンバーが全員同じ意見・同じ役割にならないように、立場と着眼点を変えること。"}
 - 学習者の校種・学年に合った年齢感・言葉づかいにする(小学生なら易しく、大学・社会人なら落ち着いた口調など)。
 - 立場(stancePosition)は、授業の議題に関して具体的に何を主張・重視する人かが分かる文にする。資料に基づく論点にすること。
+- 考え方の深さ(thinkingDepth)と返答のテンポ(replyTempo)は、メンバーごとに変えて個性を出す(例: 慎重な人は『じっくり論理的』+『ゆっくり』、勢いのある人は『直感的』+『すばやい』)。全員を同じ値にしない。
 - 名前は『ミライさん』『田中さん』のような短い呼び名だけにする。『〜派の』のような説明的な接頭辞は付けない。
 - 学習者の考えを代わりに出したり、答えを教えてしまう設計にしない(問い返し・ヒント中心)。
 - 既有知識・立場・目標には、「資料が未登録」「授業設定が未入力」など、この提案作業の事情を書かない。ペルソナ本人の設定として自然な文にする(資料が無い場合の既有知識は、学年相応の基本的な知識にとどめる)。

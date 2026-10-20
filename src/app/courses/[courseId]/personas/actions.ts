@@ -8,6 +8,7 @@ import { assertOwnsCourse } from "@/lib/courses/ownership";
 import { generateEvolvedRoles } from "@/lib/ai/evolved-persona";
 import { recommendPersonaAvatar, type AvatarOption } from "@/lib/ai/persona-avatar";
 import { recommendPersonaDrafts, MAX_RECOMMEND_COUNT } from "@/lib/ai/persona-recommend";
+import { normalizeReplyTempo, normalizeThinkingDepth } from "@/lib/persona-traits";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -29,6 +30,9 @@ export interface PersonaBehaviorRuleFields {
   speakingFrequency: string;
   teachingDegree: string;
   interventionCondition: string;
+  // 考え方の深さ・返答のテンポ(src/lib/persona-traits.ts)。未設定の既存ペルソナは標準・ふつう扱い
+  thinkingDepth?: string;
+  replyTempo?: string;
 }
 
 export type PersonaStatus = "draft" | "approved" | "active";
@@ -71,6 +75,8 @@ function readPersonaFormData(formData: FormData) {
     speakingFrequency: String(formData.get("speakingFrequency") ?? "普通").trim(),
     teachingDegree: String(formData.get("teachingDegree") ?? "問い返すのみ").trim(),
     interventionCondition: String(formData.get("interventionCondition") ?? "").trim(),
+    thinkingDepth: normalizeThinkingDepth(formData.get("thinkingDepth")),
+    replyTempo: normalizeReplyTempo(formData.get("replyTempo")),
   };
 
   return { name, profile, stance, behaviorRules };
@@ -451,6 +457,8 @@ export async function recommendPersonaDraftsAction(courseId: string, formData: F
         speakingFrequency: d.speakingFrequency,
         teachingDegree: d.teachingDegree,
         interventionCondition: d.interventionCondition,
+        thinkingDepth: d.thinkingDepth,
+        replyTempo: d.replyTempo,
       },
       origin_note: `AI推薦(授業設定と資料から生成): ${d.rationale}`,
     })),

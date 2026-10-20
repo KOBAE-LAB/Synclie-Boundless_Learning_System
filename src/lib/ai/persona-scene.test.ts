@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { buildSceneSystemPrompt, maxMessagesFor, normalizeSceneMessages, type ScenePersona } from "./persona-scene";
 
-const kouta: ScenePersona = { id: "p1", name: "コウタくん", role: "クラスメイト", tone: "くだけた口調", position: "光があれば夜でもできる", goal: "根拠を問う", speakingFrequency: "積極的", teachingDegree: "問い返すのみ", interventionCondition: "" };
-const nana: ScenePersona = { id: "p2", name: "ナナさん", role: "慎重な先輩", tone: "丁寧", position: "データから言える範囲だけ", goal: "条件を確かめさせる", speakingFrequency: "控えめ", teachingDegree: "ヒントを出す", interventionCondition: "根拠なく結論を出したとき" };
+const kouta: ScenePersona = { id: "p1", name: "コウタくん", role: "クラスメイト", tone: "くだけた口調", position: "光があれば夜でもできる", goal: "根拠を問う", speakingFrequency: "積極的", teachingDegree: "問い返すのみ", interventionCondition: "", thinkingDepth: "直感的" };
+const nana: ScenePersona = { id: "p2", name: "ナナさん", role: "慎重な先輩", tone: "丁寧", position: "データから言える範囲だけ", goal: "条件を確かめさせる", speakingFrequency: "控えめ", teachingDegree: "ヒントを出す", interventionCondition: "根拠なく結論を出したとき", thinkingDepth: "じっくり論理的" };
 const base = { personas: [kouta, nana], materialText: "資料", maxMessages: 3, calledOut: [] as string[] };
 
 describe("maxMessagesFor", () => {
@@ -21,6 +21,12 @@ describe("buildSceneSystemPrompt", () => {
     for (const word of ["コウタくん", "ナナさん", "光があれば夜でもできる", "根拠なく結論を出したとき", "控えめ", "積極的"]) {
       expect(prompt).toContain(word);
     }
+  });
+
+  it("メンバーごとの考え方の深さ(直感的・じっくり論理的)を、発言の中身・長さの指示として渡す", () => {
+    const prompt = buildSceneSystemPrompt(base);
+    expect(prompt).toContain("直感的に考えるタイプ");
+    expect(prompt).toContain("じっくり論理的に考えるタイプ");
   });
 
   it("視点から自然に口を出す・黙ってよい・AI同士の議論も可・最後は学習者に戻す、を指示する", () => {

@@ -39,6 +39,23 @@ export const DISCUSSION_STYLES = {
 
 export type DiscussionStyle = keyof typeof DISCUSSION_STYLES;
 
+// 擬似メンバーの発言を作るAIの「推論の深さ」。論証評価などの計測用の呼び出しには適用しない。
+// 深さを変えても、実際の応答速度は、思ったほど変わらないことがある(目安)。
+export const REASONING_DEPTHS = {
+  fast: "速さ優先(浅く考える)",
+  standard: "標準",
+  deep: "じっくり(深く考える。遅く、費用も増える)",
+} as const;
+export type ReasoningDepth = keyof typeof REASONING_DEPTHS;
+export type ReasoningEffort = "low" | "high";
+
+/** 授業の設定から、OpenAIに渡す reasoning.effort を決める(標準なら指定しない=モデルの既定)。 */
+export function reasoningEffortFor(depth: string | null | undefined): ReasoningEffort | undefined {
+  if (depth === "fast") return "low";
+  if (depth === "deep") return "high";
+  return undefined;
+}
+
 // 議論の終わり(制限時間)。最初の発言からの経過で数える。
 export const TIME_LIMIT_OPTIONS = [10, 15, 20, 30, 45, 60, 90, 120] as const;
 export const TIME_LIMIT_POLICIES = {
@@ -60,6 +77,7 @@ export interface CourseSettings {
   discussion_style?: string | null;
   ai_member_count?: number | null;
   discussion_liveliness?: string | null;
+  reasoning_depth?: string | null;
   time_limit_minutes?: number | null;
   time_limit_policy?: string | null;
   time_limit_affects_evaluation?: boolean | null;
@@ -76,6 +94,8 @@ export function parseCourseSettingsInput(input: {
   aiMemberCount: string;
   // 擬似メンバーの発言の活発さ(省略=普通)
   discussionLiveliness?: string;
+  // 擬似メンバーの推論の深さ(省略=標準)
+  reasoningDepth?: string;
   // 議論の終わり(省略すると、未設定=制限なし・超過しても続けられる・評価に影響しない・AIが提案する)
   timeLimitMinutes?: string;
   timeLimitPolicy?: string;
@@ -87,6 +107,7 @@ export function parseCourseSettingsInput(input: {
   discussion_style: DiscussionStyle | null;
   ai_member_count: number | null;
   discussion_liveliness: "quiet" | "normal" | "lively";
+  reasoning_depth: ReasoningDepth;
   time_limit_minutes: number | null;
   time_limit_policy: TimeLimitPolicyKey;
   time_limit_affects_evaluation: boolean;
@@ -103,6 +124,7 @@ export function parseCourseSettingsInput(input: {
     ai_member_count: Number.isInteger(count) && count >= 1 && count <= 5 ? count : null,
     discussion_liveliness:
       input.discussionLiveliness === "quiet" || input.discussionLiveliness === "lively" ? input.discussionLiveliness : "normal",
+    reasoning_depth: input.reasoningDepth === "fast" || input.reasoningDepth === "deep" ? input.reasoningDepth : "standard",
     time_limit_minutes: (TIME_LIMIT_OPTIONS as readonly number[]).includes(limit) ? limit : null,
     time_limit_policy: input.timeLimitPolicy === "hard" ? "hard" : "soft",
     // 制限時間が無い授業で、評価への影響だけが立つことは無い

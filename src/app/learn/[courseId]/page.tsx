@@ -11,6 +11,7 @@ import { AutoDiscussionTimer } from "@/components/auto-discussion-timer";
 import { SessionControls } from "@/components/session-controls";
 import { getTimeStatus } from "@/lib/learn/session-end";
 import { assignPersonaTones, toneClass } from "@/lib/persona-tones";
+import { normalizeReplyTempo, type ReplyTempo } from "@/lib/persona-traits";
 import {
   submitOutcomeAction,
   generateFeedbackAction,
@@ -190,7 +191,7 @@ export default async function LearnCourseSessionPage({
     // 解決に使うため、ステータスを問わず全部まとめて1回で引く。授業のペルソナは数件程度)。
     admin
       .from("personas")
-      .select("id, name, avatar_id, status, created_at")
+      .select("id, name, avatar_id, status, created_at, behavior_rules")
       .eq("course_id", courseId)
       .order("created_at", { ascending: true }),
     // アバター候補は全授業共通で十数件しかないため、必要分を絞らず全部引く(往復を1回減らせる)。
@@ -303,6 +304,13 @@ export default async function LearnCourseSessionPage({
   const personaAvatarPaths = new Map<string, string>();
   // 擬似メンバーごとの色(吹き出し・映像タイル・名前)。作成順で割り当てるので、いつ見ても同じ人は同じ色。
   const personaTones = assignPersonaTones((coursePersonaRows ?? []).map((p) => p.id));
+  // 返答のテンポ(すばやい/ふつう/ゆっくり)。返答が画面に出るまでの間と、文字の出る速さの個性
+  const personaTempos: Record<string, ReplyTempo> = Object.fromEntries(
+    (coursePersonaRows ?? []).map((p) => [
+      p.id,
+      normalizeReplyTempo((p.behavior_rules as { replyTempo?: string } | null)?.replyTempo),
+    ]),
+  );
   const activePersonas = (coursePersonaRows ?? []).filter((p) => p.status === "active");
   const activePersonaCount = activePersonas.length;
   const avatarPathById = new Map((avatarOptionRows ?? []).map((o) => [o.id, o.file_path]));
@@ -645,6 +653,7 @@ export default async function LearnCourseSessionPage({
           turnCount={turns.length}
           personaAvatars={Object.fromEntries(personaAvatarPaths)}
           personaTones={personaTones}
+          personaTempos={personaTempos}
         />
       )}
 

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { toneClass } from "@/lib/persona-tones";
+import { computePacing, type ReplyTempo } from "@/lib/persona-traits";
 
 /**
  * 学習画面の発言入力欄。送信した瞬間に自分の発言を画面に出し、擬似メンバーの返答を
@@ -34,6 +35,7 @@ export function ChatComposer({
   turnCount,
   personaAvatars,
   personaTones,
+  personaTempos,
 }: {
   courseId: string;
   // サーバーが描画した「これまでのやり取り」の件数。増えたら、送信した分が反映されたとみなして
@@ -43,6 +45,8 @@ export function ChatComposer({
   personaAvatars: Record<string, string>;
   // 擬似メンバーのID → 色の番号(吹き出しの色を、発言済みの履歴と同じにそろえるため)
   personaTones: Record<string, number>;
+  // 擬似メンバーのID → 返答のテンポ(返答が出るまでの間と、文字の出る速さの個性)
+  personaTempos: Record<string, ReplyTempo>;
 }) {
   const router = useRouter();
   // ページの読み込み(ハイドレーション)が終わるまでは送信させない。終わる前にフォームが
@@ -62,8 +66,15 @@ export function ChatComposer({
   const [reply, setReply] = useState("");
   const [scene, setScene] = useState<LiveMessage[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // 返答のテンポ(ペルソナごとの「間」と文字の出る速さ)で、画面に出す内容を決めるための時計
+  const [streamDone, setStreamDone] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const paceStartRef = useRef<number | null>(null);
 
   function clearLive() {
+    paceStartRef.current = null;
+    setElapsed(0);
+    setStreamDone(false);
     setPhase("idle");
     setSentMessage(null);
     setPersona(null);
@@ -96,6 +107,9 @@ export function ChatComposer({
     if (!message || phase !== "idle") return;
 
     baseCount.current = turnCount;
+    paceStartRef.current = null;
+    setElapsed(0);
+    setStreamDone(false);
     setError(null);
     setSentMessage(message);
     setPersona(null);
@@ -143,15 +157,14 @@ export function ChatComposer({
         }
       }
 
-      // 発言は保存済み(返答の生成で失敗した場合も含む)なので、エラーでも画面は最新にする。
+      // 発言は保存済み(返答の生成で失敗した場合も含む)。画面の更新は、返答を最後まで
+      // 出し終えてから行う(下の effect。ペルソナごとのテンポでの表示が、途中で切れないように)。
       if (streamError) setError(streamError);
-      setPhase("refreshing");
-      router.refresh();
+      setStreamDone(true);
     } catch {
       // 通信が途中で切れた場合も、サーバー側は処理を最後まで続けて保存するので、再取得して見せる。
       setError("通信が途中で切れました。少し待つと、続きが表示されることがあります。");
-      setPhase("refreshing");
-      router.refresh();
+      setStreamDone(true);
     }
   }
 
@@ -163,6 +176,38 @@ export function ChatComposer({
       : reply !== ""
         ? [{ personaId: persona?.id ?? "", name: persona?.name ?? "擬似メンバー", text: reply }]
         : [];
+
+  // ペルソナごとの返答のテンポ: 順番に、「入力中…」の間をおいてから、その人の速さで文字を出す。
+  const pacing = computePacing(
+    bubbles.map((b) => ({ text: b.text, tempo: personaTempos[b.personaId] ?? "ふつう" })),
+    elapsed,
+  );
+  const typingBubble = pacing.typingIndex !== null ? bubbles[pacing.typingIndex] : null;
+
+  // 最初の返答が届いた時点から、テンポの時計を動かす。
+  const hasBubbles = bubbles.length > 0;
+  useEffect(() => {
+    if (hasBubbles && paceStartRef.current === null) paceStartRef.current = Date.now();
+  }, [hasBubbles]);
+  useEffect(() => {
+    if (phase !== "sending") return;
+    const timer = setInterval(() => {
+      if (paceStartRef.current !== null) setElapsed(Date.now() - paceStartRef.current);
+    }, 60);
+    return () => clearInterval(timer);
+  }, [phase]);
+
+  // 返答を最後まで出し終えたら(通信も終わっていれば)、サーバーが描画した会話に切り替える。
+  const pacingFinished = pacing.finished;
+  useEffect(() => {
+    if (phase !== "sending" || !streamDone || !pacingFinished) return;
+    // 状態の更新は、タイマーのコールバックの中で行う(effectの本体で同期的に更新しない)。
+    const timer = setTimeout(() => {
+      setPhase("refreshing");
+      router.refresh();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [phase, streamDone, pacingFinished, router]);
 
   // 入力欄の固定表示(sticky)は、親の枠の中でしか効かない。小さな枠で包むと、枠の外側に
   // 出られず固定されなくなるため、枠を作らずに、ページ全体の枠の直下に並べる(Fragment)。
@@ -188,6 +233,8 @@ export function ChatComposer({
           )}
 
           {bubbles.map((bubble, index) => {
+            const visibleChars = pacing.shown[index] ?? 0;
+            if (visibleChars === 0) return null; // まだ順番が来ていない/「入力中…」の間
             const avatarPath = personaAvatars[bubble.personaId];
             return (
               <div key={index} className={`flex items-end gap-2 ${toneClass(personaTones[bubble.personaId])}`}>
@@ -205,14 +252,28 @@ export function ChatComposer({
                 <div className="min-w-0 flex-1">
                   <p className="persona-name mb-1 text-xs font-semibold">{bubble.name}(AI)</p>
                   <div className="persona-bubble inline-block rounded-lg px-4 py-2 text-left text-sm leading-7 text-ink">
-                    <p className="whitespace-pre-wrap">{bubble.text}</p>
+                    <p className="whitespace-pre-wrap">{bubble.text.slice(0, visibleChars)}</p>
                   </div>
                 </div>
               </div>
             );
           })}
 
-          {phase === "sending" && bubbles.length > 0 && (
+          {typingBubble && (
+            <p
+              className={`flex items-center gap-1.5 pl-11 text-xs text-ink-muted ${toneClass(personaTones[typingBubble.personaId])}`}
+              role="status"
+            >
+              <span className="persona-name font-semibold">{typingBubble.name}</span>が入力中
+              <span className="flex items-center gap-0.5" aria-hidden="true">
+                <span className="thinking-dot h-1 w-1 rounded-full bg-current" />
+                <span className="thinking-dot h-1 w-1 rounded-full bg-current" />
+                <span className="thinking-dot h-1 w-1 rounded-full bg-current" />
+              </span>
+            </p>
+          )}
+
+          {phase === "sending" && bubbles.length > 0 && !typingBubble && !streamDone && (
             <span className="flex items-center gap-0.5 pl-11 text-ink-faint" aria-hidden="true">
               <span className="thinking-dot h-1 w-1 rounded-full bg-current" />
               <span className="thinking-dot h-1 w-1 rounded-full bg-current" />
