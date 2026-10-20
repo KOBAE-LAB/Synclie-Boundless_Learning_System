@@ -269,7 +269,13 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
   - `src/app/consent/` — F16(同意・データ管理)。学習者が同意していない/撤回済みの場合、
     `src/lib/consent.ts`の`requireConsent()`がここへリダイレクトする
     (`/learn`, `/learn/[courseId]`, `/learn/[courseId]/portfolio`から呼んでいる)。
-    同意すると`consent_records`に記録され`/learn`に戻る
+    同意すると`consent_records`に記録され`/learn`に戻る。
+    **同意画面は、データの利用に加えて「AIの利用について」を説明する**(AIを使う場面・AIに送る内容(氏名・メールは送らない)・
+    OpenAI(米国)へ送るため国外で処理されうること・OpenAIの扱い・AIの誤りと評価の最終判断・入力しないでほしいこと)。
+    プライバシーポリシー(`privacy/`)の3章と内容をそろえてある(**OpenAIでの保管・学習への利用の記述は、OpenAIの現在の方針に
+    基づく。運営者が公開前に最新の公式の案内で確認すること**)。説明文を大きく変えたら`src/lib/consent.ts`の
+    `CONSENT_TEXT_UPDATED_AT`を新しくする(それより前に同意した学習者は、`/learn`に入る前に再同意になる。
+    F10・教師向けの指導のヒントは、撤回していない同意を対象にしていて、再同意の有無までは見ていない)
   - `src/app/learn/portfolio/` — ポートフォリオ(学習者本人の「学びのデータベース」。EduDX方針の
     「学習者が所有し持ち出せる学びの記録」)。全授業を横断し、成果(`submissions`)に、議論のまとめ
     (`learning_sessions.closing_summary`)・AIフィードバック・AIジャッジ・振り返りを束ねて時系列表示する
@@ -840,6 +846,7 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
     (参加コード、列デフォルト式で新規作成時に自動生成)と`course_enrollments`
     (course_id+student_idの組、unique制約)を追加。既存の`learning_sessions`から
     参加登録済み扱いのバックフィルも行う(詳細は8章の`learn/`の説明を参照)
+  - `0041_revoke_public_api_access.sql` — 公開API(anon/authenticated)の権限を外す(RLSの二重の防壁。詳細は「認証まわりの注意」)
   - `0040_series_management.sql` — `course_series.planned_lessons`(全回数)・`fiscal_year`(年度)・`archived_at`(アーカイブ)
   - `0039_course_series.sql` — 授業シリーズ(`course_series`)・`series_enrollments`・`courses.series_id/lesson_no/released`。既存の授業は同名シリーズの第1回に移し、`course_enrollments`・`courses.join_code`は廃止
   - `0038_step_video_file.sql` — インプットのステップに動画ファイル(`course_steps.video_path`)
@@ -1002,15 +1009,18 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
 
 ### 認証まわりの注意(重要・要フォローアップ)
 
-- RLS(Row Level Security)は`0018_enable_rls.sql`で全テーブル有効化済み。ただし**ポリシーは
-  まだ無い**。アプリはservice roleキー(`createAdminClient()`、RLSを常にバイパスする)だけで
-  DBにアクセスしており、教師専用ページは`src/lib/auth/session.ts`の`requireRole()`による
-  アプリ側のロールチェックで保護している。ポリシーが無い状態でRLSを有効にしているのは、
-  「anon/authenticatedキーが漏れても何も読み書きできない」ようにする最低限の保険であり、
-  本番投入前には別途、`courses.owner_teacher_id` / `course_materials.uploaded_by` /
-  `student_id`ベースのポリシーを追加すること。
-  **新しいテーブルを追加するたびに、そのマイグレーションで`alter table ... enable row
-  level security;`も必ず一緒に実行すること**(ポリシーは無くてよいが、RLS自体は毎回有効化する)。
+- **公開API(PostgRESTのanon/authenticated)からは、何も読み書きできない**ようにしてある(2026-10-21、`0041`)。
+  全テーブルでRLSを有効にしてポリシーは置かず(=全拒否)、さらに`0041`で**anon/authenticatedの権限そのものを外し**
+  (既定の権限も外す)、授業RAGの検索関数`match_material_chunks`も`service_role`だけに実行を絞った。Supabaseは新しい
+  テーブルに既定で全権限を付けるため、RLSの有効化を忘れても漏れないようにするための二重の防壁。
+  **行ごとのRLSポリシー(「この教師はこの授業だけ」)は、書けない**: 利用者がSupabase Authの利用者ではなく
+  (認証はAuth.js)、`auth.uid()`で本人を特定できないため。アクセスの制御は、アプリ側の`requireRole`・`assertOwnsCourse`・
+  `requireEnrollment`などで行い、DBへは常に`service_role`(`createAdminClient()`)で接続する。
+  **確認**: `node --env-file=.env.local scripts/dev/check-public-access.mjs`(本番は`.env.production.local`)が
+  すべてPASSになること。テーブルを足したら実行する。
+  **新しいテーブルを追加するたびに、そのマイグレーションで`alter table ... enable row level security;`も必ず一緒に実行すること**
+  (権限は`0041`の既定で外れるが、二重にする)。**新しい関数を足すときは、`revoke all on function ... from public, anon,
+  authenticated; grant execute ... to service_role;`も付ける**(関数の実行権限は既定で全員に付くため)。
 - 段階1のCredentials認証は自前のパスワードハッシュ(bcrypt)を`profiles`に保存する方式。
   段階2でSSO(F22)に移行する際、`password_hash`列はそのまま残しつつ、
   SSOプロバイダーのsubject idを別途キーとして使う設計にする(要件定義書6章・12章参照)。

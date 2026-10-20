@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { isConsentCurrent, needsReconsent } from "@/lib/consent";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { withdrawConsentAction, deleteMyDataAction } from "./actions";
@@ -34,7 +35,8 @@ export default async function MyDataPage() {
     .select("id", { count: "exact", head: true })
     .eq("student_id", user.id);
 
-  const isActive = !!consent && !consent.withdrawn_at;
+  const isActive = isConsentCurrent(consent);
+  const reconsent = needsReconsent(consent);
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
@@ -46,7 +48,10 @@ export default async function MyDataPage() {
       <div className="mt-6 rounded-lg border border-line p-5 text-sm">
         <h2 className="text-sm font-medium text-ink">同意の状況</h2>
         {!consent && <p className="mt-2 text-ink-muted">まだ同意していません。</p>}
-        {consent && (
+        {consent && reconsent && (
+          <p className="mt-2 text-warn">同意の内容(AIの利用についての説明)が更新されました。内容を確認して、もう一度同意してください。</p>
+        )}
+        {consent && !reconsent && (
           <p className="mt-2 text-ink-muted">
             {isActive
               ? `${new Date(consent.granted_at).toLocaleString("ja-JP")} に同意済みです。`

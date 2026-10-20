@@ -7,7 +7,7 @@ export const metadata: Metadata = { title: "プライバシーポリシー - Syn
 // アプリの実際の仕組み(取得する情報・AIへの送信・教師への開示・本人による削除)に沿って書いている。
 export default function PrivacyPage() {
   return (
-    <LegalPage title="プライバシーポリシー" updatedAt="2026年10月20日">
+    <LegalPage title="プライバシーポリシー" updatedAt="2026年10月21日">
       <p>
         KOBAE-LAB(以下「運営者」)は、学習支援サービス「Synclie - Boundless Learning System」
         (以下「本サービス」)における、利用者の情報の取り扱いについて、次のとおり定めます。
@@ -43,6 +43,13 @@ export default function PrivacyPage() {
           AIとの対話やフィードバックの生成のため、利用者が入力した内容と、授業の教材の一部を、
           AIサービス(OpenAI)に送信して処理します。氏名・メールアドレスは、AIには送信しません。
           個人を特定できる情報や、他人に知られたくない情報は、入力しないでください。
+        </p>
+        <p>
+          OpenAIは米国の事業者で、送信した内容は日本国外で処理されることがあります。OpenAIの公開している
+          方針では、API経由で送られた内容は、既定ではAIの学習には使われず、不正利用の監視などのために
+          一定期間保管されることがあります。最新の内容は、OpenAIの公式の案内で確認できます。
+          AIの出力には誤りが含まれることがあり、フィードバックや評価は、教師と学習者本人が判断するための
+          材料です。
         </p>
       </LegalSection>
 
