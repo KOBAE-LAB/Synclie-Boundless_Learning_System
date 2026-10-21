@@ -1,4 +1,6 @@
 import { notFound } from "next/navigation";
+import { loadUsedRecords, type UsedRecord } from "@/lib/inquiry/senior-memory";
+import { stageLabel } from "@/lib/inquiry/stages";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { updateTurnAction } from "./actions";
@@ -57,6 +59,7 @@ export default async function PersonaAuditPage({
   const personaTurns: PersonaTurnWithContext[] = [];
   const personaNames = new Map<string, string>();
   const teacherMarked = new Set<string>();
+  const usedRecords = new Map<string, UsedRecord>();
 
   if (sessionIds.length > 0) {
     const { data: turnRows } = await admin
@@ -69,13 +72,16 @@ export default async function PersonaAuditPage({
       .order("created_at", { ascending: true });
     const turns = (turnRows ?? []) as TurnRow[];
     const personaTurnIds = turns.filter((t) => t.speaker_type === "persona").map((t) => t.id);
-    const [corrections, { data: markRows }] = await Promise.all([
+    const [corrections, { data: markRows }, used] = await Promise.all([
       loadLatestCorrections(admin, personaTurnIds),
       personaTurnIds.length > 0
         ? admin.from("inquiry_markers").select("turn_id").eq("kind", "teacher_mark").in("turn_id", personaTurnIds)
         : Promise.resolve({ data: [] as { turn_id: string }[] }),
+      // 先輩のAI(0045)が、その発言で読んだ記録
+      loadUsedRecords(admin, personaTurnIds),
     ]);
     for (const row of markRows ?? []) teacherMarked.add(row.turn_id as string);
+    for (const [turnId, record] of used) usedRecords.set(turnId, record);
 
     // セッションごとに並んでいる前提で、擬似メンバーの発言の直前にある
     // 学習者の発言を文脈として拾う(1件前がstudentでなければ文脈なしとする)。
@@ -142,6 +148,26 @@ export default async function PersonaAuditPage({
                 <p className="mt-2 whitespace-pre-wrap rounded-md bg-surface px-3 py-2 text-xs text-ink-muted">
                   学習者: {turn.precedingStudentContent}
                 </p>
+              )}
+
+              {usedRecords.has(turn.id) && (
+                <details className="mt-2 text-xs text-ink-muted">
+                  <summary className="cursor-pointer">
+                    先輩の記録をもとにした発言({usedRecords.get(turn.id)!.mode === "retrospective" ? "振り返りモード" : "当時モード"})・読んだ記録を見る
+                  </summary>
+                  <div className="mt-1 space-y-1 rounded-md bg-surface px-3 py-2">
+                    <p>{usedRecords.get(turn.id)!.trajectory ? "探究の流れ(軌跡)を読んでいます。" : "探究の流れ(軌跡)は、まだありませんでした。"}</p>
+                    {usedRecords.get(turn.id)!.episode ? (
+                      <p className="whitespace-pre-wrap">
+                        近い場面({stageLabel(usedRecords.get(turn.id)!.episode!.stageKey)}):{" "}
+                        {usedRecords.get(turn.id)!.episode!.header ? `${usedRecords.get(turn.id)!.episode!.header}\n` : ""}
+                        {usedRecords.get(turn.id)!.episode!.body}
+                      </p>
+                    ) : (
+                      <p>近い場面は、渡していません(記録が無いか、作り直されました)。</p>
+                    )}
+                  </div>
+                </details>
               )}
 
               {turn.originalContent !== null && (

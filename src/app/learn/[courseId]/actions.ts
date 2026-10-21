@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
+import { recordRetrievals, retrieveForTurn } from "@/lib/learn/members";
 import { searchMaterialChunks } from "@/lib/rag/search";
 import { askPersona, type PersonaProfile, type ChatTurn } from "@/lib/ai/persona";
 import { generateOutcomeFeedback } from "@/lib/ai/feedback";
@@ -47,7 +48,7 @@ export async function autoContinueDiscussionAction(courseId: string) {
 
   const { data: session } = await admin
     .from("learning_sessions")
-    .select("id, auto_discussion_tempo_seconds")
+    .select("id, auto_discussion_tempo_seconds, project_id")
     .eq("course_id", courseId)
     .eq("student_id", user.id)
     .is("ended_at", null)
@@ -96,7 +97,13 @@ export async function autoContinueDiscussionAction(courseId: string) {
   // 新しい学習者発言は無いため、直近の学習者発言を手がかりに資料を検索する
   // (無ければ資料検索はせず「関連資料なし」として扱う)。
   const lastStudentTurn = recentTurns.find((t) => t.speaker_type === "student");
-  const materialChunks = lastStudentTurn ? await searchMaterialChunks(courseId, lastStudentTurn.content) : [];
+  // 先輩型(0045)がいれば、その記憶も一緒に組み立てる(発言の埋め込みは教材の検索と共用)。
+  const { materialChunks, memories } = await retrieveForTurn(admin, {
+    courseId,
+    members: [persona, ...others],
+    queryText: lastStudentTurn?.content ?? null,
+    juniorProjectId: session.project_id ?? null,
+  });
   const materialText =
     materialChunks.length > 0
       ? materialChunks.map((chunk, i) => `[資料${i + 1}]\n${chunk}`).join("\n\n")
@@ -139,6 +146,7 @@ export async function autoContinueDiscussionAction(courseId: string) {
       "学習者からの新しい発言はまだ無い。少し沈黙が続いたため、あなたから会話を継続する番になった。" +
       "他の参加者の発言があればそれに応答・反論してよいし、学習者に短く問いかけてもよい。",
     otherParticipants,
+    memory: memories.get(persona.id)?.memory.text,
     courseContext: withStepContext(buildCourseContext(course), stepContextFor(flow)),
   };
 
@@ -151,7 +159,7 @@ export async function autoContinueDiscussionAction(courseId: string) {
       const members = [persona, ...others];
       const messages = await askScene(
         {
-          personas: members.map(toScenePersona),
+          personas: members.map((m) => toScenePersona(m, memories.get(m.id)?.memory.text)),
           courseContext: withStepContext(buildCourseContext(course), stepContextFor(flow)),
           materialText,
           turnGuidance:
@@ -163,7 +171,7 @@ export async function autoContinueDiscussionAction(courseId: string) {
           reasoningEffort: reasoningEffortFor(course.reasoning_depth),
         },
         history,
-        toScenePersona(persona),
+        toScenePersona(persona, memories.get(persona.id)?.memory.text),
       );
       for (const m of messages) {
         replies.push(m.reply);
@@ -181,15 +189,22 @@ export async function autoContinueDiscussionAction(courseId: string) {
   // 1つずつ順に保存する(同じ瞬間の時刻になって、並び順が崩れないように)。
   const memberNames = new Map([persona, ...others].map((p) => [p.id, p.name]));
   for (const [i, text] of replies.entries()) {
-    await admin.from("dialogue_turns").insert({
-      session_id: session.id,
-      speaker_type: "persona",
-      persona_id: personaIdsToSave[i],
-      // 擬似メンバーが消えても、誰の発言か読めるようにする控え(0042)。
-      persona_name: memberNames.get(personaIdsToSave[i]) ?? null,
-      content: text,
-      auto_generated: true,
-    });
+    const { data: saved } = await admin
+      .from("dialogue_turns")
+      .insert({
+        session_id: session.id,
+        speaker_type: "persona",
+        persona_id: personaIdsToSave[i],
+        // 擬似メンバーが消えても、誰の発言か読めるようにする控え(0042)。
+        persona_name: memberNames.get(personaIdsToSave[i]) ?? null,
+        content: text,
+        auto_generated: true,
+      })
+      .select("id")
+      .single();
+    // 先輩型の発言には、使った記録を残す(0045)。
+    const used = memories.get(personaIdsToSave[i]);
+    if (saved && used) await recordRetrievals(admin, { turnId: saved.id, personaId: personaIdsToSave[i], memory: used.memory, mode: used.mode });
   }
 
   revalidatePath(`/learn/${courseId}`);

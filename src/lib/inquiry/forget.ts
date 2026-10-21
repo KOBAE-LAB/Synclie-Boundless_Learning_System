@@ -103,6 +103,18 @@ export async function forgetStudentInGroups(admin: AdminClient, studentId: strin
       await enqueueJob(admin, { kind: "build_stage_story", projectId, stageKey: story.stage_key as string, round });
     }
   }
+  // 先輩のAI(0045): このグループの記録から作った先輩のAIは、設定(役割・当時の問い)に本人の言葉が残っているかもしれないので、
+  // 下書きに戻し、先生に確かめてもらう(下書きの間は、授業回で話さない)。
+  if (projectIds.length > 0) {
+    check(
+      await admin
+        .from("personas")
+        .update({ status: "draft", origin_note: "メンバーの記録が削除されたため、下書きに戻しました。内容を確かめてから承認してください。" })
+        .in("source_project_id", projectIds)
+        .eq("status", "approved"),
+      "先輩のAI",
+    );
+  }
   result.rebuiltProjectIds = projectIds;
   return result;
 }

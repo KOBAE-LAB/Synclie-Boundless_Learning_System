@@ -42,6 +42,8 @@ export interface ScenePersona {
   interventionCondition: string;
   // 考え方の深さ(発言の中身と文量に効く)。返答のテンポは画面での出方だけの設定なので、ここには含めない
   thinkingDepth: ThinkingDepth;
+  // 先輩型(0045): 先輩の探究の記録(軌跡・近い場面)と、先輩としてのルール。このメンバーだけが知っている
+  memory?: string;
 }
 
 export interface SceneMessage {
@@ -76,7 +78,16 @@ export function buildSceneSystemPrompt(params: SceneParams): string {
 - 発言頻度: ${p.speakingFrequency || "普通"}
 - 教える度合い: ${p.teachingDegree || "問い返すのみ"}
 - 介入の条件: ${p.interventionCondition || "(特になし)"}
-- 考え方: ${THINKING_DEPTH_GUIDANCE[p.thinkingDepth]}`,
+- 考え方: ${THINKING_DEPTH_GUIDANCE[p.thinkingDepth]}${
+        p.memory
+          ? `
+- このメンバーは、先輩の探究の記録をもとにしたAI。次の記録は、このメンバーだけが知っている(他のメンバーは知らない)。以下の「あなた」は、このメンバーのこと。
+${p.memory
+              .split("\n")
+              .map((line) => `  ${line}`)
+              .join("\n")}`
+          : ""
+      }`,
     )
     .join("\n\n");
 

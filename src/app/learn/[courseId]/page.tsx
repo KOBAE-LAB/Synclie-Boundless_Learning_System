@@ -14,6 +14,8 @@ import { memberAlias, resolveSessionScope, scopeSessionQuery } from "@/lib/learn
 import { SessionControls } from "@/components/session-controls";
 import { getTimeStatus } from "@/lib/learn/session-end";
 import { assignPersonaTones, toneClass } from "@/lib/persona-tones";
+import { loadActiveMembers, loadLoanedPersonaRows } from "@/lib/learn/members";
+import { isSeniorTier } from "@/lib/inquiry/senior";
 import { normalizeReplyTempo, type ReplyTempo } from "@/lib/persona-traits";
 import {
   submitOutcomeAction,
@@ -177,7 +179,7 @@ export default async function LearnCourseSessionPage({
     ,
     { data: course },
     { data: session },
-    { data: coursePersonaRows },
+    { data: ownPersonaRows },
     { data: avatarOptionRows },
     { data: personalization },
     { data: submissionRows },
@@ -213,7 +215,7 @@ export default async function LearnCourseSessionPage({
     // 解決に使うため、ステータスを問わず全部まとめて1回で引く。授業のペルソナは数件程度)。
     admin
       .from("personas")
-      .select("id, name, avatar_id, status, created_at, behavior_rules")
+      .select("id, name, avatar_id, status, created_at, behavior_rules, tier")
       .eq("course_id", courseId)
       .order("created_at", { ascending: true }),
     // アバター候補は全授業共通で十数件しかないため、必要分を絞らず全部引く(往復を1回減らせる)。
@@ -368,6 +370,10 @@ export default async function LearnCourseSessionPage({
     reflectionBySubmission.set(row.submission_id, row);
   }
 
+  // 先輩型(0045): 貸し出した先輩のペルソナも、授業回のペルソナのあとに並べる(色・名前・アバター)。
+  const [loanedPersonaRows, activeMembers] = await Promise.all([loadLoanedPersonaRows(admin, courseId), loadActiveMembers(admin, courseId)]);
+  const coursePersonaRows = [...(ownPersonaRows ?? []), ...loanedPersonaRows];
+  const activeMemberIds = new Set(activeMembers.map((m) => m.id));
   const personaNames = new Map<string, string>();
   const personaAvatarPaths = new Map<string, string>();
   // 擬似メンバーごとの色(吹き出し・映像タイル・名前)。作成順で割り当てるので、いつ見ても同じ人は同じ色。
@@ -379,7 +385,7 @@ export default async function LearnCourseSessionPage({
       normalizeReplyTempo((p.behavior_rules as { replyTempo?: string } | null)?.replyTempo),
     ]),
   );
-  const activePersonas = (coursePersonaRows ?? []).filter((p) => p.status === "active");
+  const activePersonas = coursePersonaRows.filter((p) => activeMemberIds.has(p.id));
   const activePersonaCount = activePersonas.length;
   const avatarPathById = new Map((avatarOptionRows ?? []).map((o) => [o.id, o.file_path]));
   for (const persona of coursePersonaRows ?? []) {
@@ -690,6 +696,12 @@ export default async function LearnCourseSessionPage({
                   <span className="persona-chip absolute bottom-2 left-2 max-w-[85%] truncate rounded px-2 py-0.5 text-xs font-medium">
                     {persona.name}
                   </span>
+                  {isSeniorTier(persona.tier) && (
+                    // 本人ではなく、先輩の記録をもとにしたAIであることを常に示す(要件定義書14章ステップ6)。
+                    <span className="absolute left-2 top-2 rounded bg-black/60 px-1.5 py-0.5 text-[0.6875rem] font-medium text-white">
+                      先輩の記録をもとにしたAI
+                    </span>
+                  )}
                   {isSpeaker && (
                     <span className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[0.6875rem] font-medium text-white">
                       <span className="persona-dot h-1.5 w-1.5 rounded-full" aria-hidden="true" />

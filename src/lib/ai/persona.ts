@@ -37,6 +37,8 @@ export interface PersonaProfile {
   // 授業設定(ねらい・学習者の校種学年・討論の型)から組み立てた、この授業の文脈
   // (src/lib/courses/settings.ts の buildCourseContext)。未設定なら省略。
   courseContext?: string;
+  // 先輩型(0045): 先輩の探究の記録(軌跡・近い場面)と、先輩としてのルール(@/lib/inquiry/senior-memory)。
+  memory?: string;
 }
 
 export const COMMON_GUARDRAILS = `
@@ -66,7 +68,7 @@ ${persona.materialText}
 
 # 立場と目標
 ${persona.stance}
-${persona.otherParticipants ? `\n# この対話にいる他の擬似メンバー\n${persona.otherParticipants}\n(会話履歴では、あなた以外のメンバーの発言も同じ役割で渡ってくるため、\n発言の先頭に付いている名前で誰の発言かを見分けること。名前が無ければ学習者の発言。)\n` : ""}${persona.behaviorNotes ? `\n# このペルソナ固有の行動ルール\n${persona.behaviorNotes}\n` : ""}${persona.turnGuidance ? `\n# 今回の発言に対する補足\n${persona.turnGuidance}\n` : ""}${COMMON_GUARDRAILS}`;
+${persona.memory ? `\n${persona.memory}\n` : ""}${persona.otherParticipants ? `\n# この対話にいる他の擬似メンバー\n${persona.otherParticipants}\n(会話履歴では、あなた以外のメンバーの発言も同じ役割で渡ってくるため、\n発言の先頭に付いている名前で誰の発言かを見分けること。名前が無ければ学習者の発言。)\n` : ""}${persona.behaviorNotes ? `\n# このペルソナ固有の行動ルール\n${persona.behaviorNotes}\n` : ""}${persona.turnGuidance ? `\n# 今回の発言に対する補足\n${persona.turnGuidance}\n` : ""}${COMMON_GUARDRAILS}`;
 }
 
 export type ChatTurn = { role: "user" | "assistant"; content: string };

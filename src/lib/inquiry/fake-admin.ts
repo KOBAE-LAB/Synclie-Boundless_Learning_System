@@ -6,16 +6,24 @@ export interface FakeAdminOptions {
   /** テーブルごとに、update(...).select().maybeSingle() が返す行(取り合い防止の「取れたか」を表す) */
   updateReturns?: Record<string, Record<string, unknown> | null>;
   rpc?: Record<string, unknown>;
+  /** テーブルごとに、問い合わせのたびに順に返す行(同じテーブルを条件を変えて何度か読む関数のテスト用)。tables より優先 */
+  sequences?: Record<string, Record<string, unknown>[][]>;
 }
 
 export function fakeAdmin(options: FakeAdminOptions = {}) {
   const log: string[] = [];
+  const rpcCalls: { name: string; args: unknown }[] = [];
   const tables = options.tables ?? {};
+  const sequences = Object.fromEntries(Object.entries(options.sequences ?? {}).map(([k, v]) => [k, [...v]]));
   const admin = {
     log,
-    rpc: async (name: string) => ({ data: options.rpc?.[name] ?? null, error: null }),
+    rpcCalls,
+    rpc: async (name: string, args?: unknown) => {
+      rpcCalls.push({ name, args });
+      return { data: options.rpc?.[name] ?? null, error: null };
+    },
     from(table: string) {
-      const rows = tables[table] ?? [];
+      const rows = sequences[table]?.length ? sequences[table].shift()! : (tables[table] ?? []);
       let mode: "select" | "update" | "insert" | "delete" = "select";
       const chain: Record<string, unknown> = {};
       for (const m of ["select", "eq", "in", "not", "neq", "is", "order", "limit"]) chain[m] = () => chain;
