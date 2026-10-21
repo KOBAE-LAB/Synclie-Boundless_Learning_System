@@ -17,7 +17,7 @@ type AdminClient = ReturnType<typeof createAdminClient>;
 async function buildCrossCourseActivityLog(admin: AdminClient, studentId: string): Promise<string> {
   const { data: submissions } = await admin
     .from("submissions")
-    .select("id, course_id, content, created_at")
+    .select("id, course_id, course_label, content, created_at")
     .eq("student_id", studentId)
     .order("created_at", { ascending: true });
 
@@ -25,7 +25,7 @@ async function buildCrossCourseActivityLog(admin: AdminClient, studentId: string
     return "";
   }
 
-  const courseIds = [...new Set(submissions.map((s) => s.course_id))];
+  const courseIds = [...new Set(submissions.map((s) => s.course_id).filter((id): id is string => !!id))];
   const courseTitleById = await loadLessonLabels(admin, courseIds);
 
   const submissionIds = submissions.map((s) => s.id);
@@ -61,7 +61,9 @@ async function buildCrossCourseActivityLog(admin: AdminClient, studentId: string
   const judgmentBySubmission = new Map((judgmentRows ?? []).map((j) => [j.submission_id as string, j]));
 
   const sections = submissions.map((submission, index) => {
-    const courseTitle = courseTitleById.get(submission.course_id) ?? "(不明な授業)";
+    // 授業回が削除された記録は、控えの名前を使う(0042)。
+    const courseTitle =
+      (submission.course_id ? courseTitleById.get(submission.course_id) : undefined) ?? submission.course_label ?? "(不明な授業)";
     const lines = [
       `## ${index + 1}件目 - ${courseTitle}(${new Date(submission.created_at).toLocaleDateString("ja-JP")})`,
     ];

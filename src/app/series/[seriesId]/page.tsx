@@ -369,7 +369,16 @@ export default async function SeriesPage({ params }: { params: Promise<{ seriesI
             <summary className="cursor-pointer text-sm font-medium text-danger">シリーズを削除する(テストデータの消去を含む)</summary>
             {hasRecords ? (
               <div className="mt-2 space-y-3 text-sm text-ink-muted">
-                <p>学習者の記録(対話・提出など)があるため、通常の削除はできません。ふだんは「アーカイブ」を使ってください。</p>
+                <p>
+                  授業回・資料・擬似メンバー・評価の観点・学習の流れを削除します。<b>元に戻せません。</b>
+                  学習者{recordSummary?.learners ?? 0}人分の記録(対話・提出物・振り返り・手書き画像・音声)は消えず、
+                  授業名の控えとともに、学習者のポートフォリオに残ります。年度の途中なら、ふだんは「アーカイブ」を使ってください。
+                </p>
+                <form action={deleteSeriesAction.bind(null, seriesId)}>
+                  <SubmitButton pendingText="削除中…" className="rounded-md bg-danger px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50">
+                    授業の構成を削除する(記録は残す)
+                  </SubmitButton>
+                </form>
                 {canPurge ? (
                   <div className="rounded-md border border-danger p-3">
                     <p className="font-medium text-danger">テストデータの消去(管理者のみ・学習者の記録ごと完全に削除)</p>
@@ -394,7 +403,7 @@ export default async function SeriesPage({ params }: { params: Promise<{ seriesI
                     )}
                   </div>
                 ) : (
-                  <p className="text-xs text-ink-faint">学習者の記録は、教師は消せません。テストデータの消去が必要なときは、管理者に依頼してください。</p>
+                  <p className="text-xs text-ink-faint">学習者の記録そのものは、教師は消せません。テストデータの消去が必要なときは、管理者に依頼してください。</p>
                 )}
               </div>
             ) : (

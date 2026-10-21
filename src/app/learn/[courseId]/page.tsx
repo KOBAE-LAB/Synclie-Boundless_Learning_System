@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
+import { applyTurnCorrections } from "@/lib/records/corrections";
 import { requireConsent } from "@/lib/consent";
 import { requireEnrollment } from "@/lib/courses/enrollment";
 import { SubmitButton } from "@/components/submit-button";
@@ -69,6 +70,7 @@ interface DialogueTurnRow {
   id: string;
   speaker_type: "student" | "persona";
   persona_id: string | null;
+  persona_name: string | null;
   content: string;
   source_kind: "text" | "handwriting" | "audio";
   auto_generated: boolean;
@@ -265,10 +267,11 @@ export default async function LearnCourseSessionPage({
     session
       ? admin
           .from("dialogue_turns")
-          .select("id, speaker_type, persona_id, content, source_kind, auto_generated")
+          .select("id, speaker_type, persona_id, persona_name, content, source_kind, auto_generated")
           .eq("session_id", session.id)
           .order("created_at", { ascending: true })
-          .then((r) => r.data)
+          // 教師が監査で直した発言は、直した内容を表示する(元の発言は記録として残る)。
+          .then((r) => applyTurnCorrections(admin, r.data ?? []))
       : null,
     // F12: まだ送信していない(確認・修正待ちの)手書きアップロードを表示する。
     session
@@ -644,7 +647,7 @@ export default async function LearnCourseSessionPage({
           }
 
           const avatarPath = turn.persona_id ? personaAvatarPaths.get(turn.persona_id) : undefined;
-          const personaName = turn.persona_id ? (personaNames.get(turn.persona_id) ?? "擬似メンバー") : "擬似メンバー";
+          const personaName = (turn.persona_id ? personaNames.get(turn.persona_id) : undefined) ?? turn.persona_name ?? "擬似メンバー";
           return (
             <div key={turn.id} className={`flex items-end gap-2 ${toneClass(turn.persona_id ? personaTones[turn.persona_id] : undefined)}`}>
               {avatarPath ? (

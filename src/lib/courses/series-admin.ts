@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/server";
+import { assertRawLogProtection, stampSeriesRecordContext } from "@/lib/records/context";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -9,7 +10,7 @@ async function lessonIdsOf(admin: AdminClient, seriesId: string): Promise<string
 
 /**
  * シリーズに、学習者の記録(対話・提出・インプットの進み)が1つでもあるか。
- * あれば削除できない(学習者の記録が消えてしまうため。代わりにアーカイブする)。
+ * 画面で、削除したときに何が残るかを説明するのに使う(記録があっても、通常の削除で記録は消えない。0042)。
  */
 export async function seriesHasLearnerRecords(admin: AdminClient, seriesId: string): Promise<boolean> {
   const lessonIds = await lessonIdsOf(admin, seriesId);
@@ -76,32 +77,56 @@ async function removeSeriesFiles(admin: AdminClient, files: SeriesFiles) {
 }
 
 /**
- * 学習者の記録を、外部キーの依存の順に消す(対話ログ → ポートフォリオの記録)。
- * まとめて消すと、擬似メンバー(personas)を先に消そうとして、それを参照する対話ログ(dialogue_turns)の
- * 外部キーで失敗するため、参照している側を先に消しておく。
+ * テストデータの消去用: 学習者の記録を、外部キーの依存の順に明示的に消す。
+ * 0042(生ログの保護)以降、授業の構成を消しても記録は連鎖では消えないため、ここで消す。
+ * 順序: 対話ログ(論証評価・発言の修正版は連鎖で消える)→ ポートフォリオの記録 → 成果(フィードバック・振り返り・
+ * ジャッジは連鎖)→ 対話セッション(手書き・音声のアップロードは連鎖)→ インプットの進み・学習計画 → 探究プロジェクト
+ * (記録がプロジェクトを参照しているため最後)。
  */
 async function deleteLearnerRecords(admin: AdminClient, seriesId: string) {
   const lessonIds = await lessonIdsOf(admin, seriesId);
-  if (lessonIds.length === 0) return;
-  const { data: sessions } = await admin.from("learning_sessions").select("id").in("course_id", lessonIds);
-  const sessionIds = (sessions ?? []).map((x) => x.id);
-  if (sessionIds.length === 0) return;
+  const check = (result: { error: { message: string } | null }, what: string) => {
+    if (result.error) throw new Error(`${what}の削除に失敗しました: ${result.error.message}`);
+  };
 
-  const turns = await admin.from("dialogue_turns").delete().in("session_id", sessionIds);
-  if (turns.error) throw new Error(`対話ログの削除に失敗しました: ${turns.error.message}`);
-  const entries = await admin.from("portfolio_entries").delete().in("session_id", sessionIds);
-  if (entries.error) throw new Error(`ポートフォリオの記録の削除に失敗しました: ${entries.error.message}`);
+  if (lessonIds.length > 0) {
+    const [{ data: sessions }, { data: steps }] = await Promise.all([
+      admin.from("learning_sessions").select("id").in("course_id", lessonIds),
+      admin.from("course_steps").select("id").in("course_id", lessonIds),
+    ]);
+    const sessionIds = (sessions ?? []).map((x) => x.id);
+    const stepIds = (steps ?? []).map((x) => x.id);
+
+    if (sessionIds.length > 0) {
+      check(await admin.from("dialogue_turns").delete().in("session_id", sessionIds), "対話ログ");
+      check(await admin.from("portfolio_entries").delete().in("session_id", sessionIds), "ポートフォリオの記録");
+    }
+    check(await admin.from("submissions").delete().in("course_id", lessonIds), "成果");
+    check(await admin.from("learning_sessions").delete().in("course_id", lessonIds), "対話セッション");
+    if (stepIds.length > 0) {
+      check(await admin.from("step_progress").delete().in("step_id", stepIds), "インプットの進み");
+    }
+    check(await admin.from("study_plan_items").delete().in("course_id", lessonIds), "学習計画");
+  }
+  check(await admin.from("inquiry_projects").delete().eq("series_id", seriesId), "探究プロジェクト");
 }
 
-/** 学習者の記録が無いシリーズだけを、資料ファイルごと完全に削除する。 */
-export async function deleteSeriesIfEmpty(admin: AdminClient, seriesId: string) {
+/**
+ * 通常の削除(教師): 授業の構成(授業回・資料・擬似メンバー・評価の観点・学習の流れ)を、資料・動画のファイルごと
+ * 完全に削除する。学習者の記録(対話・成果・振り返り・進み・手書き画像・音声)は消えず、授業の控えと探究プロジェクトを
+ * 持ったまま、学習者のポートフォリオに残る(要件定義書14章の設計原則4、0042)。
+ * 記録があるときは、0042がDBに入っていることを確かめ、控えの抜けを埋めてから消す。
+ */
+export async function deleteSeries(admin: AdminClient, seriesId: string) {
   if (await seriesHasLearnerRecords(admin, seriesId)) {
-    throw new Error("学習者の記録があるため削除できません。代わりにアーカイブするか、強制削除を使ってください。");
+    await assertRawLogProtection(admin);
+    await stampSeriesRecordContext(admin, seriesId);
   }
-  const files = await collectSeriesFiles(admin, seriesId);
+  // 学習者の手書き画像・音声は記録の一部なので残す。消すのは授業の構成のファイル(資料・動画)だけ。
+  const { materials } = await collectSeriesFiles(admin, seriesId);
   const { error } = await admin.from("course_series").delete().eq("id", seriesId);
   if (error) throw new Error(`削除に失敗しました: ${error.message}`);
-  await removeSeriesFiles(admin, files);
+  await removeSeriesFiles(admin, { materials, handwriting: [], audio: [] });
 }
 
 export interface SeriesRecordSummary {
@@ -111,7 +136,7 @@ export interface SeriesRecordSummary {
   submissions: number;
 }
 
-/** 強制削除の前に見せる、消えてしまう学習者の記録の量。 */
+/** 削除の前に見せる、学習者の記録の量(通常の削除では残り、テストデータの消去では消える)。 */
 export async function summarizeSeriesRecords(admin: AdminClient, seriesId: string): Promise<SeriesRecordSummary> {
   const lessonIds = await lessonIdsOf(admin, seriesId);
   if (lessonIds.length === 0) return { learners: 0, sessions: 0, submissions: 0 };
@@ -125,9 +150,9 @@ export async function summarizeSeriesRecords(admin: AdminClient, seriesId: strin
 }
 
 /**
- * 強制削除: 学習者の記録(対話・提出物・フィードバック・振り返り・ポートフォリオの評価・手書き画像・音声)ごと、
- * シリーズを完全に削除する。元に戻せない。誤操作を防ぐため、(1)先にアーカイブしてあること、
- * (2)シリーズ名を一字一句入力して確かめること、を求める。
+ * 強制削除(テストデータの消去、管理者のみ): 学習者の記録(対話・提出物・フィードバック・振り返り・
+ * ポートフォリオの評価・進み・学習計画・探究プロジェクト・手書き画像・音声)ごと、シリーズを完全に削除する。
+ * 元に戻せない。誤操作を防ぐため、(1)先にアーカイブしてあること、(2)シリーズ名を一字一句入力して確かめること、を求める。
  */
 export async function forceDeleteSeries(admin: AdminClient, seriesId: string, confirmTitle: string) {
   const { data: series } = await admin.from("course_series").select("title, archived_at").eq("id", seriesId).maybeSingle();

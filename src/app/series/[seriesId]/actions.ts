@@ -6,7 +6,7 @@ import { requireAdmin, requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { assertOwnsSeries, fiscalYearOfDate } from "@/lib/courses/series";
 import { copyCriteriaBetweenLessons, copyPersonasBetweenLessons } from "@/lib/courses/lesson-copy";
-import { carryOverSeries, deleteSeriesIfEmpty, forceDeleteSeries } from "@/lib/courses/series-admin";
+import { carryOverSeries, deleteSeries, forceDeleteSeries } from "@/lib/courses/series-admin";
 import { hashPassword } from "@/lib/auth/password";
 import { normalizeEmail, validateSignupFields } from "@/lib/auth/signup-validation";
 
@@ -226,10 +226,11 @@ export async function unarchiveSeriesAction(seriesId: string) {
   revalidatePath("/courses");
 }
 
-// 削除: 学習者の記録が無いシリーズだけ、資料ファイルごと完全に削除する(元に戻せない)。
+// 削除: 授業の構成(授業回・資料・擬似メンバーなど)を、資料ファイルごと完全に削除する(元に戻せない)。
+// 学習者の記録は消えず、授業の控えとともに学習者のポートフォリオに残る(要件定義書14章、0042)。
 export async function deleteSeriesAction(seriesId: string) {
   const { admin } = await guard(seriesId);
-  await deleteSeriesIfEmpty(admin, seriesId);
+  await deleteSeries(admin, seriesId);
   revalidatePath("/courses");
   redirect("/courses");
 }

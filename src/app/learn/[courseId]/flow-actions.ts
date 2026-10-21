@@ -8,6 +8,7 @@ import { isEnrolled } from "@/lib/courses/enrollment";
 import { ARCHIVED_MESSAGE, isLessonArchived } from "@/lib/courses/series";
 import { loadLearnerFlow } from "@/lib/flow/load";
 import { currentStep, readCheckQuestions } from "@/lib/flow/steps";
+import { loadLessonContext } from "@/lib/records/context";
 
 // 学習の流れ: 学習者が、いまのステップを終えて次へ進む。インプットでは、理解チェックの問いに
 // 自分の言葉で答える(答えの目安と見比べる自己確認で、AIは採点しない)。
@@ -43,8 +44,18 @@ export async function completeStepAction(courseId: string, stepId: string, formD
     }
   }
 
+  // 生ログの保護(0042): ステップ(授業の構成)が消えても、何のステップの進みか読めるよう、控えを一緒に書く。
+  const lesson = await loadLessonContext(admin, courseId);
   const { error } = await admin.from("step_progress").upsert(
-    { student_id: user.id, step_id: stepId, answers, completed_at: new Date().toISOString() },
+    {
+      student_id: user.id,
+      step_id: stepId,
+      answers,
+      completed_at: new Date().toISOString(),
+      step_title: step.title,
+      step_kind: step.kind,
+      course_label: lesson?.label ?? null,
+    },
     { onConflict: "student_id,step_id", ignoreDuplicates: true },
   );
   if (error) throw new Error(`保存に失敗しました: ${error.message}`);

@@ -7,7 +7,10 @@ type AdminClient = ReturnType<typeof createAdminClient>;
 
 interface SubmissionRow {
   id: string;
-  course_id: string;
+  /** 授業回が削除されると null になる(記録は残る。0042) */
+  course_id: string | null;
+  /** 授業の控え(「シリーズ名 第N回 名前」) */
+  course_label: string | null;
   session_id: string | null;
   content: string;
   created_at: string;
@@ -35,7 +38,7 @@ export async function loadPortfolio(
 
   let query = admin
     .from("submissions")
-    .select("id, course_id, session_id, content, created_at")
+    .select("id, course_id, course_label, session_id, content, created_at")
     .eq("student_id", studentId);
   if (options.courseId) query = query.eq("course_id", options.courseId);
   const { data: submissionRows } = await query.order("created_at", { ascending: true });
@@ -49,7 +52,7 @@ export async function loadPortfolio(
   if (submissions.length === 0) return portfolio;
 
   const submissionIds = submissions.map((s) => s.id);
-  const courseIds = [...new Set(submissions.map((s) => s.course_id))];
+  const courseIds = [...new Set(submissions.map((s) => s.course_id).filter((id): id is string => !!id))];
   const sessionIds = [...new Set(submissions.map((s) => s.session_id).filter((id): id is string => !!id))];
 
   const [courses, feedback, judgments, reflections, entries, sessions] = await Promise.all([
@@ -81,8 +84,11 @@ export async function loadPortfolio(
     const e = entryBy.get(s.id);
     return {
       submissionId: s.id,
-      courseId: s.course_id,
-      courseTitle: titleByCourse.get(s.course_id) ?? "(削除された授業)",
+      // 授業回が削除された記録は、控えの名前で1つの授業として束ねる(絞り込みのキー)。
+      courseId: s.course_id ?? `deleted:${s.course_label ?? ""}`,
+      courseTitle:
+        (s.course_id ? titleByCourse.get(s.course_id) : undefined) ??
+        (s.course_label ? `${s.course_label}(授業は削除済み)` : "(削除された授業)"),
       createdAt: s.created_at,
       fiscalYear: fiscalYearOf(s.created_at),
       content: s.content,

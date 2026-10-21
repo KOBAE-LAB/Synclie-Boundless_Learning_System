@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { collectSeriesFiles, forceDeleteSeries, summarizeSeriesRecords } from "./series-admin";
+import { collectSeriesFiles, deleteSeries, forceDeleteSeries, summarizeSeriesRecords } from "./series-admin";
 
 type FakeAdmin = Parameters<typeof forceDeleteSeries>[0];
 
 // どのテーブルも、絞り込み条件は無視して、用意した行を返す汎用の偽クライアント(テストデータは1シリーズ分だけ)。
-function fakeAdmin(tables: Record<string, Record<string, unknown>[]>) {
+// selectErrors に書いたテーブルは、読み取りがエラーになる(0042が未適用のDBで、新しい列を読んだときの再現)。
+function fakeAdmin(tables: Record<string, Record<string, unknown>[]>, selectErrors: Record<string, string> = {}) {
   const log: string[] = [];
   const admin = {
     storage: {
@@ -13,11 +14,20 @@ function fakeAdmin(tables: Record<string, Record<string, unknown>[]>) {
     from(table: string) {
       const rows = tables[table] ?? [];
       const chain: Record<string, unknown> = {};
-      for (const m of ["select", "eq", "in", "not", "neq", "is", "order"]) chain[m] = () => chain;
+      for (const m of ["select", "eq", "in", "not", "neq", "is", "order", "limit"]) chain[m] = () => chain;
       chain.maybeSingle = async () => ({ data: rows[0] ?? null });
-      chain.then = (resolve: (v: unknown) => void) => resolve({ data: rows, count: rows.length });
+      chain.then = (resolve: (v: unknown) => void) =>
+        resolve(
+          selectErrors[table]
+            ? { data: null, count: null, error: { message: selectErrors[table] } }
+            : { data: rows, count: rows.length, error: null },
+        );
       const del = async () => { log.push(`delete:${table}`); return { error: null }; };
       chain.delete = () => ({ eq: del, in: del });
+      chain.update = () => { log.push(`update:${table}`); return chain; };
+      chain.upsert = async () => ({ error: null });
+      chain.insert = () => { log.push(`insert:${table}`); return chain; };
+      chain.single = async () => ({ data: { id: `${table}-new` }, error: null });
       return chain;
     },
     log,
@@ -82,5 +92,53 @@ describe("forceDeleteSeries(強制削除の安全装置)", () => {
   });
   it("存在しないシリーズは拒否する", async () => {
     await expect(forceDeleteSeries(fakeAdmin({}), "s1", "x")).rejects.toThrow("見つかりません");
+  });
+});
+
+describe("deleteSeries(通常の削除: 授業の構成だけを消し、学習者の記録は残す。0042)", () => {
+  const lessonRows = { courses: [{ id: "c1", title: "光合成", lesson_no: 1, series_id: "s1" }], course_series: [{ title: "理科1年", owner_teacher_id: "t1", fiscal_year: 2026 }] };
+
+  it("学習者の記録を消さず、授業の構成(シリーズ)と資料・動画のファイルだけを消す", async () => {
+    const admin = fakeAdmin({ ...withRecords, ...lessonRows });
+    await deleteSeries(admin, "s1");
+    const deletes = admin.log.filter((l) => l.startsWith("delete:"));
+    expect(deletes).toEqual(["delete:course_series"]);
+    expect(admin.log.some((l) => l.startsWith("remove:materials:"))).toBe(true);
+    // 手書き画像・音声は学習者の記録なので残す
+    expect(admin.log.some((l) => l.startsWith("remove:handwriting:"))).toBe(false);
+    expect(admin.log.some((l) => l.startsWith("remove:audio:"))).toBe(false);
+  });
+
+  it("消す前に、記録に授業の控えを書き込む", async () => {
+    const admin = fakeAdmin({ ...withRecords, ...lessonRows });
+    await deleteSeries(admin, "s1");
+    const firstDelete = admin.log.indexOf("delete:course_series");
+    expect(admin.log.indexOf("update:learning_sessions")).toBeGreaterThanOrEqual(0);
+    expect(admin.log.indexOf("update:learning_sessions")).toBeLessThan(firstDelete);
+    expect(admin.log.indexOf("update:submissions")).toBeLessThan(firstDelete);
+  });
+
+  it("0042(学習記録の保護)が入っていないDBでは、記録のあるシリーズを削除しない(連鎖で記録が消えるため)", async () => {
+    const admin = fakeAdmin({ ...withRecords, ...lessonRows }, { learning_sessions: 'column "course_label" does not exist' });
+    await expect(deleteSeries(admin, "s1")).rejects.toThrow("0042");
+    expect(admin.log).not.toContain("delete:course_series");
+  });
+});
+
+describe("forceDeleteSeries(テストデータの消去: 記録を明示的に消す)", () => {
+  const series = { ...withRecords, course_series: [{ title: "理科1年 光合成", archived_at: "2027-03-31T00:00:00Z" }] };
+
+  it("記録(成果・セッション・進み・学習計画・探究プロジェクト)を、シリーズより先に消す", async () => {
+    const admin = fakeAdmin(series);
+    await forceDeleteSeries(admin, "s1", "理科1年 光合成");
+    const order = admin.log.filter((l) => l.startsWith("delete:"));
+    const at = (t: string) => order.indexOf(`delete:${t}`);
+    for (const t of ["submissions", "learning_sessions", "step_progress", "study_plan_items", "inquiry_projects"]) {
+      expect(at(t)).toBeGreaterThanOrEqual(0);
+      expect(at(t)).toBeLessThan(at("course_series"));
+    }
+    // 記録が探究プロジェクトを参照しているので、プロジェクトは記録の後
+    expect(at("inquiry_projects")).toBeGreaterThan(at("learning_sessions"));
+    expect(at("inquiry_projects")).toBeGreaterThan(at("submissions"));
   });
 });

@@ -297,7 +297,9 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
     手書き画像のStorageファイル削除と、抜けていたF11の`personalization_suggestions`削除を
     追加で拾った。F13実装時に音声ファイルの削除も同様に追加した。F23実装時に
     `study_plan_items`削除も追加した。F24実装時に`discussion_judgments`削除も追加した。
-    F26実装時に`learner_profiles`/`learner_suggestions`削除も追加した)
+    F26実装時に`learner_profiles`/`learner_suggestions`削除も追加した。0042で、本人の個人プロジェクト
+    (`inquiry_projects.solo_student_id`)の削除と、グループのプロジェクトからの脱退(`inquiry_project_members`)を追加した。
+    記録がプロジェクトを参照しているため、記録を消した後に消す)
   - `src/app/learn/dashboard/` — F23(生徒ダッシュボード)。「学習者が自分の学習履歴
     (対話ログ、成果物、フィードバック、振り返り)を一覧で確認し、AIの提案をもとに次に
     取り組む学習計画を立てられる」(要件定義書4章)。F14(教師ダッシュボード)と同じ方針で、
@@ -633,10 +635,12 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
     - `[courseId]/audit/` — F15(挙動の監査と修正)。「擬似メンバーの発言ログを確認し、
       不適切・不正確な挙動を修正する」(要件定義書4章)。この授業の擬似メンバーの発言
       (`dialogue_turns`, `speaker_type='persona'`)を、直前の学習者発言(文脈)とあわせて
-      一覧表示し、`updateTurnAction`で内容を直接修正できる(F07の`updateFeedbackAction`と
-      同じ「新しい監査テーブルは作らず、対象の行に直接書き込む」方針。`dialogue_turns`に
-      `flagged_by_teacher`・`teacher_note`を追加)。修正後の内容は以後の対話でLLMに渡す
-      直近履歴としてもそのまま使われるため、訂正すれば同じ誤りの再発も防げる
+      一覧表示し、`updateTurnAction`で内容を修正できる。**修正は元の発言(`dialogue_turns.content`)を
+      書き換えず、修正版を`dialogue_turn_corrections`に積む**(0042、生ログは書き換えない)。フラグと確認メモは
+      これまでどおり`dialogue_turns`の`flagged_by_teacher`・`teacher_note`。画面の表示・以後の対話でLLMに渡す
+      直近履歴・議論のまとめ・AIジャッジは、最新の修正版を使う(`src/lib/records/corrections.ts`の
+      `applyTurnCorrections`。**発言の本文を表示したりAIに渡したりする新しい箇所では、これを通すこと**)ので、
+      訂正すれば同じ誤りの再発も防げる。監査画面では元の発言も確認できる
   - `src/app/organization/` — F21用。組織(学校・地域単位)への参加・作成と、組織をまたぐ
     共有リクエストの承認者設定。SSO(F22)がまだ無いため、`profiles.organization_id`への
     所属は教師が組織名を入力して自己申告で参加・作成する方式にしている
@@ -846,6 +850,9 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
     (参加コード、列デフォルト式で新規作成時に自動生成)と`course_enrollments`
     (course_id+student_idの組、unique制約)を追加。既存の`learning_sessions`から
     参加登録済み扱いのバックフィルも行う(詳細は8章の`learn/`の説明を参照)
+  - `0042_raw_log_protection.sql` — **生ログの保護**(要件定義書14章のPart A)。探究プロジェクト(`inquiry_projects`/`inquiry_project_members`)、
+    記録の「授業の控え」(`course_label`ほか)、授業回・シリーズ・擬似メンバー・ステップを消しても記録が残る削除ルール(set null)、
+    発言の修正版(`dialogue_turn_corrections`)。既存の記録への控えの埋め戻しと、個人プロジェクトへの束ねも含む(下の「生ログの保護」を参照)
   - `0041_revoke_public_api_access.sql` — 公開API(anon/authenticated)の権限を外す(RLSの二重の防壁。詳細は「認証まわりの注意」)
   - `0040_series_management.sql` — `course_series.planned_lessons`(全回数)・`fiscal_year`(年度)・`archived_at`(アーカイブ)
   - `0039_course_series.sql` — 授業シリーズ(`course_series`)・`series_enrollments`・`courses.series_id/lesson_no/released`。既存の授業は同名シリーズの第1回に移し、`course_enrollments`・`courses.join_code`は廃止
@@ -924,15 +931,17 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
   インプットの完了を受け付けない**(サーバー側は`getOrCreateSessionRow`・`completeStepAction`・参加申請で
   `isLessonArchived`/`ARCHIVED_MESSAGE`を確かめる。画面は入力欄・提出フォームを隠す)。学習者は「過去のシリーズ」
   として記録を見返せる。いつでも解除できる。一覧の「年度末の一括アーカイブ」で、年度ごとにまとめて閉じられる。
-- **削除**(`series-admin.ts`の`deleteSeriesIfEmpty`): **学習者の記録(対話・提出・インプットの進み)が1つも無い
-  シリーズだけ**、資料ファイル・動画ファイルのStorageごと完全に削除する(学習者のポートフォリオが消えるのを防ぐ
-  ため、記録があれば削除できず、アーカイブを促す)。
+- **削除**(`series-admin.ts`の`deleteSeries`、0042以降): **授業の構成**(授業回・資料・擬似メンバー・評価の観点・
+  学習の流れ)を、資料・動画ファイルのStorageごと完全に削除する。**学習者の記録(対話・提出・振り返り・進み・手書き画像・
+  音声)は消えず**、授業の控え(`course_label`)と探究プロジェクトを持ったまま学習者のポートフォリオに残る。記録がある
+  ときは、0042がDBに入っていることを確かめ(`assertRawLogProtection`。入っていないDBで消すと記録が連鎖で消えるため)、
+  控えの抜けを埋めてから(`stampSeriesRecordContext`)消す。以前は「記録が無いシリーズだけ削除できる」(`deleteSeriesIfEmpty`)だった。
 - **強制削除=「テストデータの消去」**(`forceDeleteSeries`、**管理者のみ**。一般の教師は、学習者の記録を消せない): 学習者の記録がある
   シリーズを、**記録ごと完全に削除**する(元に戻せない。学習者の
   ポートフォリオからも消える)。導入初期のテストデータを片付けるための機能で、本物の学習者の記録には使わない。誤操作を防ぐため、**(1)先にアーカイブしてあること、(2)シリーズ名を一字一句入力すること**を
-  サーバー側で求め、画面には消える記録の量(学習者数・対話・提出物)を見せる。削除では、まず対話ログ・ポートフォリオの記録を
-  消してからシリーズを消す(`deleteLearnerRecords`。**擬似メンバーを参照する`dialogue_turns`の外部キーが`NO ACTION`で、
-  まとめて消すと失敗するため**。実DBで見つけた不具合で、順序はテストで固定している)。手書き画像・音声・資料・動画の
+  サーバー側で求め、画面には消える記録の量(学習者数・対話・提出物)を見せる。0042以降は授業の構成を消しても記録は
+  連鎖では消えないため、`deleteLearnerRecords`が記録を**明示的に**消す(対話ログ → ポートフォリオの記録 → 成果 →
+  セッション → 進み・学習計画 → 探究プロジェクト(記録が参照しているので最後)。順序はテストで固定している)。手書き画像・音声・資料・動画の
   Storageのファイルも消す(`collectSeriesFiles`)。ただし、F26の横断プロファイル(`learner_profiles`)など、消えた記録から
   作られた要約は残る。
 - **翌年度への引き継ぎ**(`carryOverSeries`): 授業回・資料(ファイルも複製、RAGは複製先で再生成)・擬似メンバー
@@ -941,6 +950,28 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
   授業コードは新しくなる**。途中で失敗したら、新しいシリーズごと消して巻き戻す。
 - **履修者の一括整理**: 承認済みの履修者を別のシリーズにも登録する/履修登録を全員分外す(学習者の記録は消えない)。
 - 管理は、`/courses`(一覧の「管理」)と`/series/[seriesId]`(「3. 年度の処理・シリーズの管理」)のどちらからもできる。
+
+### 生ログの保護(0042、要件定義書14章のPart A、2026-10-21)
+
+要件定義書14章「データ基盤の再設計(3層)」の①記録層を、授業から独立させた。**学習者の記録は、授業回・シリーズ・
+擬似メンバー・ステップ(授業の構成)を消しても消えない**。記録ごと消えるのは、学習者本人の全データ削除(F16)と、
+管理者の「テストデータの消去」だけ(どちらもアプリが明示的に消す)。
+
+- **探究プロジェクト**(`inquiry_projects`/`inquiry_project_members`): 記録をまとめる、授業から独立した単位。
+  いまは人間のグループが無いので、すべて「学習者 × シリーズ」の**個人プロジェクト**(`kind='solo'`、`solo_student_id`、
+  (シリーズ, 本人)で一意)。シリーズが消えても残る(`series_label`が控え)。
+- **授業の控え**: `learning_sessions`/`submissions`/`step_progress`の`course_label`(「シリーズ名 第N回 名前」)、
+  `step_progress`の`step_title`/`step_kind`、`dialogue_turns`の`persona_name`。授業回が消えると`course_id`等は null になり、
+  控えで文脈を表示する(ポートフォリオ・学習ダッシュボード・F26の材料)。
+- **新しい記録を作るときは、文脈を一緒に書く**: セッション・成果は`src/lib/records/context.ts`の`recordContextFor`
+  (`project_id`と`course_label`)、インプットの進みは`loadLessonContext`の`label`、擬似メンバーの発言は`persona_name`。
+  **①のテーブルに行を足す新しいコードでは、これらを必ず書くこと**(書き忘れても、シリーズ削除の前に
+  `stampSeriesRecordContext`が埋めるが、それに頼らない)。
+- **発言の修正版**: 上の「`[courseId]/audit/`」を参照。
+- 記録を読むコードは、`course_id`が null の行がありうることを前提にする(`.in("course_id", …)`に null を混ぜない、
+  表示は`course_label`にフォールバックする)。
+- 残り(②抽出層・③投射層のテーブル、F26・ペルソナの版1の移し替え)は、草案`docs/drafts/0042_data_foundation_draft.sql`の
+  Part B・Part C(C4〜C6)として、`0043`・`0044`で入れる予定。
 
 ### 画面の文章と「流れ」の見せ方(2026-10)
 

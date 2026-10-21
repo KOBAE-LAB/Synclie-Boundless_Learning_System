@@ -96,8 +96,9 @@ export default async function StudentDashboardPage() {
     .from("learning_sessions")
     .select("id, course_id")
     .eq("student_id", user.id);
+  // 授業回が削除された記録(course_id が null)は、授業ごとの集計には入れない(ポートフォリオでは控えの名前で見られる)。
   const sessionCourse = new Map<string, string>();
-  for (const s of sessions ?? []) sessionCourse.set(s.id, s.course_id);
+  for (const s of sessions ?? []) if (s.course_id) sessionCourse.set(s.id, s.course_id);
   const sessionIds = [...sessionCourse.keys()];
   const courseIds = [...new Set(sessionCourse.values())];
 
@@ -138,7 +139,7 @@ export default async function StudentDashboardPage() {
 
   const { data: submissionRows } = await admin
     .from("submissions")
-    .select("id, course_id, content, created_at")
+    .select("id, course_id, course_label, content, created_at")
     .eq("student_id", user.id);
   for (const s of submissionRows ?? []) {
     const stat = stats.get(s.course_id);
@@ -173,7 +174,7 @@ export default async function StudentDashboardPage() {
       const submission = submissionById.get(r.submission_id);
       if (!submission) continue;
       nextGoals.push({
-        courseTitle: stats.get(submission.course_id)?.title ?? "(不明)",
+        courseTitle: stats.get(submission.course_id)?.title ?? submission.course_label ?? "(不明)",
         content: r.next_goal,
         createdAt: r.updated_at,
       });

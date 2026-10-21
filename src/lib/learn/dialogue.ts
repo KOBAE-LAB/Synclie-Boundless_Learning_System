@@ -16,6 +16,8 @@ import { assertDiscussionAllowed, hasLaterOutput, stepContextFor, withStepContex
 import { judgeDiscussionState } from "@/lib/ai/discussion-wrapup";
 import { THINKING_DEPTH_GUIDANCE, normalizeThinkingDepth } from "@/lib/persona-traits";
 import { getTimeStatus, shouldJudgeDiscussionState } from "@/lib/learn/session-end";
+import { recordContextFor } from "@/lib/records/context";
+import { applyTurnCorrections } from "@/lib/records/corrections";
 
 export type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -126,9 +128,19 @@ export async function getOrCreateSessionRow(
   const { data: course } = await admin.from("courses").select("mode").eq("id", courseId).maybeSingle();
   const mode = course?.mode === "solo_study" ? "solo_study" : "group";
 
+  // 生ログの保護(0042): 授業回が消えても文脈が残るよう、探究プロジェクトと授業の控えを一緒に書く。
+  const context = await recordContextFor(admin, courseId, studentId);
+
   const { data: created, error } = await admin
     .from("learning_sessions")
-    .insert({ course_id: courseId, student_id: studentId, mode, lti_resource_link_id: ltiResourceLinkId })
+    .insert({
+      course_id: courseId,
+      student_id: studentId,
+      mode,
+      lti_resource_link_id: ltiResourceLinkId,
+      project_id: context.projectId,
+      course_label: context.courseLabel,
+    })
     .select(SESSION_COLUMNS)
     .single();
   if (error || !created) {
@@ -167,12 +179,14 @@ export async function pickRespondingPersona(
     return { chosen: mentioned, others: activePersonas.filter((p) => p.id !== mentioned.id) };
   }
 
-  const { data: personaTurns } = await admin
+  const { data: personaTurnRows } = await admin
     .from("dialogue_turns")
-    .select("persona_id, content")
+    .select("id, persona_id, content")
     .eq("session_id", sessionId)
     .eq("speaker_type", "persona")
     .order("created_at", { ascending: false });
+  // 教師が監査で直した発言は、直した内容で名指しを判定する。
+  const personaTurns = await applyTurnCorrections(admin, personaTurnRows ?? []);
 
   // 学習者が誰も名指ししていない場合でも、直前の擬似メンバーの発言が他のメンバーを
   // 名指しして反論・言及していれば、その名指しされた人に答えさせる。これが無いと、
@@ -309,15 +323,17 @@ export async function postStudentMessageAndRespond(
 
   // 資料検索(埋め込みAPI+DB)、直近の履歴、個別最適化の提案は互いに独立なので並行して取得する
   // (以前は1つずつ待っていたため、その分だけ返答が遅れていた)。
-  const [materialChunks, { data: recentTurns }, { data: personalization }, { count: studentTurnCount }] =
+  const [materialChunks, recentTurns, { data: personalization }, { count: studentTurnCount }] =
     await Promise.all([
     searchMaterialChunks(courseId, message),
+    // 教師が監査で直した発言は、直した内容をAIに渡す(元の発言は①として残る)。
     admin
       .from("dialogue_turns")
-      .select("speaker_type, content, persona_id")
+      .select("id, speaker_type, content, persona_id, persona_name")
       .eq("session_id", sessionId)
       .order("created_at", { ascending: false })
-      .limit(HISTORY_LIMIT),
+      .limit(HISTORY_LIMIT)
+      .then(({ data }) => applyTurnCorrections(admin, data ?? [])),
     // F11: 教師が採用(accepted)した個別最適化の提案があれば、促し方・難度・誤解回避の
     // 問いをこのターンのガイダンスに反映する(「学習内容を一方的に固定しない」ため、
     // 採用されたものだけを使い、未決定・見送りの提案は反映しない)。
@@ -358,7 +374,8 @@ export async function postStudentMessageAndRespond(
       if (turn.speaker_type === "student") {
         return { role: "user" as const, content: turn.content };
       }
-      const speakerName = turn.persona_id ? (historyPersonaNames.get(turn.persona_id) ?? "擬似メンバー") : "擬似メンバー";
+      const speakerName =
+        (turn.persona_id ? historyPersonaNames.get(turn.persona_id) : undefined) ?? turn.persona_name ?? "擬似メンバー";
       return { role: "assistant" as const, content: `${speakerName}: ${turn.content}` };
     });
 
@@ -513,11 +530,14 @@ export async function postStudentMessageAndRespond(
   // (hasNewEvidence=false)のにその人が譲歩した(conceded=true)場合を unwarranted_conformity とする。
   // 論証評価の点数は学習者の発言に対するもので、どのメンバーの行にも同じ値が入る
   // (集計側は、学習者の発言ごとに1回だけ数える)。
+  const memberNames = new Map(activeMembers.map((p) => [p.id, p.name]));
   for (const reply of replies) {
     const { error: personaTurnError } = await admin.from("dialogue_turns").insert({
       session_id: sessionId,
       speaker_type: "persona",
       persona_id: reply.personaId,
+      // 擬似メンバー(授業の構成)が消えても、誰の発言か読めるようにする控え(0042)。
+      persona_name: memberNames.get(reply.personaId) ?? null,
       content: reply.text,
     });
     if (personaTurnError) {
