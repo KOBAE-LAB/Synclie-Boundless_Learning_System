@@ -37,6 +37,7 @@ export async function removeMarker(admin: AdminClient, turnId: string, kind: Mar
 
 /**
  * 学習者が印を付けてよい発言か: 本人の、その授業回の議論の発言だけ(他人の議論には付けられない)。
+ * グループの議論では、いまそのグループのメンバーなら付けられる(抜けたメンバー・他のグループは付けられない)。
  * 付けてよければ、その議論(セッション)を返す。権限の境界なので、テストで固定している(markers.test.ts)。
  */
 export async function loadOwnTurnSession(
@@ -50,6 +51,18 @@ export async function loadOwnTurnSession(
     .select("id, student_id, course_id, ended_at, project_id")
     .eq("id", turn.session_id)
     .maybeSingle();
-  if (!session || session.student_id !== params.studentId || session.course_id !== params.courseId) return null;
+  if (!session || session.course_id !== params.courseId) return null;
+  if (session.student_id !== params.studentId) {
+    // グループの議論(0044): いまそのグループのメンバーなら、メンバー全員の発言に印を付けられる。
+    if (session.student_id !== null || !session.project_id) return null;
+    const { data: member } = await admin
+      .from("inquiry_project_members")
+      .select("student_id")
+      .eq("project_id", session.project_id)
+      .eq("student_id", params.studentId)
+      .is("left_at", null)
+      .maybeSingle();
+    if (!member) return null;
+  }
   return { id: session.id, ended_at: session.ended_at, project_id: session.project_id };
 }

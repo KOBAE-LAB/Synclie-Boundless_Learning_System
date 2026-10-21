@@ -16,6 +16,8 @@ export async function createSeriesAction(formData: FormData) {
   const subject = String(formData.get("subject") ?? "").trim().slice(0, 40);
   const planned = Number.parseInt(String(formData.get("plannedLessons") ?? ""), 10);
   const year = Number.parseInt(String(formData.get("fiscalYear") ?? ""), 10);
+  // 探究: 人間のグループで、時間差で議論する(0044)。作成後は変えない(議論の記録の単位が変わるため)。
+  const kind = formData.get("kind") === "inquiry" ? "inquiry" : "standard";
 
   if (!title) {
     throw new Error("シリーズの名前を入力してください。");
@@ -28,6 +30,7 @@ export async function createSeriesAction(formData: FormData) {
       owner_teacher_id: session.user.id,
       title,
       subject: subject || null,
+      kind,
       planned_lessons: Number.isInteger(planned) && planned >= 1 && planned <= 60 ? planned : null,
       fiscal_year: Number.isInteger(year) && year >= 2000 && year <= 2100 ? year : fiscalYearOfDate(new Date()),
     })

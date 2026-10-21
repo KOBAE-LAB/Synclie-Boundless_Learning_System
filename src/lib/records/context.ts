@@ -5,6 +5,7 @@
 // stampSeriesRecordContext() で、控えの抜けを埋めておく。
 import type { createAdminClient } from "@/lib/supabase/server";
 import { lessonFullName } from "@/lib/courses/series";
+import { findActiveGroup } from "@/lib/learn/session-scope";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -94,6 +95,12 @@ export async function ensureSoloProject(admin: AdminClient, lesson: LessonContex
 export async function recordContextFor(admin: AdminClient, courseId: string, studentId: string): Promise<RecordContext> {
   const lesson = await loadLessonContext(admin, courseId);
   if (!lesson) return { projectId: null, courseLabel: null };
+  // 探究シリーズ(0044): グループに入っていれば、記録はグループの探究プロジェクトに属する。
+  const { data: series } = await admin.from("course_series").select("kind").eq("id", lesson.seriesId).maybeSingle();
+  if (series?.kind === "inquiry") {
+    const group = await findActiveGroup(admin, lesson.seriesId, studentId);
+    if (group) return { projectId: group.id, courseLabel: lesson.label };
+  }
   try {
     return { projectId: await ensureSoloProject(admin, lesson, studentId), courseLabel: lesson.label };
   } catch (err) {

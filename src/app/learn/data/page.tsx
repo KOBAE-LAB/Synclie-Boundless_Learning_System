@@ -22,6 +22,11 @@ export default async function MyDataPage() {
     .from("learning_sessions")
     .select("id", { count: "exact", head: true })
     .eq("student_id", user.id);
+  // 探究のグループの議論での本人の発言(議論はメンバーと共有。削除すると本人の発言だけが消える)。
+  const { count: authoredTurnCount } = await admin
+    .from("dialogue_turns")
+    .select("id", { count: "exact", head: true })
+    .eq("author_student_id", user.id);
   const { count: submissionCount } = await admin
     .from("submissions")
     .select("id", { count: "exact", head: true })
@@ -84,6 +89,7 @@ export default async function MyDataPage() {
         </h2>
         <ul className="mt-2 space-y-1 text-ink-muted">
           <li>学習セッション: {sessionCount ?? 0}件(擬似メンバーとの対話ログを含む)</li>
+          <li>あなたの発言: {authoredTurnCount ?? 0}件(グループの議論の発言を含む。削除すると、グループの議論からはあなたの発言だけが消えます)</li>
           <li>提出した成果: {submissionCount ?? 0}件</li>
           <li>振り返り: {reflectionCount ?? 0}件</li>
           <li>学習者プロファイル: {profileCount ?? 0}件</li>

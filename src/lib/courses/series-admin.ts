@@ -141,11 +141,21 @@ export async function summarizeSeriesRecords(admin: AdminClient, seriesId: strin
   const lessonIds = await lessonIdsOf(admin, seriesId);
   if (lessonIds.length === 0) return { learners: 0, sessions: 0, submissions: 0 };
   const [{ data: sessions }, { data: submissions }] = await Promise.all([
-    admin.from("learning_sessions").select("student_id").in("course_id", lessonIds),
+    admin.from("learning_sessions").select("id, student_id").in("course_id", lessonIds),
     admin.from("submissions").select("student_id").in("course_id", lessonIds),
   ]);
   const learners = new Set<string>();
   for (const r of [...(sessions ?? []), ...(submissions ?? [])]) if (r.student_id) learners.add(r.student_id);
+  // 探究のグループの議論(student_id が null)は、発言した学習者を数える(0044)。
+  const groupSessionIds = (sessions ?? []).filter((x) => !x.student_id).map((x) => x.id as string);
+  if (groupSessionIds.length > 0) {
+    const { data: authors } = await admin
+      .from("dialogue_turns")
+      .select("author_student_id")
+      .in("session_id", groupSessionIds)
+      .not("author_student_id", "is", null);
+    for (const a of authors ?? []) if (a.author_student_id) learners.add(a.author_student_id as string);
+  }
   return { learners: learners.size, sessions: (sessions ?? []).length, submissions: (submissions ?? []).length };
 }
 

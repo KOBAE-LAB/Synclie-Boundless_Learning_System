@@ -9,6 +9,8 @@ import { SubmitButton } from "@/components/submit-button";
 import { ThinkingIndicator } from "@/components/thinking-indicator";
 import { ChatComposer } from "@/components/chat-composer";
 import { AutoDiscussionTimer } from "@/components/auto-discussion-timer";
+import { GroupLiveRefresh } from "@/components/group-live-refresh";
+import { memberAlias, resolveSessionScope, scopeSessionQuery } from "@/lib/learn/session-scope";
 import { SessionControls } from "@/components/session-controls";
 import { getTimeStatus } from "@/lib/learn/session-end";
 import { assignPersonaTones, toneClass } from "@/lib/persona-tones";
@@ -74,6 +76,7 @@ interface DialogueTurnRow {
   speaker_type: "student" | "persona";
   persona_id: string | null;
   persona_name: string | null;
+  author_student_id: string | null;
   content: string;
   source_kind: "text" | "handwriting" | "audio";
   auto_generated: boolean;
@@ -162,6 +165,8 @@ export default async function LearnCourseSessionPage({
   const { user } = await requireRole("student");
 
   const admin = createAdminClient();
+  // 探究シリーズ(0044)では、グループの共有の議論を表示する。グループに入っていなければ議論できない。
+  const scope = await resolveSessionScope(admin, courseId, user.id);
 
   // 画面の表示に必要なデータは、依存関係のあるものだけ順番に、あとは並行して取得する
   // (以前は約15回の問い合わせを1つずつ待っていたため、発言のたびの画面更新が遅かった)。
@@ -190,13 +195,15 @@ export default async function LearnCourseSessionPage({
       )
       .eq("id", courseId)
       .maybeSingle(),
-    admin
-      .from("learning_sessions")
-      .select(
-        "id, started_at, ended_at, end_reason, closing_summary, close_suggested_at, close_suggestion_reason, auto_discussion_tempo_seconds, project_id",
-      )
-      .eq("course_id", courseId)
-      .eq("student_id", user.id)
+    scopeSessionQuery(
+      admin
+        .from("learning_sessions")
+        .select(
+          "id, started_at, ended_at, end_reason, closing_summary, close_suggested_at, close_suggestion_reason, auto_discussion_tempo_seconds, project_id",
+        )
+        .eq("course_id", courseId),
+      scope,
+    )
       // 終了した議論も取得する(終わった後も、やり取りとまとめを見られるように)
       .order("started_at", { ascending: false })
       .limit(1)
@@ -270,7 +277,7 @@ export default async function LearnCourseSessionPage({
     session
       ? admin
           .from("dialogue_turns")
-          .select("id, speaker_type, persona_id, persona_name, content, source_kind, auto_generated")
+          .select("id, speaker_type, persona_id, persona_name, author_student_id, content, source_kind, auto_generated")
           .eq("session_id", session.id)
           .order("created_at", { ascending: true })
           // 教師が監査で直した発言は、直した内容を表示する(元の発言は記録として残る)。
@@ -332,6 +339,16 @@ export default async function LearnCourseSessionPage({
       : Promise.resolve({ data: [] as { turn_id: string }[] }),
   ]);
   const currentStageKey = (projectRow?.current_stage_key as string | null | undefined) ?? null;
+
+  // グループの議論(0044): ほかのメンバーの発言には名前を出す(抜けたメンバーの過去の発言も含む)。
+  const isGroup = scope.kind === "group";
+  const authorIds = [...new Set(turns.map((t) => t.author_student_id).filter((id): id is string => !!id && id !== user.id))];
+  const memberIdsForNames = isGroup ? [...new Set([...scope.memberIds, ...authorIds])] : [];
+  const { data: memberProfiles } =
+    memberIdsForNames.length > 0
+      ? await admin.from("profiles").select("id, display_name").in("id", memberIdsForNames)
+      : { data: [] as { id: string; display_name: string | null }[] };
+  const memberNames = new Map((memberProfiles ?? []).map((p) => [p.id as string, (p.display_name as string | null) ?? "メンバー"]));
   const keptTurnIds = new Set((keepRows ?? []).map((r) => r.turn_id as string));
   const pendingHandwritingUploads = (uploadRows ?? []) as HandwritingUploadRow[];
   const pendingAudioUploads = (audioUploadRows ?? []) as AudioUploadRow[];
@@ -413,7 +430,7 @@ export default async function LearnCourseSessionPage({
       })
     : null;
   const seriesArchived = lessonCrumbs?.archived ?? false;
-  const inputLocked = ended || seriesArchived || (timeStatus?.blocksInput ?? false);
+  const inputLocked = ended || seriesArchived || scope.kind === "needs_group" || (timeStatus?.blocksInput ?? false);
   const END_REASON_LABELS: Record<string, string> = {
     time_limit: "制限時間になったため",
     ai_suggested: "AIの提案に応じて",
@@ -471,6 +488,31 @@ export default async function LearnCourseSessionPage({
           </details>
         )}
       </div>
+
+      {scope.kind === "needs_group" && (
+        <p className="mt-4 rounded-md border border-warn bg-warn-soft px-4 py-3 text-sm text-ink">
+          この探究の授業では、グループで議論します。
+          {lessonCrumbs?.learnerTrail?.[1]?.href ? (
+            <Link href={lessonCrumbs.learnerTrail[1].href} className="ml-1 font-medium underline">
+              授業シリーズの画面でグループに参加する
+            </Link>
+          ) : (
+            "授業シリーズの画面で、グループに参加してください。"
+          )}
+        </p>
+      )}
+      {scope.kind === "group" && (
+        <p className="mt-3 text-sm text-ink-muted">
+          グループ「<span className="font-medium text-ink">{scope.groupTitle}</span>」の議論です(
+          {scope.memberIds.map((id) => (id === user.id ? "あなた" : (memberNames.get(id) ?? "メンバー"))).join("・")}
+          )。都合のよいときに発言しましょう。AIの仲間は、あなたを「{memberAlias(scope.memberIds, user.id)}」と呼びます。
+          {scope.theme && (
+            <span className="mt-1 block">
+              テーマ: <span className="text-ink">{scope.theme}</span>
+            </span>
+          )}
+        </p>
+      )}
 
       {flow.steps.length > 0 && <FlowStepper courseId={courseId} flow={flow} viewingId={viewingStep?.id} />}
       {viewingStep && <OutputStepCard courseId={courseId} step={viewingStep} isCurrent={flowCurrent?.id === viewingStep.id} />}
@@ -567,7 +609,9 @@ export default async function LearnCourseSessionPage({
         </form>
       </details>
 
-      {effectiveTempoSeconds > 0 && !ended && (
+      {isGroup && <GroupLiveRefresh courseId={courseId} turnCount={turns.length} ended={ended} />}
+
+      {!isGroup && effectiveTempoSeconds > 0 && !ended && (
         <AutoDiscussionTimer
           tempoSeconds={effectiveTempoSeconds}
           turnCount={turns.length}
@@ -682,6 +726,21 @@ export default async function LearnCourseSessionPage({
       <h2 className="mt-8 text-sm font-medium text-ink">これまでのやり取り</h2>
       <div className="mt-2 space-y-4">
         {turns.map((turn) => {
+          if (turn.speaker_type === "student" && isGroup && turn.author_student_id !== user.id) {
+            return (
+              <div key={turn.id} className="text-left">
+                <p className="mb-1 text-xs font-semibold text-ink-muted">
+                  {(turn.author_student_id && memberNames.get(turn.author_student_id)) ?? "メンバー"}
+                </p>
+                <div className="inline-block max-w-[88%] rounded-lg border border-line bg-surface px-4 py-2 text-left text-sm leading-7 text-ink">
+                  {turn.source_kind === "handwriting" && <p className="mb-1 text-xs text-ink-faint">[手書きから変換]</p>}
+                  {turn.source_kind === "audio" && <p className="mb-1 text-xs text-ink-faint">[音声から変換]</p>}
+                  <p className="whitespace-pre-wrap">{turn.content}</p>
+                </div>
+                {!seriesArchived && <KeepToggle courseId={courseId} turnId={turn.id} kept={keptTurnIds.has(turn.id)} />}
+              </div>
+            );
+          }
           if (turn.speaker_type === "student") {
             return (
               <div key={turn.id} className="text-right">
@@ -735,7 +794,9 @@ export default async function LearnCourseSessionPage({
 
       {inputLocked ? (
         <p className="mt-6 rounded-md border border-line bg-surface px-4 py-3 text-sm text-ink-muted">
-          {seriesArchived
+          {scope.kind === "needs_group"
+            ? "グループに参加すると、ここで議論できます。"
+            : seriesArchived
             ? "この授業シリーズは終了しています。記録は見返せますが、新しい発言はできません。"
             : ended
               ? "この議論は終了しました。上の「議論のまとめ」を確認して、成果を提出しましょう。"

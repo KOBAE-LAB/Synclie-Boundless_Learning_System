@@ -36,8 +36,21 @@ export async function loadCourseStats(admin: AdminClient, courseId: string): Pro
   for (const session of sessions ?? []) {
     if (session.student_id) sessionStudent.set(session.id, session.student_id);
   }
-  const sessionIds = [...sessionStudent.keys()];
-  const studentIds = [...new Set(sessionStudent.values())];
+  // 探究のグループの議論(student_id が null)も含める。発言者は author_student_id で数える(0044)。
+  const sessionIds = (sessions ?? []).map((s) => s.id as string);
+  const { data: turns } =
+    sessionIds.length > 0
+      ? await admin
+          .from("dialogue_turns")
+          .select("id, session_id, created_at, author_student_id")
+          .in("session_id", sessionIds)
+          .eq("speaker_type", "student")
+      : { data: [] as { id: string; session_id: string; created_at: string; author_student_id: string | null }[] };
+  const authorOf = (turn: { session_id: string; author_student_id: string | null }) =>
+    turn.author_student_id ?? sessionStudent.get(turn.session_id) ?? null;
+  const studentIds = [
+    ...new Set([...sessionStudent.values(), ...(turns ?? []).map(authorOf).filter((id): id is string => Boolean(id))]),
+  ];
 
   const stats = new Map<string, StudentStat>();
   for (const studentId of studentIds) {
@@ -60,14 +73,9 @@ export async function loadCourseStats(admin: AdminClient, courseId: string): Pro
   };
 
   const turnStudentByTurnId = new Map<string, string>();
-  if (sessionIds.length > 0) {
-    const { data: turns } = await admin
-      .from("dialogue_turns")
-      .select("id, session_id, created_at")
-      .in("session_id", sessionIds)
-      .eq("speaker_type", "student");
+  {
     for (const turn of turns ?? []) {
-      const studentId = sessionStudent.get(turn.session_id);
+      const studentId = authorOf(turn);
       if (!studentId) continue;
       turnStudentByTurnId.set(turn.id, studentId);
       const stat = stats.get(studentId);

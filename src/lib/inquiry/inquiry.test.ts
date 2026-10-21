@@ -20,6 +20,7 @@ import { loadOwnTurnSession } from "./markers";
 import { runJob, type JobRow } from "./pipeline";
 import { jobDedupeKey, monthStartJst, runPendingJobs } from "./queue";
 import { transitionStage } from "./project-stage";
+import { forgetStudentInGroups } from "./forget";
 
 type Admin = Parameters<typeof runJob>[0];
 const asAdmin = (a: ReturnType<typeof fakeAdmin>) => a as unknown as Admin;
@@ -68,6 +69,26 @@ describe("loadOwnTurnSession(印を付けてよい発言の境界)", () => {
   it("他人の議論の発言には付けられない", async () => {
     expect(await loadOwnTurnSession(asAdmin(fakeAdmin({ tables })), { turnId: "t1", studentId: "u2", courseId: "c1" })).toBeNull();
   });
+  it("グループの議論は、いまのメンバーなら付けられる", async () => {
+    const groupTables = {
+      dialogue_turns: [{ id: "t1", session_id: "s1" }],
+      learning_sessions: [{ id: "s1", student_id: null, course_id: "c1", ended_at: null, project_id: "g1" }],
+      inquiry_project_members: [{ student_id: "u2" }],
+    };
+    expect(await loadOwnTurnSession(asAdmin(fakeAdmin({ tables: groupTables })), { turnId: "t1", studentId: "u2", courseId: "c1" })).toEqual({
+      id: "s1",
+      ended_at: null,
+      project_id: "g1",
+    });
+  });
+  it("グループの議論でも、メンバーでなければ付けられない", async () => {
+    const groupTables = {
+      dialogue_turns: [{ id: "t1", session_id: "s1" }],
+      learning_sessions: [{ id: "s1", student_id: null, course_id: "c1", ended_at: null, project_id: "g1" }],
+      inquiry_project_members: [],
+    };
+    expect(await loadOwnTurnSession(asAdmin(fakeAdmin({ tables: groupTables })), { turnId: "t1", studentId: "u9", courseId: "c1" })).toBeNull();
+  });
   it("別の授業回のURLからは付けられない", async () => {
     expect(await loadOwnTurnSession(asAdmin(fakeAdmin({ tables })), { turnId: "t1", studentId: "u1", courseId: "c2" })).toBeNull();
   });
@@ -104,6 +125,71 @@ describe("extract_session(費用と同意の境界)", () => {
     expect(versions).toContain('"kind":"excerpt"');
     expect(admin.log.find((l) => l.startsWith("insert:inquiry_episodes"))).toContain('"picked_by":"student"');
     expect(admin.log.some((l) => l.startsWith("insert:inquiry_sources"))).toBe(true);
+  });
+});
+
+describe("extract_session(探究のグループの議論、0044)", () => {
+  const groupTables = (): Record<string, Record<string, unknown>[]> => ({
+    learning_sessions: [{ id: "s1", student_id: null, course_id: "c1", project_id: "g1", started_at: "2026-10-21T00:00:00Z" }],
+    profiles: [{ test_owner_id: null, display_name: "山田 太郎", organization_id: null }],
+    dialogue_turns: [
+      { id: "t1", speaker_type: "student", content: "葉で作ると思う", persona_name: null, author_student_id: "u1" },
+      { id: "t2", speaker_type: "student", content: "同意していない人の発言", persona_name: null, author_student_id: "u2" },
+      { id: "t3", speaker_type: "persona", content: "根拠は?", persona_name: "コウタ", author_student_id: null },
+    ],
+    inquiry_projects: [{ id: "g1", title: "防災班", theme: "避難所", current_stage_key: "analysis", created_at: "2026-10-01T00:00:00Z", owner_teacher_id: "teacher", kind: "group", solo_student_id: null }],
+    inquiry_project_members: [{ student_id: "u1" }, { student_id: "u2" }],
+    inquiry_markers: [{ turn_id: "t1", kind: "student_keep" }],
+  });
+  it("同意していないメンバーの発言は、AIに渡さない。発言者は仮の呼び名", async () => {
+    hasConsent.mockImplementation(async (_admin: unknown, id: string) => id === "u1");
+    extractEpisodes.mockResolvedValue([]);
+    expect(await runJob(asAdmin(fakeAdmin({ tables: groupTables() })), job({ project_id: "g1" }))).toBe("done");
+    const input = extractEpisodes.mock.calls[0][0] as { transcript: string };
+    expect(input.transcript).toContain("学習者(メンバーA): 葉で作ると思う");
+    expect(input.transcript).not.toContain("同意していない人の発言");
+  });
+  it("同意しているメンバーの発言が無ければ、AIを呼ばない", async () => {
+    hasConsent.mockResolvedValue(false);
+    expect(await runJob(asAdmin(fakeAdmin({ tables: groupTables() })), job({ project_id: "g1" }))).toBe("skipped");
+    expect(extractEpisodes).not.toHaveBeenCalled();
+  });
+  it("作り直しでは、仕事に書いた段階にエピソードを置く", async () => {
+    hasConsent.mockResolvedValue(true);
+    extractEpisodes.mockResolvedValue([{ type: "stuck", startTurn: 1, endTurn: 1, contextHeader: "h", narrative: "n" }]);
+    const admin = fakeAdmin({ tables: groupTables() });
+    await runJob(asAdmin(admin), job({ project_id: "g1", stage_key: "problem_setting" }));
+    expect(admin.log.find((l) => l.startsWith("insert:inquiry_episodes"))).toContain('"stage_key":"problem_setting"');
+  });
+});
+
+describe("forgetStudentInGroups(本人の全データ削除のうち、グループの議論)", () => {
+  it("本人の発言と、そこから作った抽出層を消し、元の段階で作り直しを積む", async () => {
+    const admin = fakeAdmin({
+      tables: {
+        dialogue_turns: [{ id: "t1", session_id: "s1", source_kind: "audio", source_path: "a/1.webm" }],
+        learning_sessions: [{ id: "s1", project_id: "g1" }],
+        inquiry_episodes: [{ id: "e1", session_id: "s1", stage_key: "analysis" }],
+        inquiry_stage_stories: [{ id: "st1", project_id: "g1", stage_key: "analysis", kind: "live" }],
+        inquiry_trajectories: [{ id: "tr1", kind: "live" }],
+      },
+    });
+    const result = await forgetStudentInGroups(asAdmin(admin), "u1");
+    expect(result).toMatchObject({ turnsDeleted: 1, audioPaths: ["a/1.webm"], rebuiltProjectIds: ["g1"] });
+    for (const table of ["inquiry_sources", "inquiry_episodes", "inquiry_stage_stories", "inquiry_trajectories", "dialogue_turns"]) {
+      expect(admin.log).toContain(`delete:${table}`);
+    }
+    // 議論(セッション)そのものは消さない(メンバーと共有しているため)
+    expect(admin.log).not.toContain("delete:learning_sessions");
+    const jobs = admin.log.filter((l) => l.startsWith("insert:inquiry_jobs"));
+    expect(jobs[0]).toContain('"kind":"extract_session"');
+    expect(jobs[0]).toContain('"stage_key":"analysis"');
+    expect(jobs[1]).toContain('"kind":"build_stage_story"');
+  });
+  it("グループの議論での発言が無ければ、何もしない", async () => {
+    const admin = fakeAdmin({ tables: { dialogue_turns: [] } });
+    expect((await forgetStudentInGroups(asAdmin(admin), "u1")).turnsDeleted).toBe(0);
+    expect(admin.log).toEqual([]);
   });
 });
 

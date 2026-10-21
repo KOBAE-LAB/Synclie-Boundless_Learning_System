@@ -92,13 +92,21 @@ export default async function StudentDashboardPage() {
     .maybeSingle();
   const learnerSuggestion = learnerSuggestionRow as LearnerSuggestionRow | null;
 
-  const { data: sessions } = await admin
-    .from("learning_sessions")
-    .select("id, course_id")
-    .eq("student_id", user.id);
+  // 本人の議論と、本人が発言した探究のグループの議論(0044)。発言は本人のもの(author_student_id)だけを数える。
+  const [{ data: ownSessions }, { data: authoredGroupTurns }] = await Promise.all([
+    admin.from("learning_sessions").select("id, course_id").eq("student_id", user.id),
+    admin.from("dialogue_turns").select("session_id").eq("author_student_id", user.id),
+  ]);
+  const ownIds = new Set((ownSessions ?? []).map((s) => s.id as string));
+  const groupSessionIds = [...new Set((authoredGroupTurns ?? []).map((t) => t.session_id as string))].filter((id) => !ownIds.has(id));
+  const { data: groupSessions } =
+    groupSessionIds.length > 0
+      ? await admin.from("learning_sessions").select("id, course_id").in("id", groupSessionIds)
+      : { data: [] as { id: string; course_id: string | null }[] };
+  const sessions = [...(ownSessions ?? []), ...(groupSessions ?? [])];
   // 授業回が削除された記録(course_id が null)は、授業ごとの集計には入れない(ポートフォリオでは控えの名前で見られる)。
   const sessionCourse = new Map<string, string>();
-  for (const s of sessions ?? []) if (s.course_id) sessionCourse.set(s.id, s.course_id);
+  for (const s of sessions) if (s.course_id) sessionCourse.set(s.id, s.course_id);
   const sessionIds = [...sessionCourse.keys()];
   const courseIds = [...new Set(sessionCourse.values())];
 
@@ -127,7 +135,8 @@ export default async function StudentDashboardPage() {
       .from("dialogue_turns")
       .select("session_id, created_at")
       .in("session_id", sessionIds)
-      .eq("speaker_type", "student");
+      .eq("speaker_type", "student")
+      .eq("author_student_id", user.id);
     for (const turn of turns ?? []) {
       const courseId = sessionCourse.get(turn.session_id);
       if (!courseId) continue;

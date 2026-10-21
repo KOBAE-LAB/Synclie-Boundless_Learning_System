@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { forgetStudentInGroups } from "@/lib/inquiry/forget";
+import { scheduleJobRun } from "@/lib/inquiry/queue";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 
@@ -78,6 +80,22 @@ export async function deleteMyDataAction() {
   for (const upload of audioUploads ?? []) {
     if (upload.audio_path) audioPaths.push(upload.audio_path);
   }
+  // 探究のグループの議論(0044): 議論はメンバーで共有しているので、本人の発言だけを消す
+  // (本人の発言から作った抽出層も消し、残ったメンバーの記録から作り直す)。
+  const { data: groupTurnSessions } = await admin.from("dialogue_turns").select("session_id").eq("author_student_id", user.id);
+  const { data: groupCourses } =
+    (groupTurnSessions ?? []).length > 0
+      ? await admin
+          .from("learning_sessions")
+          .select("course_id")
+          .in("id", [...new Set((groupTurnSessions ?? []).map((t) => t.session_id))])
+          .is("student_id", null)
+      : { data: [] as { course_id: string | null }[] };
+  const forgotten = await forgetStudentInGroups(admin, user.id);
+  handwritingPaths.push(...forgotten.handwritingPaths);
+  audioPaths.push(...forgotten.audioPaths);
+  if (forgotten.rebuiltProjectIds.length > 0) scheduleJobRun();
+
   if (handwritingPaths.length > 0) {
     await admin.storage.from("handwriting").remove([...new Set(handwritingPaths)]);
   }
@@ -90,7 +108,9 @@ export async function deleteMyDataAction() {
   // 教師ダッシュボードの「指導のヒント」には、この学習者に触れた文が含まれうる。個別の文だけを
   // 取り除くのは難しいため、関わった授業のヒントは丸ごと消す(教師はいつでも再生成できる)。
   const { data: involvedCourses } = await admin.from("learning_sessions").select("course_id").eq("student_id", user.id);
-  const involvedCourseIds = [...new Set((involvedCourses ?? []).map((c) => c.course_id).filter((id): id is string => !!id))];
+  const involvedCourseIds = [
+    ...new Set([...(involvedCourses ?? []), ...(groupCourses ?? [])].map((c) => c.course_id).filter((id): id is string => !!id)),
+  ];
   if (involvedCourseIds.length > 0) {
     await admin.from("teacher_guidance").delete().in("course_id", involvedCourseIds);
   }

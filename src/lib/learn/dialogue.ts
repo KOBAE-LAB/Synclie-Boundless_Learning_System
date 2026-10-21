@@ -20,6 +20,13 @@ import { recordContextFor } from "@/lib/records/context";
 import { applyTurnCorrections } from "@/lib/records/corrections";
 import { addMarker } from "@/lib/inquiry/markers";
 import { applyExpectedStage } from "@/lib/inquiry/project-stage";
+import {
+  memberAlias,
+  NEEDS_GROUP_MESSAGE,
+  resolveSessionScope,
+  scopeSessionQuery,
+  type SessionScope,
+} from "@/lib/learn/session-scope";
 
 export type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -53,6 +60,8 @@ export interface SessionRow {
   ended_at: string | null;
   close_suggested_at: string | null;
   close_suggest_after_turn: number;
+  /** 学習者本人の議論か、グループの共有の議論か(0044) */
+  scope: SessionScope;
 }
 
 const SESSION_COLUMNS = "id, started_at, ended_at, close_suggested_at, close_suggest_after_turn";
@@ -111,19 +120,23 @@ export async function getOrCreateSessionRow(
     throw new Error(ARCHIVED_MESSAGE);
   }
 
-  const { data: latest } = await admin
-    .from("learning_sessions")
-    .select(SESSION_COLUMNS)
-    .eq("course_id", courseId)
-    .eq("student_id", studentId)
-    .order("started_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  // 探究シリーズ(0044): グループの共有の議論。グループに入っていなければ議論できない。
+  const scope = await resolveSessionScope(admin, courseId, studentId);
+  if (scope.kind === "needs_group") throw new Error(NEEDS_GROUP_MESSAGE);
+
+  const findLatest = async () =>
+    (
+      await scopeSessionQuery(admin.from("learning_sessions").select(SESSION_COLUMNS).eq("course_id", courseId), scope)
+        .order("started_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+    ).data;
+  const latest = await findLatest();
   if (latest) {
     if (latest.ended_at && !options.allowEnded) {
       throw new Error("この議論は終了しました。議論のまとめを確認して、成果を提出しましょう。");
     }
-    return latest as SessionRow;
+    return { ...(latest as Omit<SessionRow, "scope">), scope };
   }
 
   // F19: 授業(courses.mode)が独習モードなら、セッションもsolo_studyとして作る。
@@ -133,28 +146,32 @@ export async function getOrCreateSessionRow(
   // 生ログの保護(0042): 授業回が消えても文脈が残るよう、探究プロジェクトと授業の控えを一緒に書く。
   const context = await recordContextFor(admin, courseId, studentId);
 
-  const { data: created, error } = await admin
+  const { data: inserted, error } = await admin
     .from("learning_sessions")
     .insert({
       course_id: courseId,
-      student_id: studentId,
+      // グループの議論は、学習者個人のものではない(発言者は dialogue_turns.author_student_id に持つ)
+      student_id: scope.kind === "group" ? null : studentId,
       mode,
       lti_resource_link_id: ltiResourceLinkId,
-      project_id: context.projectId,
+      project_id: scope.kind === "group" ? scope.projectId : context.projectId,
       course_label: context.courseLabel,
     })
     .select(SESSION_COLUMNS)
     .single();
-  if (error || !created) {
+  // グループの別のメンバーが同時に最初の発言をした場合は、先に作られた方を使う(一意の索引、0044)。
+  const created = inserted ?? (error?.code === "23505" ? await findLatest() : null);
+  if (!created) {
     throw new Error(`学習セッションの作成に失敗しました: ${error?.message ?? "不明なエラー"}`);
   }
   // 探究の段階(要件定義書14章ステップ5): 授業回の「想定の段階」がいまより先なら、そこまで進める。失敗しても学習は止めない。
-  if (context.projectId) {
-    await applyExpectedStage(admin, context.projectId, courseId).catch((err) =>
+  const projectId = scope.kind === "group" ? scope.projectId : context.projectId;
+  if (projectId) {
+    await applyExpectedStage(admin, projectId, courseId).catch((err) =>
       console.error("[inquiry] 想定の段階を反映できませんでした", err),
     );
   }
-  return created as SessionRow;
+  return { ...(created as Omit<SessionRow, "scope">), scope };
 }
 
 // F04で「使用中」にした擬似メンバーの中から、次に発言する1人を選ぶ。
@@ -284,6 +301,14 @@ export async function postStudentMessageAndRespond(
   }
   const sessionId = session.id;
 
+  // 探究のグループ(0044): 誰と話しているかを擬似メンバーに伝える(氏名ではなく仮の呼び名で)。
+  const groupNote =
+    session.scope.kind === "group"
+      ? `- この議論は、学習者のグループ(${session.scope.memberIds.map((id) => memberAlias(session.scope.kind === "group" ? session.scope.memberIds : [], id)).join("・")})と、時間差で行っている。発言の先頭の「メンバーA:」などが発言者。メンバー同士の考えの違いも取り上げ、まだ発言していないメンバーにも問いかけてよい。${
+          session.scope.theme ? `\n- グループが決めた探究のテーマ: 「${session.scope.theme}」(テーマはグループが決める。擬似メンバーが勝手に変えない)` : ""
+        }`
+      : undefined;
+
   // 学習の流れ(インプット/アウトプット)。順番を強制する授業では、インプットの間は議論に入れない。
   const flow = await assertDiscussionAllowed(admin, courseId, studentId);
   const stepContext = stepContextFor(flow);
@@ -307,6 +332,8 @@ export async function postStudentMessageAndRespond(
       .insert({
         session_id: sessionId,
         speaker_type: "student",
+        // 発言者(0044)。グループの議論では、誰の発言かをここで区別する。
+        author_student_id: studentId,
         content: message,
         source_kind: source.kind,
         source_path: source.sourcePath ?? null,
@@ -337,7 +364,7 @@ export async function postStudentMessageAndRespond(
     // 教師が監査で直した発言は、直した内容をAIに渡す(元の発言は①として残る)。
     admin
       .from("dialogue_turns")
-      .select("id, speaker_type, content, persona_id, persona_name")
+      .select("id, speaker_type, content, persona_id, persona_name, author_student_id")
       .eq("session_id", sessionId)
       .order("created_at", { ascending: false })
       .limit(HISTORY_LIMIT)
@@ -380,7 +407,12 @@ export async function postStudentMessageAndRespond(
     .reverse()
     .map((turn) => {
       if (turn.speaker_type === "student") {
-        return { role: "user" as const, content: turn.content };
+        // グループの議論では、誰の発言かを仮の呼び名で示す(AIには氏名を送らない)。
+        const content =
+          session.scope.kind === "group"
+            ? `${memberAlias(session.scope.memberIds, turn.author_student_id)}: ${turn.content}`
+            : turn.content;
+        return { role: "user" as const, content };
       }
       const speakerName =
         (turn.persona_id ? historyPersonaNames.get(turn.persona_id) : undefined) ?? turn.persona_name ?? "擬似メンバー";
@@ -486,7 +518,7 @@ export async function postStudentMessageAndRespond(
     behaviorNotes: buildBehaviorNotes(persona.behavior_rules),
     turnGuidance: guidanceLines.length > 0 ? guidanceLines.join("\n") : undefined,
     otherParticipants,
-    courseContext: withStepContext(buildCourseContext(course), stepContext),
+    courseContext: withStepContext(withStepContext(buildCourseContext(course), stepContext), groupNote),
   };
 
   // 返答: 擬似メンバーが1人なら従来どおり1人が答える。2人以上いる授業では、各メンバーの
@@ -507,7 +539,7 @@ export async function postStudentMessageAndRespond(
       const sceneMessages = await askScene(
         {
           personas: activeMembers.map(toScenePersona),
-          courseContext: withStepContext(buildCourseContext(course), stepContext),
+          courseContext: withStepContext(withStepContext(buildCourseContext(course), stepContext), groupNote),
           materialText,
           turnGuidance: guidanceLines.length > 0 ? guidanceLines.join("\n") : undefined,
           maxMessages: maxMessagesFor(course.discussion_liveliness),

@@ -242,6 +242,17 @@ export default async function CoursesPage({
               <input name="fiscalYear" type="number" min={2000} max={2100} defaultValue={currentYear} className="mt-1 block w-28 rounded-md border border-line bg-surface-raised px-3 py-2 text-sm" />
             </label>
           </div>
+          <fieldset className="space-y-1">
+            <legend className="text-xs text-ink-muted">学び方(作成後は変えられません)</legend>
+            <label className="flex items-start gap-2 text-sm text-ink">
+              <input type="radio" name="kind" value="standard" defaultChecked className="mt-1" />
+              <span>通常 — 一人ひとりが擬似メンバーと議論します</span>
+            </label>
+            <label className="flex items-start gap-2 text-sm text-ink">
+              <input type="radio" name="kind" value="inquiry" className="mt-1" />
+              <span>探究 — 学習者のグループで、時間差で議論します(グループは先生の割り当てか、グループのコードで作ります)</span>
+            </label>
+          </fieldset>
           <SubmitButton pendingText="作成中…" className="rounded-md bg-accent-fill px-4 py-2 text-sm font-medium text-white hover:bg-accent-fill-hover disabled:opacity-50">
             作成する
           </SubmitButton>

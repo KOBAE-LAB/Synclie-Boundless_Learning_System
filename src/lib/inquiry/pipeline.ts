@@ -10,9 +10,10 @@ import { extractEpisodes, EPISODE_TYPES } from "@/lib/ai/episode-extraction";
 import { buildLiveStageStory, buildRetrospective } from "@/lib/ai/stage-story";
 import { hasConsent } from "@/lib/consent";
 import { applyTurnCorrections } from "@/lib/records/corrections";
+import { memberAlias } from "@/lib/learn/session-scope";
 import { maskNames } from "./anonymize";
 import { MARKER_REASONS, type MarkerKind } from "./markers";
-import { CANONICAL_STAGES, FIRST_STAGE, stageLabel } from "./stages";
+import { CANONICAL_STAGES, FIRST_STAGE, isStageKey, stageLabel } from "./stages";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -87,14 +88,24 @@ async function latestTrajectory(admin: AdminClient, projectId: string, kind: "li
 }
 
 /** 伏せる名前: 学習者本人・担当教師の表示名と、学習者の組織名。 */
-async function namesToMask(admin: AdminClient, studentId: string, teacherId: string | null): Promise<string[]> {
-  const ids = [studentId, teacherId].filter((id): id is string => !!id);
+async function namesToMask(admin: AdminClient, studentIds: string[], teacherId: string | null): Promise<string[]> {
+  const ids = [...studentIds, teacherId].filter((id): id is string => !!id);
   const { data: profiles } = await admin.from("profiles").select("display_name, organization_id").in("id", ids);
   const orgIds = [...new Set((profiles ?? []).map((p) => p.organization_id).filter((id): id is string => !!id))];
   const { data: orgs } = orgIds.length > 0 ? await admin.from("organizations").select("name").in("id", orgIds) : { data: [] };
   return [...(profiles ?? []).map((p) => p.display_name as string | null), ...(orgs ?? []).map((o) => o.name as string)].filter(
     (n): n is string => !!n,
   );
+}
+
+/** グループに入ったことのあるメンバー全員(抜けた人も)。仮の呼び名の順番(参加した順)を、議論の途中で変えないため。 */
+async function loadGroupMemberIdsEverJoined(admin: AdminClient, projectId: string): Promise<string[]> {
+  const { data } = await admin
+    .from("inquiry_project_members")
+    .select("student_id, joined_at")
+    .eq("project_id", projectId)
+    .order("joined_at", { ascending: true });
+  return (data ?? []).map((m) => m.student_id as string);
 }
 
 async function embed(text: string): Promise<number[]> {
@@ -113,6 +124,7 @@ interface TurnRow {
   speaker_type: "student" | "persona";
   content: string;
   persona_name: string | null;
+  author_student_id: string | null;
 }
 
 async function extractSession(admin: AdminClient, job: JobRow): Promise<JobOutcome> {
@@ -122,20 +134,32 @@ async function extractSession(admin: AdminClient, job: JobRow): Promise<JobOutco
     .select("id, student_id, course_id, project_id, started_at")
     .eq("id", job.session_id)
     .maybeSingle();
-  if (!session || !session.student_id) return "skipped";
-  if (!(await isEligibleLearner(admin, session.student_id))) return "skipped";
+  if (!session) return "skipped";
+  // 個人の議論は本人、グループの議論(0044)はメンバーごとに、同意しているかを確かめる。
+  const isGroup = !session.student_id;
+  if (!isGroup && !(await isEligibleLearner(admin, session.student_id as string))) return "skipped";
 
   const [{ data: turnRows }, { data: markerRows }, { data: existingEpisodes }] = await Promise.all([
     admin
       .from("dialogue_turns")
-      .select("id, speaker_type, content, persona_name")
+      .select("id, speaker_type, content, persona_name, author_student_id")
       .eq("session_id", session.id)
       .order("created_at", { ascending: true }),
     admin.from("inquiry_markers").select("turn_id, kind").eq("session_id", session.id),
     admin.from("inquiry_episodes").select("id").eq("session_id", session.id),
   ]);
-  const turns = await applyTurnCorrections(admin, (turnRows ?? []) as TurnRow[]);
-  if (turns.length === 0) return "skipped";
+  const allTurns = await applyTurnCorrections(admin, (turnRows ?? []) as TurnRow[]);
+  // グループの議論: 同意していないメンバー(とテスト学習者)の発言は、AIにも記録の材料にも使わない。
+  const memberIds = isGroup ? await loadGroupMemberIdsEverJoined(admin, session.project_id ?? job.project_id) : [];
+  const eligibleAuthors = new Set<string>();
+  if (isGroup) {
+    const authors = [...new Set(allTurns.map((t) => t.author_student_id).filter((id): id is string => !!id))];
+    for (const id of authors) if (await isEligibleLearner(admin, id)) eligibleAuthors.add(id);
+  }
+  const turns = isGroup
+    ? allTurns.filter((t) => t.speaker_type !== "student" || (t.author_student_id && eligibleAuthors.has(t.author_student_id)))
+    : allTurns;
+  if (!turns.some((t) => t.speaker_type === "student")) return "skipped";
   const indexOf = new Map(turns.map((t, i) => [t.id, i + 1]));
 
   // すでにエピソードにした範囲(出典の発言から復元する)
@@ -164,17 +188,24 @@ async function extractSession(admin: AdminClient, job: JobRow): Promise<JobOutco
   if (marked.length === 0) return "skipped";
 
   const project = await loadProject(admin, session.project_id ?? job.project_id);
-  const stageKey = project.current_stage_key ?? FIRST_STAGE;
+  // 作り直し(学習者の全データ削除の後など)では、元のエピソードと同じ段階に置く(job.stage_key)。
+  const stageKey = (isStageKey(job.stage_key) ? job.stage_key : null) ?? project.current_stage_key ?? FIRST_STAGE;
   const [trajectory, reflectionText, names, lessonNo] = await Promise.all([
     latestTrajectory(admin, project.id),
-    loadReflectionText(admin, session.id),
-    namesToMask(admin, session.student_id, project.owner_teacher_id),
+    loadReflectionText(admin, session.id, isGroup ? [...eligibleAuthors] : null),
+    namesToMask(admin, isGroup ? memberIds : [session.student_id as string], project.owner_teacher_id),
     session.course_id
       ? admin.from("courses").select("lesson_no").eq("id", session.course_id).maybeSingle().then((r) => (r.data?.lesson_no as number | undefined) ?? null)
       : Promise.resolve(null),
   ]);
 
-  const speaker = (t: TurnRow) => (t.speaker_type === "student" ? "学習者" : `AIの${t.persona_name ?? "仲間"}`);
+  // グループでは「メンバーA」などの仮の呼び名(参加した順。氏名はAIに送らない)。
+  const speaker = (t: TurnRow) =>
+    t.speaker_type === "student"
+      ? isGroup
+        ? `学習者(${memberAlias(memberIds, t.author_student_id)})`
+        : "学習者"
+      : `AIの${t.persona_name ?? "仲間"}`;
   const transcript = turns.map((t, i) => `[T${i + 1}] ${speaker(t)}: ${t.content}`).join("\n");
 
   const extracted = await withAiContext(
@@ -264,9 +295,12 @@ async function extractSession(admin: AdminClient, job: JobRow): Promise<JobOutco
   return "done";
 }
 
-async function loadReflectionText(admin: AdminClient, sessionId: string): Promise<string> {
-  const { data: submissions } = await admin.from("submissions").select("id").eq("session_id", sessionId);
-  const ids = (submissions ?? []).map((s) => s.id as string);
+/** 議論の振り返り。グループでは、同意しているメンバーの成果の振り返りだけ(onlyStudents)。 */
+async function loadReflectionText(admin: AdminClient, sessionId: string, onlyStudents: string[] | null): Promise<string> {
+  const { data: submissions } = await admin.from("submissions").select("id, student_id").eq("session_id", sessionId);
+  const ids = (submissions ?? [])
+    .filter((s) => !onlyStudents || onlyStudents.includes(s.student_id as string))
+    .map((s) => s.id as string);
   if (ids.length === 0) return "";
   const { data: reflections } = await admin
     .from("reflections")

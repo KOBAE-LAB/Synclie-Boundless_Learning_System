@@ -23,6 +23,7 @@ import { addMarker, loadOwnTurnSession, removeMarker } from "@/lib/inquiry/marke
 import { transitionStage } from "@/lib/inquiry/project-stage";
 import { enqueueJob, scheduleJobRun } from "@/lib/inquiry/queue";
 import { isStageKey } from "@/lib/inquiry/stages";
+import { resolveSessionScope, scopeSessionQuery } from "@/lib/learn/session-scope";
 import {
   HISTORY_LIMIT,
   getOrCreateSession,
@@ -40,6 +41,9 @@ import {
 export async function autoContinueDiscussionAction(courseId: string) {
   const { user } = await requireRole("student");
   const admin = createAdminClient();
+
+  // グループの議論(0044、時間差が基本)では、沈黙は自然なことなので、AI同士の自動継続はしない。
+  if ((await resolveSessionScope(admin, courseId, user.id)).kind !== "solo") return;
 
   const { data: session } = await admin
     .from("learning_sessions")
@@ -219,12 +223,12 @@ export async function dismissCloseSuggestionAction(courseId: string) {
   const { user } = await requireRole("student");
   const admin = createAdminClient();
 
-  const { data: session } = await admin
-    .from("learning_sessions")
-    .select("id")
-    .eq("course_id", courseId)
-    .eq("student_id", user.id)
-    .is("ended_at", null)
+  // 本人の議論、または本人が入っているグループの議論だけ(0044)。
+  const scope = await resolveSessionScope(admin, courseId, user.id);
+  const { data: session } = await scopeSessionQuery(
+    admin.from("learning_sessions").select("id").eq("course_id", courseId).is("ended_at", null),
+    scope,
+  )
     .order("started_at", { ascending: false })
     .limit(1)
     .maybeSingle();
