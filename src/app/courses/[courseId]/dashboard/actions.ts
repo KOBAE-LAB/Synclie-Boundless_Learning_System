@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { assertOwnsCourse } from "@/lib/courses/ownership";
+import { retryJobs, scheduleJobRun } from "@/lib/inquiry/queue";
 import { generateTeacherGuidance } from "@/lib/ai/teacher-guidance";
 import { formatGuidanceInput, mapIndividuals, restoreNames, type GuidanceData } from "@/lib/teacher-guidance/input";
 import { loadCourseStats } from "@/lib/teacher-guidance/stats";
@@ -144,5 +145,19 @@ export async function generateTeacherGuidanceAction(courseId: string) {
     await admin.from("teacher_guidance").upsert({ course_id: courseId, status: "failed", error: message }, { onConflict: "course_id" });
   }
 
+  revalidatePath(`/courses/${courseId}/dashboard`);
+}
+
+// 探究の記録づくり(要件定義書14章ステップ5)で、失敗・後回しになった仕事を、もう一度処理待ちに戻して実行する。
+export async function retryInquiryJobsAction(courseId: string) {
+  const { user } = await requireRole("teacher");
+  const admin = createAdminClient();
+  await assertOwnsCourse(admin, courseId, user.id);
+
+  const { data: course } = await admin.from("courses").select("series_id").eq("id", courseId).maybeSingle();
+  if (!course) throw new Error("授業が見つかりません。");
+  const { data: projects } = await admin.from("inquiry_projects").select("id").eq("series_id", course.series_id);
+  const retried = await retryJobs(admin, (projects ?? []).map((p) => p.id as string));
+  if (retried > 0) scheduleJobRun();
   revalidatePath(`/courses/${courseId}/dashboard`);
 }

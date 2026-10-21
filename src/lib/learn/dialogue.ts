@@ -18,6 +18,8 @@ import { THINKING_DEPTH_GUIDANCE, normalizeThinkingDepth } from "@/lib/persona-t
 import { getTimeStatus, shouldJudgeDiscussionState } from "@/lib/learn/session-end";
 import { recordContextFor } from "@/lib/records/context";
 import { applyTurnCorrections } from "@/lib/records/corrections";
+import { addMarker } from "@/lib/inquiry/markers";
+import { applyExpectedStage } from "@/lib/inquiry/project-stage";
 
 export type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -145,6 +147,12 @@ export async function getOrCreateSessionRow(
     .single();
   if (error || !created) {
     throw new Error(`学習セッションの作成に失敗しました: ${error?.message ?? "不明なエラー"}`);
+  }
+  // 探究の段階(要件定義書14章ステップ5): 授業回の「想定の段階」がいまより先なら、そこまで進める。失敗しても学習は止めない。
+  if (context.projectId) {
+    await applyExpectedStage(admin, context.projectId, courseId).catch((err) =>
+      console.error("[inquiry] 想定の段階を反映できませんでした", err),
+    );
   }
   return created as SessionRow;
 }
@@ -532,16 +540,24 @@ export async function postStudentMessageAndRespond(
   // (集計側は、学習者の発言ごとに1回だけ数える)。
   const memberNames = new Map(activeMembers.map((p) => [p.id, p.name]));
   for (const reply of replies) {
-    const { error: personaTurnError } = await admin.from("dialogue_turns").insert({
-      session_id: sessionId,
-      speaker_type: "persona",
-      persona_id: reply.personaId,
-      // 擬似メンバー(授業の構成)が消えても、誰の発言か読めるようにする控え(0042)。
-      persona_name: memberNames.get(reply.personaId) ?? null,
-      content: reply.text,
-    });
-    if (personaTurnError) {
-      throw new Error(`擬似メンバーの発言保存に失敗しました: ${personaTurnError.message}`);
+    const { data: personaTurn, error: personaTurnError } = await admin
+      .from("dialogue_turns")
+      .insert({
+        session_id: sessionId,
+        speaker_type: "persona",
+        persona_id: reply.personaId,
+        // 擬似メンバー(授業の構成)が消えても、誰の発言か読めるようにする控え(0042)。
+        persona_name: memberNames.get(reply.personaId) ?? null,
+        content: reply.text,
+      })
+      .select("id")
+      .single();
+    if (personaTurnError || !personaTurn) {
+      throw new Error(`擬似メンバーの発言保存に失敗しました: ${personaTurnError?.message ?? "不明なエラー"}`);
+    }
+    // 印(要件定義書14章ステップ5): 根拠を受けてAIの仲間が考えを変えた瞬間。AIは呼ばない。
+    if (reply.conceded && hasNewEvidence) {
+      await addMarker(admin, { turnId: personaTurn.id, sessionId, kind: "persona_conceded" });
     }
 
     if (argumentScores !== null && hasNewEvidence !== null && reply.conceded !== null) {
@@ -557,6 +573,11 @@ export async function postStudentMessageAndRespond(
         unwarranted_conformity: reply.conceded && !hasNewEvidence,
       });
     }
+  }
+
+  // 印: 学習者が新しい根拠・具体例を出した瞬間(既存の論証評価の結果を見るだけで、AIは呼ばない)。
+  if (hasNewEvidence) {
+    await addMarker(admin, { turnId: studentTurn.id, sessionId, kind: "evidence_shift" });
   }
 
   await closeSuggestionTask;

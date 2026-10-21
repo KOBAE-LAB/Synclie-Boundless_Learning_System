@@ -7,6 +7,7 @@ import { Breadcrumbs, BackLink } from "@/components/breadcrumbs";
 import { loadCourseStats } from "@/lib/teacher-guidance/stats";
 import { SubmitButton } from "@/components/submit-button";
 import { generateTeacherGuidanceAction } from "./actions";
+import { InquiryRecordsPanel } from "./inquiry-records-panel";
 
 interface GuidanceContent {
   classOverview: string;
@@ -241,6 +242,8 @@ export default async function CourseDashboardPage({
       >
         発言を確認・修正する→
       </Link>
+
+      <InquiryRecordsPanel admin={admin} courseId={courseId} />
 
       <BackLink href={`/courses/${courseId}`} label={course.title} />
     </div>

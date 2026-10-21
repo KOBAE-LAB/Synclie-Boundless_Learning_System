@@ -3,6 +3,7 @@ import { searchMaterialChunks } from "@/lib/rag/search";
 import { summarizeDiscussion, type DiscussionSummary } from "@/lib/ai/discussion-wrapup";
 import { getTimeStatus } from "@/lib/learn/session-end";
 import { applyTurnCorrections } from "@/lib/records/corrections";
+import { enqueueJob, scheduleJobRun } from "@/lib/inquiry/queue";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -30,7 +31,7 @@ export async function closeDiscussion(
 ): Promise<{ summary: DiscussionSummary; alreadyEnded: boolean }> {
   const { data: session } = await admin
     .from("learning_sessions")
-    .select("id, started_at, ended_at, close_suggested_at, closing_summary")
+    .select("id, started_at, ended_at, close_suggested_at, closing_summary, project_id")
     .eq("course_id", courseId)
     .eq("student_id", studentId)
     .order("started_at", { ascending: false })
@@ -106,6 +107,12 @@ export async function closeDiscussion(
     .is("ended_at", null);
   if (error) {
     throw new Error(`議論の終了の記録に失敗しました: ${error.message}`);
+  }
+  // ②抽出層(要件定義書14章ステップ5): 議論が終わったら、印の付いた場面からエピソードを作る。
+  // 学習者を待たせないよう、レスポンスを返した後(after())に実行する。印が無ければAIは呼ばれない。
+  if (session.project_id) {
+    await enqueueJob(admin, { kind: "extract_session", projectId: session.project_id, sessionId: session.id });
+    scheduleJobRun({ projectId: session.project_id });
   }
   return { summary, alreadyEnded: false };
 }

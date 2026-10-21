@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { isStageKey } from "@/lib/inquiry/stages";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { requireAdmin, requireRole, VIEW_AS_COOKIE } from "@/lib/auth/session";
@@ -181,7 +182,13 @@ export async function updateCourseSettingsAction(courseId: string, formData: For
     aiCloseSuggestion: formData.get("aiCloseSuggestion") === "on",
   });
 
-  const { error } = await admin.from("courses").update(settings).eq("id", courseId);
+  // 探究の段階(要件定義書14章ステップ5): この回で想定する段階。学習者がこの回の議論を始めると、
+  // その学習者の探究の段階がここまで進む(先の段階にいる学習者を戻すことはしない)。空欄なら段階を動かさない。
+  const expectedStage = formData.get("expectedStageKey");
+  const { error } = await admin
+    .from("courses")
+    .update({ ...settings, expected_stage_key: isStageKey(expectedStage) ? expectedStage : null })
+    .eq("id", courseId);
   if (error) {
     throw new Error(`授業設定の保存に失敗しました: ${error.message}`);
   }

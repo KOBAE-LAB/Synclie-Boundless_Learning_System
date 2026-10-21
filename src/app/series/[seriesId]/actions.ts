@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { closeInquiryForSeries } from "@/lib/inquiry/project-stage";
 import { redirect } from "next/navigation";
 import { requireAdmin, requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -214,6 +215,8 @@ export async function archiveSeriesAction(seriesId: string) {
   const { admin } = await guard(seriesId);
   const { error } = await admin.from("course_series").update({ archived_at: new Date().toISOString() }).eq("id", seriesId);
   if (error) throw new Error(`アーカイブに失敗しました: ${error.message}`);
+  // 探究の終了(要件定義書14章ステップ5): 最後の段階の物語と、振り返り版を作る(後処理)。
+  await closeInquiryForSeries(admin, [seriesId]);
   revalidatePath(`/series/${seriesId}`);
   revalidatePath("/courses");
 }

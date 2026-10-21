@@ -27,7 +27,10 @@ import {
   autoContinueDiscussionAction,
   dismissCloseSuggestionAction,
   updateSessionTempoAction,
+  toggleKeepForJuniorsAction,
+  declareStageAction,
 } from "./actions";
+import { CANONICAL_STAGES, stageLabel } from "@/lib/inquiry/stages";
 import { AUTO_CONTINUE_CAP, TEMPO_OPTIONS } from "@/lib/discussion-tempo";
 import { Breadcrumbs, BackLink } from "@/components/breadcrumbs";
 import { StepNumber } from "@/components/step-number";
@@ -190,7 +193,7 @@ export default async function LearnCourseSessionPage({
     admin
       .from("learning_sessions")
       .select(
-        "id, started_at, ended_at, end_reason, closing_summary, close_suggested_at, close_suggestion_reason, auto_discussion_tempo_seconds",
+        "id, started_at, ended_at, end_reason, closing_summary, close_suggested_at, close_suggestion_reason, auto_discussion_tempo_seconds, project_id",
       )
       .eq("course_id", courseId)
       .eq("student_id", user.id)
@@ -318,6 +321,18 @@ export default async function LearnCourseSessionPage({
   ]);
 
   const turns = (turnRows ?? []) as DialogueTurnRow[];
+
+  // 探究の記録(要件定義書14章ステップ5): いまの段階と、「後輩に残したい」の印を付けた発言。
+  const [{ data: projectRow }, { data: keepRows }] = await Promise.all([
+    session?.project_id
+      ? admin.from("inquiry_projects").select("current_stage_key").eq("id", session.project_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+    session
+      ? admin.from("inquiry_markers").select("turn_id").eq("session_id", session.id).eq("kind", "student_keep")
+      : Promise.resolve({ data: [] as { turn_id: string }[] }),
+  ]);
+  const currentStageKey = (projectRow?.current_stage_key as string | null | undefined) ?? null;
+  const keptTurnIds = new Set((keepRows ?? []).map((r) => r.turn_id as string));
   const pendingHandwritingUploads = (uploadRows ?? []) as HandwritingUploadRow[];
   const pendingAudioUploads = (audioUploadRows ?? []) as AudioUploadRow[];
 
@@ -421,6 +436,41 @@ export default async function LearnCourseSessionPage({
       >
         ポートフォリオを見る→
       </Link>
+
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+        <span className="text-ink-muted">
+          探究の段階: <span className="font-medium text-ink">{stageLabel(currentStageKey)}</span>
+        </span>
+        {!seriesArchived && (
+          <details className="text-xs">
+            <summary className="cursor-pointer text-ink-muted hover:underline">段階を変える</summary>
+            <form action={declareStageAction.bind(null, courseId)} className="mt-2 flex flex-wrap items-center gap-2">
+              <label htmlFor="stage-select" className="sr-only">
+                いまの探究の段階
+              </label>
+              <select
+                id="stage-select"
+                name="stage"
+                defaultValue={currentStageKey ?? CANONICAL_STAGES[0].key}
+                className="rounded-md border border-line bg-surface-raised px-2 py-1 text-xs"
+              >
+                {CANONICAL_STAGES.map((s) => (
+                  <option key={s.key} value={s.key}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+              <SubmitButton
+                pendingText="記録中…"
+                className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface disabled:opacity-50"
+              >
+                この段階に進んだ
+              </SubmitButton>
+            </form>
+            <p className="mt-1 text-ink-faint">段階が変わると、それまでの段階の記録がまとめられ、後輩の探究の参考になります。</p>
+          </details>
+        )}
+      </div>
 
       {flow.steps.length > 0 && <FlowStepper courseId={courseId} flow={flow} viewingId={viewingStep?.id} />}
       {viewingStep && <OutputStepCard courseId={courseId} step={viewingStep} isCurrent={flowCurrent?.id === viewingStep.id} />}
@@ -642,6 +692,7 @@ export default async function LearnCourseSessionPage({
                   {turn.source_kind === "audio" && <p className="mb-1 text-xs text-ink-faint">[音声から変換]</p>}
                   <p className="whitespace-pre-wrap">{turn.content}</p>
                 </div>
+                {!seriesArchived && <KeepToggle courseId={courseId} turnId={turn.id} kept={keptTurnIds.has(turn.id)} />}
               </div>
             );
           }
@@ -672,6 +723,7 @@ export default async function LearnCourseSessionPage({
                   {turn.source_kind === "audio" && <p className="mb-1 text-xs text-ink-faint">[音声から変換]</p>}
                   <p className="whitespace-pre-wrap">{turn.content}</p>
                 </div>
+                {!seriesArchived && <KeepToggle courseId={courseId} turnId={turn.id} kept={keptTurnIds.has(turn.id)} />}
               </div>
             </div>
           );
@@ -1108,5 +1160,21 @@ export default async function LearnCourseSessionPage({
 
       <BackLink href={lessonCrumbs ? `/learn/series/${lessonCrumbs.seriesId}` : "/learn"} label={lessonCrumbs?.seriesTitle ?? "授業一覧"} />
     </div>
+  );
+}
+
+// 「後輩に残したい」の印の付け外し(要件定義書14章ステップ5)。発言の下に小さく出す。
+function KeepToggle({ courseId, turnId, kept }: { courseId: string; turnId: string; kept: boolean }) {
+  return (
+    <form action={toggleKeepForJuniorsAction.bind(null, courseId, turnId)} className="mt-0.5">
+      <button
+        type="submit"
+        aria-pressed={kept}
+        title={kept ? "印を外す" : "この場面を、後輩の探究の参考に残す"}
+        className={`text-xs hover:underline ${kept ? "font-medium text-warn" : "text-ink-faint"}`}
+      >
+        {kept ? "★ 後輩に残す" : "☆ 後輩に残す"}
+      </button>
+    </form>
   );
 }
