@@ -46,11 +46,22 @@ export function instrumentUsage(c: OpenAI): OpenAI {
     }
   };
 
+  // SDKの responses.parse は、内部で responses.create を同期的に呼ぶ(その結果を _thenUnwrap で包み直す)。
+  // create の結果に先に .then を付けると、包み直した側がもう一度応答の本文を読んで、
+  // 「Body is unusable: Body has already been read」で失敗する(2026-10-22に見つかった)。
+  // そのため、parse の中から呼ばれた create には付けず、parse の最終的な結果にだけ付ける(記録も1回になる)。
+  let parseDepth = 0;
   const responses = c.responses;
   const parse = responses.parse.bind(responses);
   responses.parse = ((params: Parameters<typeof parse>[0], options?: Parameters<typeof parse>[1]) => {
     const context = currentAiContext();
-    const result = parse(params, options);
+    parseDepth++;
+    let result: ReturnType<typeof parse>;
+    try {
+      result = parse(params, options);
+    } finally {
+      parseDepth--;
+    }
     afterResult(result, context, params, "responses");
     return result;
   }) as typeof responses.parse;
@@ -59,7 +70,7 @@ export function instrumentUsage(c: OpenAI): OpenAI {
   responses.create = ((params: unknown, options?: unknown) => {
     const context = currentAiContext();
     const result = create(params, options);
-    if (!(params as { stream?: unknown } | null)?.stream) afterResult(result, context, params, "responses");
+    if (parseDepth === 0 && !(params as { stream?: unknown } | null)?.stream) afterResult(result, context, params, "responses");
     return result;
   }) as unknown as typeof responses.create;
 
