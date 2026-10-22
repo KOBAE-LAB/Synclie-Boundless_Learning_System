@@ -2,19 +2,22 @@ import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { updateTurnAction } from "./actions";
+import { loadLatestCorrections } from "@/lib/records/corrections";
 import { loadLessonCrumbs } from "@/lib/courses/series";
 import { Breadcrumbs, BackLink } from "@/components/breadcrumbs";
 
 // F15: 擬似メンバーの挙動の監査と修正。
 // 「擬似メンバーの発言ログを確認し、不適切・不正確な挙動を修正する」(要件定義書4章)。
 // 教師が擬似メンバーの発言を一覧で確認し、直前の学習者の発言(文脈)とあわせて見ながら、
-// 内容を直接修正し、「不適切/不正確」のフラグと確認メモを残せる。
+// 内容を修正し、「不適切/不正確」のフラグと確認メモを残せる。修正は元の発言を書き換えず、
+// 修正版として積む(0042)。画面には最新の修正版を出し、元の発言も確認できるようにする。
 
 interface TurnRow {
   id: string;
   session_id: string;
   speaker_type: "student" | "persona";
   persona_id: string | null;
+  persona_name: string | null;
   content: string;
   created_at: string;
   flagged_by_teacher: boolean;
@@ -23,6 +26,8 @@ interface TurnRow {
 
 interface PersonaTurnWithContext extends TurnRow {
   precedingStudentContent: string | null;
+  /** 修正版があるときの、元の発言(①として残っているもの) */
+  originalContent: string | null;
 }
 
 export default async function PersonaAuditPage({
@@ -56,20 +61,27 @@ export default async function PersonaAuditPage({
     const { data: turnRows } = await admin
       .from("dialogue_turns")
       .select(
-        "id, session_id, speaker_type, persona_id, content, created_at, flagged_by_teacher, teacher_note",
+        "id, session_id, speaker_type, persona_id, persona_name, content, created_at, flagged_by_teacher, teacher_note",
       )
       .in("session_id", sessionIds)
       .order("session_id", { ascending: true })
       .order("created_at", { ascending: true });
     const turns = (turnRows ?? []) as TurnRow[];
+    const corrections = await loadLatestCorrections(
+      admin,
+      turns.filter((t) => t.speaker_type === "persona").map((t) => t.id),
+    );
 
     // セッションごとに並んでいる前提で、擬似メンバーの発言の直前にある
     // 学習者の発言を文脈として拾う(1件前がstudentでなければ文脈なしとする)。
     let previous: TurnRow | null = null;
     for (const turn of turns) {
       if (turn.speaker_type === "persona") {
+        const correction = corrections.get(turn.id);
         personaTurns.push({
           ...turn,
+          content: correction?.corrected_content ?? turn.content,
+          originalContent: correction ? turn.content : null,
           precedingStudentContent:
             previous && previous.session_id === turn.session_id && previous.speaker_type === "student"
               ? previous.content
@@ -94,7 +106,7 @@ export default async function PersonaAuditPage({
         擬似メンバーの挙動の監査と修正
       </h1>
       <p className="mt-1 text-sm text-ink-muted">
-        発言を確認し、不適切・不正確な内容を直接修正できます。修正後の内容は以後の対話に使われます。
+        発言を確認し、不適切・不正確な内容を修正できます。修正後の内容は以後の対話に使われ、元の発言も記録として残ります。
       </p>
 
       <ul className="mt-8 space-y-4">
@@ -111,7 +123,7 @@ export default async function PersonaAuditPage({
             >
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <span className="text-xs font-medium text-ink-muted">
-                  {turn.persona_id ? (personaNames.get(turn.persona_id) ?? "擬似メンバー") : "擬似メンバー"}
+                  {(turn.persona_id ? personaNames.get(turn.persona_id) : undefined) ?? turn.persona_name ?? "擬似メンバー"}
                   (AI) ・ {new Date(turn.created_at).toLocaleString("ja-JP")}
                 </span>
                 {turn.flagged_by_teacher && (
@@ -125,6 +137,13 @@ export default async function PersonaAuditPage({
                 <p className="mt-2 whitespace-pre-wrap rounded-md bg-surface px-3 py-2 text-xs text-ink-muted">
                   学習者: {turn.precedingStudentContent}
                 </p>
+              )}
+
+              {turn.originalContent !== null && (
+                <details className="mt-2 text-xs text-ink-muted">
+                  <summary className="cursor-pointer">修正済み(元の発言を見る)</summary>
+                  <p className="mt-1 whitespace-pre-wrap rounded-md bg-surface px-3 py-2">{turn.originalContent}</p>
+                </details>
               )}
 
               <form action={boundUpdateAction} className="mt-2 space-y-2">

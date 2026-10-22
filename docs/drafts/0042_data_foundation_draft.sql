@@ -1,4 +1,9 @@
--- 【草案・未適用】データ基盤の再設計(3層)のマイグレーション。要件定義書14章「ステップ4」の草案。
+-- 【草案】データ基盤の再設計(3層)のマイグレーション。要件定義書14章「ステップ4」の草案。
+--
+-- 2026-10-21: Part A は supabase/migrations/0042_raw_log_protection.sql として実装した(未適用の草案ではなくなった)。
+--   そのとき、Part C のうち①だけに関わる C1(控えの埋め戻し)・C2/C3(個人プロジェクトへの束ね)も 0042 に前倒しし、
+--   inquiry_projects に solo_student_id((教科・科目, 本人)で一意)を足した。このファイルの Part A・C1〜C3 は参考として残す。
+--   残り: Part B(0043)と、Part C の C4〜C6(0044)。
 --
 -- このファイルは supabase/migrations/ には置かない(置くと db push で適用されてしまう)。
 -- 実装するときに、次の3つのマイグレーションに分けて、順に supabase/migrations/ へ移す:
@@ -8,7 +13,7 @@
 -- 検証: 開発DBで begin; … rollback; の中で通ることを確認済み(DBは変更していない)。
 --
 -- 方針(14章の設計原則):
---   ① 生ログは書き換えない / 授業(授業回・シリーズ)の削除で消えない。消えるのは学習者本人の全データ削除(F16)だけ。
+--   ① 生ログは書き換えない / 授業(授業回・教科・科目)の削除で消えない。消えるのは学習者本人の全データ削除(F16)だけ。
 --   ② 加工したものは版で重ねる。すべての行が出典(①)をたどれる。
 --   ③ 授業から独立して残る。貸し出しは参照のみ。
 
@@ -18,7 +23,7 @@
 
 -- A1. 探究プロジェクト: ①②③をつなぐ、授業から独立した安定した単位。
 --   グループ × テーマ × 期間。個人の独習は1人のプロジェクト(kind='solo')。複数の授業回にまたがる。
---   授業シリーズを消しても、プロジェクトと記録は残る(series_id は set null)。
+--   授業教科・科目を消しても、プロジェクトと記録は残る(series_id は set null)。
 create table if not exists inquiry_projects (
   id uuid primary key default gen_random_uuid(),
   series_id uuid references course_series(id) on delete set null,
@@ -32,7 +37,7 @@ create table if not exists inquiry_projects (
   -- 段階の定義。null = 既定の4段階。[{ "key": "...", "label": "...", "canonical": "problem_setting|information_gathering|analysis|expression" }]
   -- canonical は、アーカイブを横断するときの既定4段階との対応。
   stage_set jsonb,
-  -- シリーズが消えても、記録の文脈(どの授業だったか)を読めるようにする控え
+  -- 教科・科目が消えても、記録の文脈(どの授業だったか)を読めるようにする控え
   series_label text,
   created_at timestamptz not null default now()
 );
@@ -314,9 +319,9 @@ set persona_name = p.name
 from personas p
 where t.persona_id = p.id and t.persona_name is null;
 
--- C2. 既存の記録を、「学習者 × シリーズ」ごとの個人プロジェクト(kind='solo')に束ねる。
+-- C2. 既存の記録を、「学習者 × 教科・科目」ごとの個人プロジェクト(kind='solo')に束ねる。
 --   人間のグループがまだ無いので、いまの記録はすべて1人のプロジェクトになる。
---   (シリーズ, 学習者)ごとに1つだけ作るため、一時的な対応表を使う。
+--   (教科・科目, 学習者)ごとに1つだけ作るため、一時的な対応表を使う。
 create temp table _proj_map on commit drop as
 select series_id, student_id, gen_random_uuid() as project_id
 from (

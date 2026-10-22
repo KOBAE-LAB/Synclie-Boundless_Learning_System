@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { joinCourseByCodeAction } from "./actions";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 
-// 履修登録。教師から伝えられた授業コードを入力して、授業シリーズを履修する。
+// 履修登録。教師から伝えられた授業コードを入力して、教科・科目を履修する。
 export default async function JoinCoursePage() {
   const { user } = await requireRole("student");
   const admin = createAdminClient();

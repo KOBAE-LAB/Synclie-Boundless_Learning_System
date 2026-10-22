@@ -20,7 +20,7 @@ export default async function AdminTeachersPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <Breadcrumbs trail={[{ label: "授業シリーズ一覧", href: "/courses" }]} current="教師の承認" />
+      <Breadcrumbs trail={[{ label: "教科・科目一覧", href: "/courses" }]} current="教師の承認" />
 
       <h1 className="text-2xl font-semibold text-ink">教師の承認</h1>
       <p className="mt-1 text-sm text-ink-muted">

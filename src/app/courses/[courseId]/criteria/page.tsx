@@ -60,7 +60,7 @@ export default async function EvaluationCriteriaPage({
         lessons={siblingLessons}
         action={copyCriteriaFromLessonAction.bind(null, courseId)}
         title="前の回から評価の観点を複製する"
-        description="同じシリーズの別の授業回の観点を、この回に複製します(同じ名前の観点がある場合は複製しません)。"
+        description="同じ教科・科目の別の授業回の観点を、この回に複製します(同じ名前の観点がある場合は複製しません)。"
         copied={copiedParam}
         skipped={skippedParam}
       />

@@ -164,7 +164,7 @@ export default async function PersonasPage({
         lessons={siblingLessons}
         action={copyPersonasFromLessonAction.bind(null, courseId)}
         title="前の回から擬似メンバーを複製する"
-        description="同じシリーズの別の授業回の擬似メンバーを、この回にそのまま複製します(状態・アバターも同じ。同じ名前がある場合は複製しません)。"
+        description="同じ教科・科目の別の授業回の擬似メンバーを、この回にそのまま複製します(状態・アバターも同じ。同じ名前がある場合は複製しません)。"
         copied={copiedParam}
         skipped={skippedParam}
       />

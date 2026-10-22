@@ -80,7 +80,7 @@ describe("getOrCreateTestStudent", () => {
 });
 
 describe("ensureTestStudentEnrolled", () => {
-  it("テスト学習者を、その授業回のシリーズの『承認済み』の履修者にする", async () => {
+  it("テスト学習者を、その授業回の教科・科目の『承認済み』の履修者にする", async () => {
     const { admin, upserts } = fakeAdmin({ existing: { id: "t1" } });
     await expect(ensureTestStudentEnrolled(admin, "admin-1", "course-1")).resolves.toBe("t1");
     expect(upserts[0]).toEqual({ series_id: "series-1", student_id: "t1", status: "approved" });

@@ -26,7 +26,7 @@ export default async function OrganizationPage() {
   if (!profile?.organization_id) {
     return (
       <div className="mx-auto max-w-2xl px-6 py-12">
-        <Breadcrumbs trail={[{ label: "授業シリーズ一覧", href: "/courses" }]} current="組織" />
+        <Breadcrumbs trail={[{ label: "教科・科目一覧", href: "/courses" }]} current="組織" />
       <h1 className="mt-3 text-2xl font-semibold text-ink">組織</h1>
         <p className="mt-1 text-sm text-ink-muted">
           組織(学校・地域単位)に参加すると、同じ組織の教師が共有したペルソナ・教材を
@@ -125,7 +125,7 @@ export default async function OrganizationPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <Breadcrumbs trail={[{ label: "授業シリーズ一覧", href: "/courses" }]} current="組織" />
+      <Breadcrumbs trail={[{ label: "教科・科目一覧", href: "/courses" }]} current="組織" />
       <h1 className="mt-3 text-2xl font-semibold text-ink">組織</h1>
       <p className="mt-1 text-sm text-ink-muted">
         所属組織: <span className="font-medium text-ink">{org?.name}</span>

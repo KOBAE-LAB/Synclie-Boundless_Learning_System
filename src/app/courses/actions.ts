@@ -6,7 +6,7 @@ import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { fiscalYearOfDate } from "@/lib/courses/series";
 
-// 授業シリーズ(科目・講座)の作成。履修登録(参加コード)の単位で、その中に授業回を重ねていく。
+// 教科・科目(科目・講座)の作成。履修登録(参加コード)の単位で、その中に授業回を重ねていく。
 // RLSが未整備の段階1では、role確認をアプリ側(requireRole)で行い、
 // 管理者クライアント(サービスロール)でDB操作する。
 export async function createSeriesAction(formData: FormData) {
@@ -17,7 +17,7 @@ export async function createSeriesAction(formData: FormData) {
   const year = Number.parseInt(String(formData.get("fiscalYear") ?? ""), 10);
 
   if (!title) {
-    throw new Error("シリーズの名前を入力してください。");
+    throw new Error("教科・科目の名前を入力してください。");
   }
 
   const admin = createAdminClient();
@@ -34,14 +34,14 @@ export async function createSeriesAction(formData: FormData) {
     .single();
 
   if (error) {
-    throw new Error(`授業シリーズの作成に失敗しました: ${error.message}`);
+    throw new Error(`教科・科目の作成に失敗しました: ${error.message}`);
   }
 
   revalidatePath("/courses");
   redirect(`/series/${data.id}`);
 }
 
-// 年度末の一括処理: 指定した年度の、自分が担当する(まだ閉じていない)シリーズを、まとめてアーカイブする。
+// 年度末の一括処理: 指定した年度の、自分が担当する(まだ閉じていない)教科・科目を、まとめてアーカイブする。
 export async function archiveYearAction(formData: FormData) {
   const session = await requireRole("teacher");
   const year = Number.parseInt(String(formData.get("fiscalYear") ?? ""), 10);

@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { searchMaterialChunks } from "@/lib/rag/search";
 import { summarizeDiscussion, type DiscussionSummary } from "@/lib/ai/discussion-wrapup";
 import { getTimeStatus } from "@/lib/learn/session-end";
+import { applyTurnCorrections } from "@/lib/records/corrections";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -49,12 +50,15 @@ export async function closeDiscussion(
       .select("title, objective, learner_level, time_limit_minutes, time_limit_policy")
       .eq("id", courseId)
       .maybeSingle(),
+    // 教師が監査で直した発言は、直した内容でまとめる(元の発言は①として残る)。
     admin
       .from("dialogue_turns")
-      .select("speaker_type, content, persona_id")
+      .select("id, speaker_type, content, persona_id, persona_name")
       .eq("session_id", session.id)
       .order("created_at", { ascending: true })
-      .limit(80),
+      .limit(80)
+      .then(({ data }) => applyTurnCorrections(admin, data ?? []))
+      .then((data) => ({ data })),
   ]);
   if (!course) throw new Error("授業が見つかりません。");
 
@@ -72,7 +76,7 @@ export async function closeDiscussion(
     .map((t) =>
       t.speaker_type === "student"
         ? `学習者: ${t.content}`
-        : `${t.persona_id ? (names.get(t.persona_id) ?? "擬似メンバー") : "擬似メンバー"}: ${t.content}`,
+        : `${(t.persona_id ? names.get(t.persona_id) : undefined) ?? t.persona_name ?? "擬似メンバー"}: ${t.content}`,
     )
     .join("\n");
   if (!transcript) {

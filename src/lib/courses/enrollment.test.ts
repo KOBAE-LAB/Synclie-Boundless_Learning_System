@@ -45,7 +45,7 @@ function fakeAdmin(opts: {
 const released = { series_id: "series-1", released: true };
 
 describe("isEnrolled", () => {
-  it("シリーズを履修していて、回が公開済みならtrue", async () => {
+  it("教科・科目を履修していて、回が公開済みならtrue", async () => {
     const admin = fakeAdmin({ course: released, enrollment: true });
     await expect(isEnrolled(admin, "course-1", "student-1")).resolves.toBe(true);
   });

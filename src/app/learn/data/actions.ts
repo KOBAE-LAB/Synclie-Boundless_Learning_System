@@ -90,19 +90,26 @@ export async function deleteMyDataAction() {
   // 教師ダッシュボードの「指導のヒント」には、この学習者に触れた文が含まれうる。個別の文だけを
   // 取り除くのは難しいため、関わった授業のヒントは丸ごと消す(教師はいつでも再生成できる)。
   const { data: involvedCourses } = await admin.from("learning_sessions").select("course_id").eq("student_id", user.id);
-  const involvedCourseIds = [...new Set((involvedCourses ?? []).map((c) => c.course_id))];
+  const involvedCourseIds = [...new Set((involvedCourses ?? []).map((c) => c.course_id).filter((id): id is string => !!id))];
   if (involvedCourseIds.length > 0) {
     await admin.from("teacher_guidance").delete().in("course_id", involvedCourseIds);
   }
 
+  // ポートフォリオの記録は、対話セッションを参照していることがあるため、セッションより先に消す。
+  await admin.from("portfolio_entries").delete().eq("student_id", user.id);
   if (sessionIds.length > 0) {
+    // 発言の修正版(dialogue_turn_corrections)・論証評価は、発言と一緒に消える(外部キーの連鎖)。
     await admin.from("dialogue_turns").delete().in("session_id", sessionIds);
   }
   await admin.from("learning_sessions").delete().eq("student_id", user.id);
 
+  // 探究プロジェクト(0042): 本人の個人プロジェクトは消し、グループのプロジェクトからは本人だけを外す。
+  // 記録(セッション・成果)がプロジェクトを参照しているため、記録を消した後に行う。
+  await admin.from("inquiry_project_members").delete().eq("student_id", user.id);
+  await admin.from("inquiry_projects").delete().eq("solo_student_id", user.id);
+
   await admin.from("student_profiles").delete().eq("student_id", user.id);
   await admin.from("personalization_suggestions").delete().eq("student_id", user.id);
-  await admin.from("portfolio_entries").delete().eq("student_id", user.id);
   await admin.from("portfolio_share_links").delete().eq("student_id", user.id);
   await admin.from("study_plan_items").delete().eq("student_id", user.id);
   // 学習の流れ(インプットの理解チェックの答えを含む)

@@ -7,7 +7,7 @@ import { isEnrolledInSeries } from "@/lib/courses/enrollment";
 import { lessonName, seriesLabel } from "@/lib/courses/series";
 import { Breadcrumbs, BackLink } from "@/components/breadcrumbs";
 
-// 履修している授業シリーズの、授業回(第1回、第2回…)の一覧。公開されている回だけを見せ、
+// 履修している教科・科目の、授業回(第1回、第2回…)の一覧。公開されている回だけを見せ、
 // 回ごとの進み具合(まだ/学習中/議論を終えた)と、学習の流れ(インプット・アウトプット)の進みを出す。
 export default async function LearnSeriesPage({ params }: { params: Promise<{ seriesId: string }> }) {
   const { seriesId } = await params;
@@ -68,7 +68,7 @@ export default async function LearnSeriesPage({ params }: { params: Promise<{ se
       {series.subject && <p className="mt-1 text-sm text-ink-muted">{series.subject}</p>}
       {series.archived_at && (
         <p className="mt-3 rounded-md border border-warn bg-warn-soft px-4 py-3 text-sm text-warn">
-          このシリーズは終了しています。記録は見返せますが、新しい発言や提出はできません。
+          この教科・科目は終了しています。記録は見返せますが、新しい発言や提出はできません。
         </p>
       )}
 

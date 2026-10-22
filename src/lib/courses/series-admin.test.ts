@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deleteSeriesIfEmpty, seriesHasLearnerRecords } from "./series-admin";
+import { deleteSeries, seriesHasLearnerRecords } from "./series-admin";
 import { fiscalYearOfDate, isLessonArchived, seriesLabel } from "./series";
 
 type FakeAdmin = Parameters<typeof seriesHasLearnerRecords>[0];
@@ -59,22 +59,18 @@ describe("seriesHasLearnerRecords", () => {
   });
 });
 
-describe("deleteSeriesIfEmpty", () => {
-  it("学習者の記録があれば削除せず、アーカイブを促す", async () => {
-    const admin = fakeAdmin({ lessons: ["c1"], submissions: 1 });
-    await expect(deleteSeriesIfEmpty(admin, "s1")).rejects.toThrow("アーカイブ");
-    expect(admin.calls).not.toContain("delete:course_series");
-  });
-  it("記録が無ければ、シリーズを削除し、Storageのファイルも消す", async () => {
+// 学習者の記録がある教科・科目の削除(記録は残る)は series-force-delete.test.ts で確かめる。
+describe("deleteSeries(記録が無い教科・科目)", () => {
+  it("教科・科目を削除し、Storageのファイルも消す", async () => {
     const admin = fakeAdmin({ lessons: ["c1"] });
-    await deleteSeriesIfEmpty(admin, "s1");
+    await deleteSeries(admin, "s1");
     expect(admin.calls).toContain("delete:course_series");
     expect(admin.calls.some((c) => c.startsWith("remove:") && c.includes("m/file.pdf"))).toBe(true);
   });
 });
 
 describe("isLessonArchived", () => {
-  it("シリーズのarchived_atがあればtrue", async () => {
+  it("教科・科目のarchived_atがあればtrue", async () => {
     expect(await isLessonArchived(fakeAdmin({ archivedAt: "2027-03-31T00:00:00Z" }), "c1")).toBe(true);
     expect(await isLessonArchived(fakeAdmin({ archivedAt: null }), "c1")).toBe(false);
   });

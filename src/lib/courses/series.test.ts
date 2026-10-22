@@ -10,7 +10,7 @@ describe("assertOwnsSeries", () => {
   it("担当教師なら通る", async () => {
     await expect(assertOwnsSeries(admin({ id: "s1", owner_teacher_id: "t1" }), "s1", "t1")).resolves.toBeUndefined();
   });
-  it("他の教師・存在しないシリーズ・エラーは拒否する", async () => {
+  it("他の教師・存在しない教科・科目・エラーは拒否する", async () => {
     await expect(assertOwnsSeries(admin({ id: "s1", owner_teacher_id: "t2" }), "s1", "t1")).rejects.toThrow("権限");
     await expect(assertOwnsSeries(admin(null), "s1", "t1")).rejects.toThrow("権限");
     await expect(assertOwnsSeries(admin(null, { message: "x" }), "s1", "t1")).rejects.toThrow("権限");
@@ -18,14 +18,14 @@ describe("assertOwnsSeries", () => {
 });
 
 describe("lessonName / lessonFullName", () => {
-  it("「第N回 名前」と、シリーズ名つきの表示名", () => {
+  it("「第N回 名前」と、教科・科目名つきの表示名", () => {
     expect(lessonName(3, "光の強さ")).toBe("第3回 光の強さ");
     expect(lessonFullName("理科1年", 3, "光の強さ")).toBe("理科1年 第3回 光の強さ");
   });
 });
 
 describe("loadLessonLabels", () => {
-  it("授業回のidから、シリーズ名つきの表示名を引く", async () => {
+  it("授業回のidから、教科・科目名つきの表示名を引く", async () => {
     const admin = {
       from: (table: string) => ({
         select: () => ({

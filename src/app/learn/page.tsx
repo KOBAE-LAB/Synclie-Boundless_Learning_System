@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { requireConsent } from "@/lib/consent";
 import { seriesLabel } from "@/lib/courses/series";
 
-// 学習者には、履修登録した授業シリーズだけを見せる(シリーズを選ぶと、公開されている授業回の一覧に進む)。
+// 学習者には、履修登録した教科・科目だけを見せる(教科・科目を選ぶと、公開されている授業回の一覧に進む)。
 export default async function LearnCoursesPage({
   searchParams,
 }: {
@@ -36,7 +36,7 @@ export default async function LearnCoursesPage({
       ? await admin.from("course_series").select("id, title").in("id", pendingSeriesIds)
       : { data: [] };
 
-  // 各シリーズの、公開されている授業回の数(学習者が開ける回)。
+  // 各教科・科目の、公開されている授業回の数(学習者が開ける回)。
   const activeSeries = (seriesRows ?? []).filter((x) => !x.archived_at);
   const pastSeries = (seriesRows ?? []).filter((x) => x.archived_at);
   const releasedCount = new Map<string, number>();
@@ -79,7 +79,7 @@ export default async function LearnCoursesPage({
 
       {(pendingSeries ?? []).length > 0 && (
         <div className="mt-6">
-          <h2 className="text-xs font-medium text-ink-faint">承認待ちのシリーズ</h2>
+          <h2 className="text-xs font-medium text-ink-faint">承認待ちの教科・科目</h2>
           <ul className="mt-2 space-y-1">
             {(pendingSeries ?? []).map((c) => (
               <li key={c.id} className="text-sm text-ink-muted">
@@ -90,7 +90,7 @@ export default async function LearnCoursesPage({
         </div>
       )}
 
-      <h2 className="mt-8 text-sm font-medium text-ink">履修している授業シリーズ</h2>
+      <h2 className="mt-8 text-sm font-medium text-ink">履修している教科・科目</h2>
       <ul className="mt-3 space-y-2">
         {activeSeries.map((series) => (
           <li key={series.id}>
@@ -99,7 +99,7 @@ export default async function LearnCoursesPage({
         ))}
         {activeSeries.length === 0 && (
           <li className="text-sm text-ink-muted">
-            {pastSeries.length > 0 ? "いま履修中のシリーズはありません。" : "まだ履修している授業がありません。先生から授業コードをもらったら"}
+            {pastSeries.length > 0 ? "いま履修中の教科・科目はありません。" : "まだ履修している授業がありません。先生から授業コードをもらったら"}
             {pastSeries.length === 0 && (
               <>
                 <Link href="/learn/join" className="mx-1 underline">
@@ -114,7 +114,7 @@ export default async function LearnCoursesPage({
 
       {pastSeries.length > 0 && (
         <>
-          <h2 className="mt-8 text-sm font-medium text-ink">過去のシリーズ(記録の閲覧のみ)</h2>
+          <h2 className="mt-8 text-sm font-medium text-ink">過去の教科・科目(記録の閲覧のみ)</h2>
           <ul className="mt-3 space-y-2">
             {pastSeries.map((series) => (
               <li key={series.id}>

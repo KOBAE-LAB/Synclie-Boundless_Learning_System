@@ -6,8 +6,8 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { assertOwnsCourse } from "@/lib/courses/ownership";
 import { copyCriteriaBetweenLessons, copyPersonasBetweenLessons } from "@/lib/courses/lesson-copy";
 
-// 同じシリーズの別の授業回から、擬似メンバー・評価の観点を複製する(前の回の設定を引き継ぐ)。
-// 複製元・複製先の両方が、自分の授業回であることを確かめる(同じシリーズかどうかは複製処理側で確かめる)。
+// 同じ教科・科目の別の授業回から、擬似メンバー・評価の観点を複製する(前の回の設定を引き継ぐ)。
+// 複製元・複製先の両方が、自分の授業回であることを確かめる(同じ教科・科目かどうかは複製処理側で確かめる)。
 async function guardPair(courseId: string, formData: FormData) {
   const { user } = await requireRole("teacher");
   const admin = createAdminClient();

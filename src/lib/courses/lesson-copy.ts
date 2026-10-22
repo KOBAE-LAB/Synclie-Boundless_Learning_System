@@ -11,19 +11,19 @@ export interface CopyResult {
   skipped: number;
 }
 
-/** 同じシリーズの授業回どうしだけ、複製できる(他のシリーズの授業回からは複製しない)。 */
+/** 同じ教科・科目の授業回どうしだけ、複製できる(他の教科・科目の授業回からは複製しない)。 */
 async function loadSameSeriesPair(admin: AdminClient, fromCourseId: string, toCourseId: string) {
   if (fromCourseId === toCourseId) throw new Error("複製元と複製先が同じ授業回です。");
   const { data } = await admin.from("courses").select("id, series_id, lesson_no, title").in("id", [fromCourseId, toCourseId]);
   const from = (data ?? []).find((c) => c.id === fromCourseId);
   const to = (data ?? []).find((c) => c.id === toCourseId);
   if (!from || !to) throw new Error("授業回が見つかりません。");
-  if (from.series_id !== to.series_id) throw new Error("同じシリーズの授業回からだけ複製できます。");
+  if (from.series_id !== to.series_id) throw new Error("同じ教科・科目の授業回からだけ複製できます。");
   return { from, to };
 }
 
 /**
- * 擬似メンバーを、同じシリーズの別の授業回から複製する(状態・アバターもそのまま。共有ライブラリへの公開は引き継がない)。
+ * 擬似メンバーを、同じ教科・科目の別の授業回から複製する(状態・アバターもそのまま。共有ライブラリへの公開は引き継がない)。
  * 同じ名前がすでにあれば複製しない(何度押しても増えない)。1授業回の上限は10体まで。
  */
 export async function copyPersonasBetweenLessons(admin: AdminClient, fromCourseId: string, toCourseId: string): Promise<CopyResult> {
@@ -55,7 +55,7 @@ export async function copyPersonasBetweenLessons(admin: AdminClient, fromCourseI
   return { copied: rows.length, skipped };
 }
 
-/** 評価の観点を、同じシリーズの別の授業回から複製する。同じ名前の観点がすでにあれば複製しない。 */
+/** 評価の観点を、同じ教科・科目の別の授業回から複製する。同じ名前の観点がすでにあれば複製しない。 */
 export async function copyCriteriaBetweenLessons(admin: AdminClient, fromCourseId: string, toCourseId: string): Promise<CopyResult> {
   await loadSameSeriesPair(admin, fromCourseId, toCourseId);
   const [{ data: source }, { data: existing }] = await Promise.all([

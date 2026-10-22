@@ -135,7 +135,7 @@ export default async function CourseDetailPage({
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <Breadcrumbs trail={crumbs?.teacherTrail.slice(0, 2) ?? [{ label: "授業シリーズ一覧", href: "/courses" }]} current={lessonName(course.lesson_no, course.title)} />
+      <Breadcrumbs trail={crumbs?.teacherTrail.slice(0, 2) ?? [{ label: "教科・科目一覧", href: "/courses" }]} current={lessonName(course.lesson_no, course.title)} />
       <h1 className="mt-3 text-2xl font-semibold text-ink">{lessonName(course.lesson_no, course.title)}</h1>
       {crumbs && <p className="mt-1 text-sm text-ink-muted">{crumbs.seriesTitle}の授業回</p>}
 
@@ -577,7 +577,7 @@ export default async function CourseDetailPage({
       <section className="mt-10">
         <h2 className="border-b border-line pb-2 text-base font-semibold text-ink">2. 学習者の進め方</h2>
         <p className="mt-2 text-sm text-ink-muted">
-          履修登録(授業コード・承認)は、シリーズのページで管理します。
+          履修登録(授業コード・承認)は、教科・科目のページで管理します。
           <Link href={`/series/${course.series_id}`} className="ml-1 text-accent hover:underline">履修登録を開く →</Link>
         </p>
       <details className="mt-4 rounded-lg border border-line p-5">
@@ -668,7 +668,7 @@ export default async function CourseDetailPage({
       </p>
       </section>
 
-      <BackLink href={crumbs ? `/series/${crumbs.seriesId}` : "/courses"} label={crumbs?.seriesTitle ?? "授業シリーズ一覧"} />
+      <BackLink href={crumbs ? `/series/${crumbs.seriesId}` : "/courses"} label={crumbs?.seriesTitle ?? "教科・科目一覧"} />
     </div>
   );
 }

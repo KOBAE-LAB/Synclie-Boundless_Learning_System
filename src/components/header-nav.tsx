@@ -10,7 +10,7 @@ import { usePathname } from "next/navigation";
 export interface NavItem {
   label: string;
   href: string;
-  /** href とは別に、この項目の配下として扱うURLの先頭(例: 授業シリーズ /series は「授業」の配下) */
+  /** href とは別に、この項目の配下として扱うURLの先頭(例: 教科・科目 /series は「授業」の配下) */
   alsoUnder?: string[];
 }
 

@@ -11,7 +11,7 @@ import {
   unarchiveSeriesAction,
 } from "../series/[seriesId]/actions";
 
-// 担当している授業シリーズの一覧と、一覧からの管理(アーカイブ・翌年度への引き継ぎ・削除)。
+// 担当している教科・科目の一覧と、一覧からの管理(アーカイブ・翌年度への引き継ぎ・削除)。
 // 年度で絞り込め、年度末に一括でアーカイブできる。
 
 const small = "rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface disabled:opacity-50";
@@ -54,7 +54,7 @@ export default async function CoursesPage({
   ).length;
   const seriesIds = allSeries.map((x) => x.id);
 
-  // 各シリーズの授業回の数・履修者の数・承認待ちの数・学習者の記録の有無(記録があれば削除できない)。
+  // 各教科・科目の授業回の数・履修者の数・承認待ちの数・学習者の記録の有無(記録があれば削除できない)。
   const lessonCount = new Map<string, number>();
   const enrolledCount = new Map<string, number>();
   const pendingCount = new Map<string, number>();
@@ -90,7 +90,7 @@ export default async function CoursesPage({
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <h1 className="text-2xl font-semibold text-ink">授業シリーズ一覧</h1>
+      <h1 className="text-2xl font-semibold text-ink">教科・科目一覧</h1>
       <p className="mt-1 text-sm text-ink-muted">
         {user.name ?? user.email} さんが担当する授業
       </p>
@@ -124,7 +124,7 @@ export default async function CoursesPage({
       </form>
 
       <h2 className="mt-6 text-sm font-medium text-ink">
-        担当している授業シリーズ({seriesList.length})
+        担当している教科・科目({seriesList.length})
         {!showArchived && archivedHidden > 0 && (
           <span className="ml-2 text-xs font-normal text-ink-faint">アーカイブ済み{archivedHidden}件は非表示</span>
         )}
@@ -172,7 +172,7 @@ export default async function CoursesPage({
                   </form>
                   {hasRecords ? (
                     <Link href={`/series/${series.id}#manage`} className="text-xs text-ink-muted hover:underline">
-                      学習者の記録あり(消去は管理者が、シリーズのページから)
+                      学習者の記録あり(削除は教科・科目のページから。記録は学習者に残ります)
                     </Link>
                   ) : (
                     <details className="inline-block">
@@ -192,14 +192,14 @@ export default async function CoursesPage({
         })}
         {seriesList.length === 0 && (
           <li className="text-sm text-ink-muted">
-            {allSeries.length === 0 ? "まだ授業シリーズがありません。下のフォームから作成してください。" : "この条件に合うシリーズはありません。"}
+            {allSeries.length === 0 ? "まだ教科・科目がありません。下のフォームから作成してください。" : "この条件に合う教科・科目はありません。"}
           </li>
         )}
       </ul>
 
       <details className="mt-6 rounded-lg border border-line p-5">
         <summary className="cursor-pointer text-sm font-medium text-ink">年度末の一括アーカイブ</summary>
-        <p className="mt-2 text-sm text-ink-muted">選んだ年度の、まだ閉じていないシリーズをまとめてアーカイブします(学習者は記録を見返せます。シリーズごとに解除できます)。</p>
+        <p className="mt-2 text-sm text-ink-muted">選んだ年度の、まだ閉じていない教科・科目をまとめてアーカイブします(学習者は記録を見返せます。教科・科目ごとに解除できます)。</p>
         <form action={archiveYearAction} className="mt-3 flex flex-wrap items-center gap-2">
           <label htmlFor="archive-year" className="sr-only">年度</label>
           <select id="archive-year" name="fiscalYear" defaultValue={String(selectedYear ?? currentYear)} className="rounded-md border border-line bg-surface-raised px-2 py-1.5 text-sm">
@@ -212,23 +212,23 @@ export default async function CoursesPage({
       </details>
 
       <details open={allSeries.length === 0} className="mt-4 rounded-lg border border-line p-5">
-        <summary className="cursor-pointer text-sm font-medium text-ink">新しい授業シリーズを作成</summary>
-        <p className="mt-2 text-sm text-ink-muted">科目や講座の単位です。作成後、その中に授業回(第1回、第2回…)を作ります。</p>
+        <summary className="cursor-pointer text-sm font-medium text-ink">新しい教科・科目を作成</summary>
+        <p className="mt-2 text-sm text-ink-muted">履修登録(授業コード)の単位です。作成後、その中に授業回(第1回、第2回…)を作ります。</p>
         <form action={createSeriesAction} className="mt-4 space-y-3">
-          <label htmlFor="series-title" className="sr-only">シリーズの名前</label>
+          <label htmlFor="series-title" className="sr-only">教科・科目の名前</label>
           <input
             id="series-title"
             name="title"
-            placeholder="シリーズの名前(例: 理科1年 光合成)"
+            placeholder="教科・科目の名前(例: 理科、数学I、情報)"
             required
             maxLength={80}
             className="w-full rounded-md border border-line bg-surface-raised px-3 py-2 text-sm"
           />
-          <label htmlFor="series-subject" className="sr-only">教科</label>
+          <label htmlFor="series-subject" className="sr-only">補足</label>
           <input
             id="series-subject"
             name="subject"
-            placeholder="教科(任意)"
+            placeholder="補足(任意。例: 中学1年)"
             maxLength={40}
             className="w-full rounded-md border border-line bg-surface-raised px-3 py-2 text-sm"
           />

@@ -3,8 +3,8 @@ import { createAdminClient } from "@/lib/supabase/server";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
-// 履修登録のガード。履修(参加コード・申請・承認)は「授業シリーズ」に持たせ、授業回(courses)は
-// そのシリーズを履修している学習者だけが開ける。requireConsent()と同じ「ページ側でリダイレクトする」方式。
+// 履修登録のガード。履修(参加コード・申請・承認)は「教科・科目」に持たせ、授業回(courses)は
+// その教科・科目を履修している学習者だけが開ける。requireConsent()と同じ「ページ側でリダイレクトする」方式。
 // 承認制: 学習者が授業コードで申請しただけ(status='pending')では参加扱いにしない。
 // 授業回は、教師が「公開」するまで学習者には開けない(準備中)。ただし管理者の「学習者として表示」の
 // テスト学習者は、公開前の回も確認できる(公開前に動作を確かめるため)。
@@ -15,7 +15,7 @@ export async function requireEnrollment(admin: AdminClient, courseId: string, st
   }
 }
 
-/** シリーズを承認済みで履修しているか(授業回の公開状況は見ない)。 */
+/** 教科・科目を承認済みで履修しているか(授業回の公開状況は見ない)。 */
 export async function isEnrolledInSeries(admin: AdminClient, seriesId: string, studentId: string): Promise<boolean> {
   const { data } = await admin
     .from("series_enrollments")
@@ -27,7 +27,7 @@ export async function isEnrolledInSeries(admin: AdminClient, seriesId: string, s
   return !!data;
 }
 
-/** この授業回を学習者が開いてよいか: シリーズを承認済みで履修していて、回が公開済み(テスト学習者は公開前も可)。 */
+/** この授業回を学習者が開いてよいか: 教科・科目を承認済みで履修していて、回が公開済み(テスト学習者は公開前も可)。 */
 export async function isEnrolled(admin: AdminClient, courseId: string, studentId: string): Promise<boolean> {
   const { data: course } = await admin
     .from("courses")

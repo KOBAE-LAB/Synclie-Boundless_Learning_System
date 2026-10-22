@@ -15,6 +15,8 @@ import { buildCourseContext, reasoningEffortFor } from "@/lib/courses/settings";
 import { loadLearnerFlow, stepContextFor, withStepContext } from "@/lib/flow/load";
 import { discussionGate } from "@/lib/flow/steps";
 import { askScene } from "@/lib/ai/persona-scene";
+import { recordContextFor } from "@/lib/records/context";
+import { applyTurnCorrections } from "@/lib/records/corrections";
 import {
   HISTORY_LIMIT,
   getOrCreateSession,
@@ -61,11 +63,12 @@ export async function autoContinueDiscussionAction(courseId: string) {
 
   const { data: recentTurnsData } = await admin
     .from("dialogue_turns")
-    .select("speaker_type, content, persona_id, auto_generated")
+    .select("id, speaker_type, content, persona_id, persona_name, auto_generated")
     .eq("session_id", session.id)
     .order("created_at", { ascending: false })
     .limit(HISTORY_LIMIT);
-  const recentTurns = recentTurnsData ?? [];
+  // 教師が監査で直した発言は、直した内容をAIに渡す(元の発言は①として残る)。
+  const recentTurns = await applyTurnCorrections(admin, recentTurnsData ?? []);
   if (recentTurns.length === 0) return; // まだ誰も発言していない
 
   // 直近(新しい順)に自動継続の発言が何連続しているかを数え、上限に達していれば止める。
@@ -100,7 +103,8 @@ export async function autoContinueDiscussionAction(courseId: string) {
 
   const history: ChatTurn[] = [...recentTurns].reverse().map((turn) => {
     if (turn.speaker_type === "student") return { role: "user" as const, content: turn.content };
-    const speakerName = turn.persona_id ? (historyPersonaNames.get(turn.persona_id) ?? "擬似メンバー") : "擬似メンバー";
+    const speakerName =
+      (turn.persona_id ? historyPersonaNames.get(turn.persona_id) : undefined) ?? turn.persona_name ?? "擬似メンバー";
     return { role: "assistant" as const, content: `${speakerName}: ${turn.content}` };
   });
 
@@ -165,11 +169,14 @@ export async function autoContinueDiscussionAction(courseId: string) {
   }
 
   // 1つずつ順に保存する(同じ瞬間の時刻になって、並び順が崩れないように)。
+  const memberNames = new Map([persona, ...others].map((p) => [p.id, p.name]));
   for (const [i, text] of replies.entries()) {
     await admin.from("dialogue_turns").insert({
       session_id: session.id,
       speaker_type: "persona",
       persona_id: personaIdsToSave[i],
+      // 擬似メンバーが消えても、誰の発言か読めるようにする控え(0042)。
+      persona_name: memberNames.get(personaIdsToSave[i]) ?? null,
       content: text,
       auto_generated: true,
     });
@@ -481,6 +488,8 @@ export async function submitOutcomeAction(courseId: string, formData: FormData) 
   }
 
   const sessionId = await getOrCreateSession(admin, courseId, user.id, { allowEnded: true });
+  // 生ログの保護(0042): 授業回が消えても文脈が残るよう、探究プロジェクトと授業の控えを一緒に書く。
+  const context = await recordContextFor(admin, courseId, user.id);
 
   const { error } = await admin.from("submissions").insert({
     course_id: courseId,
@@ -488,6 +497,8 @@ export async function submitOutcomeAction(courseId: string, formData: FormData) 
     session_id: sessionId,
     kind: "text",
     content,
+    project_id: context.projectId,
+    course_label: context.courseLabel,
   });
   if (error) {
     throw new Error(`成果の提出に失敗しました: ${error.message}`);
@@ -654,12 +665,14 @@ export async function judgeDiscussionAction(courseId: string, submissionId: stri
       throw new Error("この成果に紐づく対話セッションが見つかりません。");
     }
 
-    const { data: turnRows } = await admin
+    const { data: rawTurnRows } = await admin
       .from("dialogue_turns")
-      .select("speaker_type, content, created_at")
+      .select("id, speaker_type, content, created_at")
       .eq("session_id", submission.session_id)
       .order("created_at", { ascending: true });
-    if (!turnRows || turnRows.length === 0) {
+    // 教師が監査で直した発言は、直した内容でジャッジする。
+    const turnRows = await applyTurnCorrections(admin, rawTurnRows ?? []);
+    if (turnRows.length === 0) {
       throw new Error("議論の記録がまだありません。擬似メンバーと議論してから提出してください。");
     }
 

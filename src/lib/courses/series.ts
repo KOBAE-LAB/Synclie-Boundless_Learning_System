@@ -2,7 +2,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
-/** 教師が、そのシリーズの担当者かを確かめる(授業回の assertOwnsCourse と対)。 */
+/** 教師が、その教科・科目の担当者かを確かめる(授業回の assertOwnsCourse と対)。 */
 export async function assertOwnsSeries(admin: AdminClient, seriesId: string, teacherId: string) {
   const { data: series, error } = await admin
     .from("course_series")
@@ -10,7 +10,7 @@ export async function assertOwnsSeries(admin: AdminClient, seriesId: string, tea
     .eq("id", seriesId)
     .maybeSingle();
   if (error || !series || series.owner_teacher_id !== teacherId) {
-    throw new Error("この授業シリーズを操作する権限がありません。");
+    throw new Error("この教科・科目を操作する権限がありません。");
   }
 }
 
@@ -19,7 +19,7 @@ export function lessonName(lessonNo: number, title: string): string {
   return `第${lessonNo}回 ${title}`;
 }
 
-/** 「理科1年 第3回 光の強さ」のように、シリーズ名つきの表示名(ポートフォリオ・一覧など、文脈が無い所用)。 */
+/** 「理科1年 第3回 光の強さ」のように、教科・科目名つきの表示名(ポートフォリオ・一覧など、文脈が無い所用)。 */
 export function lessonFullName(seriesTitle: string, lessonNo: number, title: string): string {
   return `${seriesTitle} ${lessonName(lessonNo, title)}`;
 }
@@ -28,17 +28,17 @@ export interface LessonCrumbs {
   seriesId: string;
   seriesTitle: string;
   lessonNo: number;
-  /** シリーズがアーカイブ済みか(学習者は記録の閲覧のみ) */
+  /** 教科・科目がアーカイブ済みか(学習者は記録の閲覧のみ) */
   archived: boolean;
-  /** 教師の画面用: 授業シリーズ一覧 › シリーズ › 第N回 */
+  /** 教師の画面用: 教科・科目一覧 › 教科・科目 › 第N回 */
   teacherTrail: { label: string; href: string }[];
-  /** 学習者の画面用: 授業一覧 › シリーズ */
+  /** 学習者の画面用: 授業一覧 › 教科・科目 */
   learnerTrail: { label: string; href: string }[];
 }
 
 /**
- * 授業回の画面の「戻る」「パンくず」に使う、親(シリーズ)の情報。
- * 教師の trail は「授業シリーズ一覧 › シリーズ › 第N回」まで、学習者の trail は「授業一覧 › シリーズ」まで。
+ * 授業回の画面の「戻る」「パンくず」に使う、親(教科・科目)の情報。
+ * 教師の trail は「教科・科目一覧 › 教科・科目 › 第N回」まで、学習者の trail は「授業一覧 › 教科・科目」まで。
  */
 export async function loadLessonCrumbs(admin: AdminClient, courseId: string): Promise<LessonCrumbs | null> {
   const { data: course } = await admin
@@ -55,7 +55,7 @@ export async function loadLessonCrumbs(admin: AdminClient, courseId: string): Pr
     lessonNo: course.lesson_no,
     archived: !!series.archived_at,
     teacherTrail: [
-      { label: "授業シリーズ一覧", href: "/courses" },
+      { label: "教科・科目一覧", href: "/courses" },
       { label: series.title, href: `/series/${series.id}` },
       { label: lessonName(course.lesson_no, course.title), href: `/courses/${courseId}` },
     ],
@@ -66,7 +66,7 @@ export async function loadLessonCrumbs(admin: AdminClient, courseId: string): Pr
   };
 }
 
-/** 授業回のid → 「シリーズ名 第N回 回の名前」。一覧や記録など、親の文脈が無い所で回を名指すとき用。 */
+/** 授業回のid → 「教科・科目名 第N回 回の名前」。一覧や記録など、親の文脈が無い所で回を名指すとき用。 */
 export async function loadLessonLabels(admin: AdminClient, courseIds: string[]): Promise<Map<string, string>> {
   const labels = new Map<string, string>();
   if (courseIds.length === 0) return labels;
@@ -94,7 +94,7 @@ export function fiscalYearOfDate(date: Date): number {
   return month >= 4 ? jst.getUTCFullYear() : jst.getUTCFullYear() - 1;
 }
 
-/** 授業回が属するシリーズがアーカイブ済みか(アーカイブ済みは、新しい発言・提出ができない)。 */
+/** 授業回が属する教科・科目がアーカイブ済みか(アーカイブ済みは、新しい発言・提出ができない)。 */
 export async function isLessonArchived(admin: AdminClient, courseId: string): Promise<boolean> {
   const { data: course } = await admin.from("courses").select("series_id").eq("id", courseId).maybeSingle();
   if (!course) return false;
@@ -102,7 +102,7 @@ export async function isLessonArchived(admin: AdminClient, courseId: string): Pr
   return !!series?.archived_at;
 }
 
-export const ARCHIVED_MESSAGE = "この授業シリーズは終了しています(記録の閲覧のみ)。新しい発言や提出はできません。";
+export const ARCHIVED_MESSAGE = "この教科・科目は終了しています(記録の閲覧のみ)。新しい発言や提出はできません。";
 
 export interface SiblingLessons {
   siblings: { id: string; lessonNo: number; title: string }[];
@@ -110,7 +110,7 @@ export interface SiblingLessons {
   defaultFromId: string | null;
 }
 
-/** 同じシリーズの、ほかの授業回(複製元の候補)。 */
+/** 同じ教科・科目の、ほかの授業回(複製元の候補)。 */
 export async function loadSiblingLessons(admin: AdminClient, courseId: string): Promise<SiblingLessons> {
   const { data: current } = await admin.from("courses").select("series_id, lesson_no").eq("id", courseId).maybeSingle();
   if (!current) return { siblings: [], defaultFromId: null };

@@ -6,12 +6,12 @@ import { requireAdmin, requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { assertOwnsSeries, fiscalYearOfDate } from "@/lib/courses/series";
 import { copyCriteriaBetweenLessons, copyPersonasBetweenLessons } from "@/lib/courses/lesson-copy";
-import { carryOverSeries, deleteSeriesIfEmpty, forceDeleteSeries } from "@/lib/courses/series-admin";
+import { carryOverSeries, deleteSeries, forceDeleteSeries } from "@/lib/courses/series-admin";
 import { hashPassword } from "@/lib/auth/password";
 import { normalizeEmail, validateSignupFields } from "@/lib/auth/signup-validation";
 
-// 授業シリーズ: 教師が担当し、学習者が履修登録する単位。履修(参加コード・申請・承認・直接登録)と、
-// 授業回(courses)の追加を扱う。すべて、そのシリーズの担当教師だけが操作できる。
+// 教科・科目: 教師が担当し、学習者が履修登録する単位。履修(参加コード・申請・承認・直接登録)と、
+// 授業回(courses)の追加を扱う。すべて、その教科・科目の担当教師だけが操作できる。
 
 const MAX_LESSONS = 60;
 
@@ -33,7 +33,7 @@ export async function createLessonAction(seriesId: string, formData: FormData) {
 
   const { data: seriesRow } = await admin.from("course_series").select("archived_at").eq("id", seriesId).maybeSingle();
   if (seriesRow?.archived_at) {
-    throw new Error("アーカイブしたシリーズには、授業回を追加できません。");
+    throw new Error("アーカイブした教科・科目には、授業回を追加できません。");
   }
   const { data: existing } = await admin.from("courses").select("lesson_no").eq("series_id", seriesId);
   if ((existing?.length ?? 0) >= MAX_LESSONS) {
@@ -90,12 +90,12 @@ function parseSeriesFields(formData: FormData) {
   };
 }
 
-// 授業シリーズの名前・教科・全回数・年度の変更。
+// 教科・科目の名前・補足・全回数・年度の変更。
 export async function updateSeriesAction(seriesId: string, formData: FormData) {
   const { admin } = await guard(seriesId);
   const fields = parseSeriesFields(formData);
   if (!fields.title) {
-    throw new Error("シリーズの名前を入力してください。");
+    throw new Error("教科・科目の名前を入力してください。");
   }
   const { error } = await admin
     .from("course_series")
@@ -208,7 +208,7 @@ export async function registerStudentAction(seriesId: string, formData: FormData
   revalidatePath(`/series/${seriesId}`);
 }
 
-// アーカイブ(年度末などにシリーズを閉じる): 新しい履修登録・発言・提出は受け付けず、学習者は記録を見返せる。
+// アーカイブ(年度末などに教科・科目を閉じる): 新しい履修登録・発言・提出は受け付けず、学習者は記録を見返せる。
 // いつでも元に戻せる。
 export async function archiveSeriesAction(seriesId: string) {
   const { admin } = await guard(seriesId);
@@ -226,10 +226,11 @@ export async function unarchiveSeriesAction(seriesId: string) {
   revalidatePath("/courses");
 }
 
-// 削除: 学習者の記録が無いシリーズだけ、資料ファイルごと完全に削除する(元に戻せない)。
+// 削除: 授業の構成(授業回・資料・擬似メンバーなど)を、資料ファイルごと完全に削除する(元に戻せない)。
+// 学習者の記録は消えず、授業の控えとともに学習者のポートフォリオに残る(要件定義書14章、0042)。
 export async function deleteSeriesAction(seriesId: string) {
   const { admin } = await guard(seriesId);
-  await deleteSeriesIfEmpty(admin, seriesId);
+  await deleteSeries(admin, seriesId);
   revalidatePath("/courses");
   redirect("/courses");
 }
@@ -237,7 +238,7 @@ export async function deleteSeriesAction(seriesId: string) {
 // テストデータの消去(強制削除): 学習者の記録ごと完全に削除する(元に戻せない)。**管理者だけ**が使える。
 // 導入初期のテストデータを片付けるための機能で、本物の学習者の記録を消すために使わない
 // (一般の教師は、学習者の記録を消せない。要件定義書14章の設計原則)。
-// 先にアーカイブし、シリーズ名を入力して確かめる。
+// 先にアーカイブし、教科・科目名を入力して確かめる。
 export async function forceDeleteSeriesAction(seriesId: string, formData: FormData) {
   const { user } = await requireAdmin();
   const admin = createAdminClient();
@@ -247,7 +248,7 @@ export async function forceDeleteSeriesAction(seriesId: string, formData: FormDa
   redirect("/courses");
 }
 
-// 翌年度への引き継ぎ: 構成(授業回・資料・擬似メンバー・評価の観点・学習の流れ)を新しいシリーズに複製する。
+// 翌年度への引き継ぎ: 構成(授業回・資料・擬似メンバー・評価の観点・学習の流れ)を新しい教科・科目に複製する。
 export async function carryOverSeriesAction(seriesId: string, formData: FormData) {
   const { user, admin } = await guard(seriesId);
   const { data: source } = await admin.from("course_series").select("fiscal_year").eq("id", seriesId).maybeSingle();
@@ -258,15 +259,15 @@ export async function carryOverSeriesAction(seriesId: string, formData: FormData
   redirect(`/series/${newSeriesId}`);
 }
 
-// 履修者の一括整理(1): 承認済みの履修者を、別のシリーズ(自分が担当する、アーカイブしていないもの)にも履修登録する。
-// 元のシリーズの履修は残る(過去の記録を見返せるように)。
+// 履修者の一括整理(1): 承認済みの履修者を、別の教科・科目(自分が担当する、アーカイブしていないもの)にも履修登録する。
+// 元の教科・科目の履修は残る(過去の記録を見返せるように)。
 export async function copyEnrollmentsAction(seriesId: string, formData: FormData) {
   const { user, admin } = await guard(seriesId);
   const targetId = String(formData.get("targetSeriesId") ?? "");
-  if (!targetId || targetId === seriesId) throw new Error("登録先のシリーズを選んでください。");
+  if (!targetId || targetId === seriesId) throw new Error("登録先の教科・科目を選んでください。");
   await assertOwnsSeries(admin, targetId, user.id);
   const { data: target } = await admin.from("course_series").select("archived_at").eq("id", targetId).maybeSingle();
-  if (target?.archived_at) throw new Error("アーカイブしたシリーズには登録できません。");
+  if (target?.archived_at) throw new Error("アーカイブした教科・科目には登録できません。");
 
   const { data: rows } = await admin
     .from("series_enrollments")
@@ -282,7 +283,7 @@ export async function copyEnrollmentsAction(seriesId: string, formData: FormData
   revalidatePath(`/series/${targetId}`);
 }
 
-// 履修者の一括整理(2): このシリーズの履修登録を全員分まとめて外す(申請中も含む)。
+// 履修者の一括整理(2): この教科・科目の履修登録を全員分まとめて外す(申請中も含む)。
 // 対話ログ・提出物などの学習者の記録は消さない(学習者のポートフォリオには残る)。
 export async function clearEnrollmentsAction(seriesId: string) {
   const { admin } = await guard(seriesId);

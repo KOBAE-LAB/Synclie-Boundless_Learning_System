@@ -43,7 +43,7 @@ function fakeAdmin(opts: {
 const courses = [
   { id: "c1", series_id: "s1", lesson_no: 1, title: "光" },
   { id: "c2", series_id: "s1", lesson_no: 2, title: "実験" },
-  { id: "x1", series_id: "s2", lesson_no: 1, title: "別シリーズ" },
+  { id: "x1", series_id: "s2", lesson_no: 1, title: "別教科・科目" },
 ];
 const persona = (name: string, courseId: string, extra: Record<string, unknown> = {}) => ({
   id: `p-${name}-${courseId}`, course_id: courseId, name, tier: "teacher_defined", status: "active", profile: {}, stance: {},
@@ -51,7 +51,7 @@ const persona = (name: string, courseId: string, extra: Record<string, unknown> 
 });
 
 describe("copyPersonasBetweenLessons", () => {
-  it("同じシリーズの別の回から、状態・アバターはそのまま、共有は引き継がずに複製する", async () => {
+  it("同じ教科・科目の別の回から、状態・アバターはそのまま、共有は引き継がずに複製する", async () => {
     const admin = fakeAdmin({ courses, personas: [persona("コウタ", "c1"), persona("ナナ", "c1", { status: "draft" })] });
     const result = await copyPersonasBetweenLessons(admin, "c1", "c2");
     expect(result).toEqual({ copied: 2, skipped: 0 });
@@ -74,9 +74,9 @@ describe("copyPersonasBetweenLessons", () => {
     expect(result.copied).toBe(1);
     expect(result.skipped).toBe(MAX_PERSONAS_PER_COURSE);
   });
-  it("別のシリーズの授業回・同じ授業回からは複製できない", async () => {
+  it("別の教科・科目の授業回・同じ授業回からは複製できない", async () => {
     const admin = fakeAdmin({ courses, personas: [persona("コウタ", "x1")] });
-    await expect(copyPersonasBetweenLessons(admin, "x1", "c2")).rejects.toThrow("同じシリーズ");
+    await expect(copyPersonasBetweenLessons(admin, "x1", "c2")).rejects.toThrow("同じ教科・科目");
     await expect(copyPersonasBetweenLessons(admin, "c1", "c1")).rejects.toThrow("同じ授業回");
     expect(admin.inserted.personas).toBeUndefined();
   });
@@ -90,7 +90,7 @@ describe("copyCriteriaBetweenLessons", () => {
     expect(result).toEqual({ copied: 1, skipped: 1 });
     expect(admin.inserted.evaluation_criteria[0]).toMatchObject({ course_id: "c2", label: "多面性", position: 1 });
   });
-  it("別のシリーズからは複製できない", async () => {
-    await expect(copyCriteriaBetweenLessons(fakeAdmin({ courses }), "x1", "c2")).rejects.toThrow("同じシリーズ");
+  it("別の教科・科目からは複製できない", async () => {
+    await expect(copyCriteriaBetweenLessons(fakeAdmin({ courses }), "x1", "c2")).rejects.toThrow("同じ教科・科目");
   });
 });

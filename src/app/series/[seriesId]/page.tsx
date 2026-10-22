@@ -22,7 +22,7 @@ import {
   updateSeriesAction,
 } from "./actions";
 
-// 授業シリーズ(科目・講座)のページ。担当教師が、授業回(第1回、第2回…)を重ね、履修登録(授業コード・承認)を管理する。
+// 教科・科目(科目・講座)のページ。担当教師が、授業回(第1回、第2回…)を重ね、履修登録(授業コード・承認)を管理する。
 // 資料・ペルソナ・学習の流れ・議論は、授業回ごとに持つ。
 
 const MODE_LABELS: Record<string, string> = {
@@ -84,7 +84,7 @@ export default async function SeriesPage({ params }: { params: Promise<{ seriesI
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <Breadcrumbs trail={[{ label: "授業シリーズ一覧", href: "/courses" }]} current={series.title} />
+      <Breadcrumbs trail={[{ label: "教科・科目一覧", href: "/courses" }]} current={series.title} />
       <h1 className="mt-3 text-2xl font-semibold text-ink">{seriesLabel(series.title, series.planned_lessons)}</h1>
       <p className="mt-1 text-sm text-ink-muted">
         {series.fiscal_year}年度{series.subject ? `・${series.subject}` : ""}
@@ -92,7 +92,7 @@ export default async function SeriesPage({ params }: { params: Promise<{ seriesI
       </p>
       {series.archived_at && (
         <div className="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-lg border border-warn bg-warn-soft px-4 py-3 text-sm text-warn">
-          <span>このシリーズはアーカイブ済みです。新しい履修登録・発言・提出は受け付けず、学習者は記録を見返せます。</span>
+          <span>この教科・科目はアーカイブ済みです。新しい履修登録・発言・提出は受け付けず、学習者は記録を見返せます。</span>
           <form action={unarchiveSeriesAction.bind(null, seriesId)}>
             <SubmitButton pendingText="戻しています…" className="rounded-md border border-warn px-3 py-1.5 text-xs font-medium hover:bg-surface-raised disabled:opacity-50">
               アーカイブを解除する
@@ -103,10 +103,10 @@ export default async function SeriesPage({ params }: { params: Promise<{ seriesI
       <details className="mt-2">
         <summary className="cursor-pointer text-xs text-ink-muted">名前・全回数・年度を変える</summary>
         <form action={updateSeriesAction.bind(null, seriesId)} className="mt-2 flex flex-wrap gap-2">
-          <label htmlFor="series-title" className="sr-only">シリーズの名前</label>
+          <label htmlFor="series-title" className="sr-only">教科・科目の名前</label>
           <input id="series-title" name="title" defaultValue={series.title} required maxLength={80} className="min-w-0 flex-1 rounded-md border border-line bg-surface-raised px-3 py-1.5 text-sm" />
-          <label htmlFor="series-subject" className="sr-only">教科</label>
-          <input id="series-subject" name="subject" defaultValue={series.subject ?? ""} placeholder="教科(任意)" maxLength={40} className="w-36 rounded-md border border-line bg-surface-raised px-3 py-1.5 text-sm" />
+          <label htmlFor="series-subject" className="sr-only">補足</label>
+          <input id="series-subject" name="subject" defaultValue={series.subject ?? ""} placeholder="補足(任意。例: 中学1年)" maxLength={40} className="w-48 rounded-md border border-line bg-surface-raised px-3 py-1.5 text-sm" />
           <label htmlFor="series-planned" className="sr-only">全回数</label>
           <input id="series-planned" name="plannedLessons" type="number" min={1} max={60} defaultValue={series.planned_lessons ?? ""} placeholder="全◯回" className="w-24 rounded-md border border-line bg-surface-raised px-3 py-1.5 text-sm" />
           <label htmlFor="series-year" className="sr-only">年度</label>
@@ -171,7 +171,7 @@ export default async function SeriesPage({ params }: { params: Promise<{ seriesI
 
       <section className="mt-10">
         <h2 className="border-b border-line pb-2 text-base font-semibold text-ink">2. 履修登録</h2>
-        <p className="mt-2 text-sm text-ink-muted">授業コードを伝え、申請を承認します。シリーズの全授業回に共通です。</p>
+        <p className="mt-2 text-sm text-ink-muted">授業コードを伝え、申請を承認します。教科・科目の全授業回に共通です。</p>
       <details open className="mt-4 rounded-lg border border-line p-5">
         <summary className="cursor-pointer text-sm font-medium text-ink">
           受講登録
@@ -307,12 +307,12 @@ export default async function SeriesPage({ params }: { params: Promise<{ seriesI
 
 
       <section className="mt-10" id="manage">
-        <h2 className="border-b border-line pb-2 text-base font-semibold text-ink">3. 年度の処理・シリーズの管理</h2>
+        <h2 className="border-b border-line pb-2 text-base font-semibold text-ink">3. 年度の処理・教科・科目の管理</h2>
         <div className="mt-4 space-y-3">
           <details className="rounded-lg border border-line p-4">
             <summary className="cursor-pointer text-sm font-medium text-ink">翌年度へ引き継ぐ(複製)</summary>
             <p className="mt-2 text-sm text-ink-muted">
-              授業回・資料・擬似メンバー・評価の観点・学習の流れを、新しい年度のシリーズに複製します。授業回は「準備中」で作られ、
+              授業回・資料・擬似メンバー・評価の観点・学習の流れを、新しい年度の教科・科目に複製します。授業回は「準備中」で作られ、
               履修者・学習者の記録は引き継ぎません(授業コードも新しくなります)。資料の知識ベースは、複製先で改めて生成します。
             </p>
             <form action={carryOverSeriesAction.bind(null, seriesId)} className="mt-3 flex flex-wrap items-center gap-2">
@@ -326,12 +326,12 @@ export default async function SeriesPage({ params }: { params: Promise<{ seriesI
 
           <details className="rounded-lg border border-line p-4">
             <summary className="cursor-pointer text-sm font-medium text-ink">履修者の一括整理</summary>
-            <p className="mt-2 text-sm text-ink-muted">年度末に、履修者をまとめて別のシリーズに登録したり、履修登録を外したりします。学習者の記録は消えません。</p>
+            <p className="mt-2 text-sm text-ink-muted">年度末に、履修者をまとめて別の教科・科目に登録したり、履修登録を外したりします。学習者の記録は消えません。</p>
             {(otherSeries ?? []).length > 0 ? (
               <form action={copyEnrollmentsAction.bind(null, seriesId)} className="mt-3 flex flex-wrap items-center gap-2">
-                <label htmlFor="copy-target" className="text-xs text-ink-muted">承認済みの{enrolledStudentIds.length}人を、次のシリーズにも登録</label>
+                <label htmlFor="copy-target" className="text-xs text-ink-muted">承認済みの{enrolledStudentIds.length}人を、次の教科・科目にも登録</label>
                 <select id="copy-target" name="targetSeriesId" required defaultValue="" className="min-w-0 rounded-md border border-line bg-surface-raised px-2 py-1.5 text-sm">
-                  <option value="" disabled>シリーズを選ぶ</option>
+                  <option value="" disabled>教科・科目を選ぶ</option>
                   {(otherSeries ?? []).map((o) => (
                     <option key={o.id} value={o.id}>{o.title}({o.fiscal_year}年度)</option>
                   ))}
@@ -341,10 +341,10 @@ export default async function SeriesPage({ params }: { params: Promise<{ seriesI
                 </SubmitButton>
               </form>
             ) : (
-              <p className="mt-3 text-xs text-ink-faint">登録先にできる(アーカイブしていない)他のシリーズがありません。</p>
+              <p className="mt-3 text-xs text-ink-faint">登録先にできる(アーカイブしていない)他の教科・科目がありません。</p>
             )}
             <form action={clearEnrollmentsAction.bind(null, seriesId)} className="mt-3 border-t border-line pt-3">
-              <p className="text-xs text-ink-muted">このシリーズの履修登録を、全員分(申請中も)外します。学習者は、このシリーズの授業回を開けなくなります。</p>
+              <p className="text-xs text-ink-muted">この教科・科目の履修登録を、全員分(申請中も)外します。学習者は、この教科・科目の授業回を開けなくなります。</p>
               <SubmitButton pendingText="整理中…" className="mt-2 rounded-md border border-line px-3 py-1.5 text-xs font-medium text-danger hover:bg-surface disabled:opacity-50">
                 履修登録を全員分外す
               </SubmitButton>
@@ -353,7 +353,7 @@ export default async function SeriesPage({ params }: { params: Promise<{ seriesI
 
           {!series.archived_at && (
             <details className="rounded-lg border border-line p-4">
-              <summary className="cursor-pointer text-sm font-medium text-ink">アーカイブする(年度末にシリーズを閉じる)</summary>
+              <summary className="cursor-pointer text-sm font-medium text-ink">アーカイブする(年度末に教科・科目を閉じる)</summary>
               <p className="mt-2 text-sm text-ink-muted">
                 新しい履修登録・発言・提出を受け付けなくなります。学習者は記録を見返せます。いつでも解除できます。
               </p>
@@ -366,10 +366,19 @@ export default async function SeriesPage({ params }: { params: Promise<{ seriesI
           )}
 
           <details className="rounded-lg border border-line p-4">
-            <summary className="cursor-pointer text-sm font-medium text-danger">シリーズを削除する(テストデータの消去を含む)</summary>
+            <summary className="cursor-pointer text-sm font-medium text-danger">教科・科目を削除する(テストデータの消去を含む)</summary>
             {hasRecords ? (
               <div className="mt-2 space-y-3 text-sm text-ink-muted">
-                <p>学習者の記録(対話・提出など)があるため、通常の削除はできません。ふだんは「アーカイブ」を使ってください。</p>
+                <p>
+                  授業回・資料・擬似メンバー・評価の観点・学習の流れを削除します。<b>元に戻せません。</b>
+                  学習者{recordSummary?.learners ?? 0}人分の記録(対話・提出物・振り返り・手書き画像・音声)は消えず、
+                  授業名の控えとともに、学習者のポートフォリオに残ります。年度の途中なら、ふだんは「アーカイブ」を使ってください。
+                </p>
+                <form action={deleteSeriesAction.bind(null, seriesId)}>
+                  <SubmitButton pendingText="削除中…" className="rounded-md bg-danger px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50">
+                    授業の構成を削除する(記録は残す)
+                  </SubmitButton>
+                </form>
                 {canPurge ? (
                   <div className="rounded-md border border-danger p-3">
                     <p className="font-medium text-danger">テストデータの消去(管理者のみ・学習者の記録ごと完全に削除)</p>
@@ -382,7 +391,7 @@ export default async function SeriesPage({ params }: { params: Promise<{ seriesI
                     {series.archived_at ? (
                       <form action={forceDeleteSeriesAction.bind(null, seriesId)} className="mt-3 space-y-2">
                         <label htmlFor="force-confirm" className="block text-xs text-ink-muted">
-                          確認のため、シリーズ名「{series.title}」を入力してください
+                          確認のため、教科・科目名「{series.title}」を入力してください
                         </label>
                         <input id="force-confirm" name="confirmTitle" required autoComplete="off" className="w-full rounded-md border border-line bg-surface-raised px-3 py-1.5 text-sm" />
                         <SubmitButton pendingText="削除中…" className="rounded-md bg-danger px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50">
@@ -390,17 +399,17 @@ export default async function SeriesPage({ params }: { params: Promise<{ seriesI
                         </SubmitButton>
                       </form>
                     ) : (
-                      <p className="mt-2 text-xs text-warn">消去するには、先に上の「アーカイブする」でシリーズを閉じてください。</p>
+                      <p className="mt-2 text-xs text-warn">消去するには、先に上の「アーカイブする」で教科・科目を閉じてください。</p>
                     )}
                   </div>
                 ) : (
-                  <p className="text-xs text-ink-faint">学習者の記録は、教師は消せません。テストデータの消去が必要なときは、管理者に依頼してください。</p>
+                  <p className="text-xs text-ink-faint">学習者の記録そのものは、教師は消せません。テストデータの消去が必要なときは、管理者に依頼してください。</p>
                 )}
               </div>
             ) : (
               <>
                 <p className="mt-2 text-sm text-ink-muted">
-                  授業回・資料・擬似メンバーなど、このシリーズのすべてを完全に削除します。<b>元に戻せません。</b>
+                  授業回・資料・擬似メンバーなど、この教科・科目のすべてを完全に削除します。<b>元に戻せません。</b>
                 </p>
                 <form action={deleteSeriesAction.bind(null, seriesId)} className="mt-3">
                   <SubmitButton pendingText="削除中…" className="rounded-md bg-danger px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50">
@@ -413,7 +422,7 @@ export default async function SeriesPage({ params }: { params: Promise<{ seriesI
         </div>
       </section>
 
-      <BackLink href="/courses" label="授業シリーズ一覧" />
+      <BackLink href="/courses" label="教科・科目一覧" />
     </div>
   );
 }

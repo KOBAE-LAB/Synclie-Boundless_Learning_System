@@ -118,7 +118,7 @@ export default async function LibraryPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <Breadcrumbs trail={[{ label: "授業シリーズ一覧", href: "/courses" }]} current="共有ライブラリ" />
+      <Breadcrumbs trail={[{ label: "教科・科目一覧", href: "/courses" }]} current="共有ライブラリ" />
       <h1 className="mt-3 text-2xl font-semibold text-ink">共有ライブラリ</h1>
       <p className="mt-1 text-sm text-ink-muted">
         他の教師が公開したペルソナ・教材(単元の対応表)を自分の授業に複製できる。同じ組織なら

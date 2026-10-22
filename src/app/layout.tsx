@@ -35,7 +35,7 @@ const ROLE_LABELS: Record<string, string> = {
 // (各画面にリンクが散らばって並ぶのをやめた)。授業の配下のページでは「授業」が強調される。
 const NAV_ITEMS: Record<string, NavItem[]> = {
   teacher: [
-    { label: "授業シリーズ", href: "/courses", alsoUnder: ["/series"] },
+    { label: "教科・科目", href: "/courses", alsoUnder: ["/series"] },
     { label: "組織", href: "/organization" },
     { label: "共有ライブラリ", href: "/library" },
   ],

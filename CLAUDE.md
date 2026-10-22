@@ -297,7 +297,9 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
     手書き画像のStorageファイル削除と、抜けていたF11の`personalization_suggestions`削除を
     追加で拾った。F13実装時に音声ファイルの削除も同様に追加した。F23実装時に
     `study_plan_items`削除も追加した。F24実装時に`discussion_judgments`削除も追加した。
-    F26実装時に`learner_profiles`/`learner_suggestions`削除も追加した)
+    F26実装時に`learner_profiles`/`learner_suggestions`削除も追加した。0042で、本人の個人プロジェクト
+    (`inquiry_projects.solo_student_id`)の削除と、グループのプロジェクトからの脱退(`inquiry_project_members`)を追加した。
+    記録がプロジェクトを参照しているため、記録を消した後に消す)
   - `src/app/learn/dashboard/` — F23(生徒ダッシュボード)。「学習者が自分の学習履歴
     (対話ログ、成果物、フィードバック、振り返り)を一覧で確認し、AIの提案をもとに次に
     取り組む学習計画を立てられる」(要件定義書4章)。F14(教師ダッシュボード)と同じ方針で、
@@ -633,10 +635,12 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
     - `[courseId]/audit/` — F15(挙動の監査と修正)。「擬似メンバーの発言ログを確認し、
       不適切・不正確な挙動を修正する」(要件定義書4章)。この授業の擬似メンバーの発言
       (`dialogue_turns`, `speaker_type='persona'`)を、直前の学習者発言(文脈)とあわせて
-      一覧表示し、`updateTurnAction`で内容を直接修正できる(F07の`updateFeedbackAction`と
-      同じ「新しい監査テーブルは作らず、対象の行に直接書き込む」方針。`dialogue_turns`に
-      `flagged_by_teacher`・`teacher_note`を追加)。修正後の内容は以後の対話でLLMに渡す
-      直近履歴としてもそのまま使われるため、訂正すれば同じ誤りの再発も防げる
+      一覧表示し、`updateTurnAction`で内容を修正できる。**修正は元の発言(`dialogue_turns.content`)を
+      書き換えず、修正版を`dialogue_turn_corrections`に積む**(0042、生ログは書き換えない)。フラグと確認メモは
+      これまでどおり`dialogue_turns`の`flagged_by_teacher`・`teacher_note`。画面の表示・以後の対話でLLMに渡す
+      直近履歴・議論のまとめ・AIジャッジは、最新の修正版を使う(`src/lib/records/corrections.ts`の
+      `applyTurnCorrections`。**発言の本文を表示したりAIに渡したりする新しい箇所では、これを通すこと**)ので、
+      訂正すれば同じ誤りの再発も防げる。監査画面では元の発言も確認できる
   - `src/app/organization/` — F21用。組織(学校・地域単位)への参加・作成と、組織をまたぐ
     共有リクエストの承認者設定。SSO(F22)がまだ無いため、`profiles.organization_id`への
     所属は教師が組織名を入力して自己申告で参加・作成する方式にしている
@@ -846,9 +850,12 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
     (参加コード、列デフォルト式で新規作成時に自動生成)と`course_enrollments`
     (course_id+student_idの組、unique制約)を追加。既存の`learning_sessions`から
     参加登録済み扱いのバックフィルも行う(詳細は8章の`learn/`の説明を参照)
+  - `0042_raw_log_protection.sql` — **生ログの保護**(要件定義書14章のPart A)。探究プロジェクト(`inquiry_projects`/`inquiry_project_members`)、
+    記録の「授業の控え」(`course_label`ほか)、授業回・教科・科目・擬似メンバー・ステップを消しても記録が残る削除ルール(set null)、
+    発言の修正版(`dialogue_turn_corrections`)。既存の記録への控えの埋め戻しと、個人プロジェクトへの束ねも含む(下の「生ログの保護」を参照)
   - `0041_revoke_public_api_access.sql` — 公開API(anon/authenticated)の権限を外す(RLSの二重の防壁。詳細は「認証まわりの注意」)
   - `0040_series_management.sql` — `course_series.planned_lessons`(全回数)・`fiscal_year`(年度)・`archived_at`(アーカイブ)
-  - `0039_course_series.sql` — 授業シリーズ(`course_series`)・`series_enrollments`・`courses.series_id/lesson_no/released`。既存の授業は同名シリーズの第1回に移し、`course_enrollments`・`courses.join_code`は廃止
+  - `0039_course_series.sql` — 教科・科目(`course_series`)・`series_enrollments`・`courses.series_id/lesson_no/released`。既存の授業は同名教科・科目の第1回に移し、`course_enrollments`・`courses.join_code`は廃止
   - `0038_step_video_file.sql` — インプットのステップに動画ファイル(`course_steps.video_path`)
   - `0037_learning_flow.sql` — 学習の流れ。`course_steps`(インプット/アウトプットのステップ)・`step_progress`・`courses.steps_in_order`
   - `0036_teacher_guidance.sql` — 教師ダッシュボードの「指導のヒント」(`teacher_guidance`、授業ごと最新1件)
@@ -877,70 +884,94 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
   生成し、`.env.local`に貼り付ける`LTI_TOOL_PRIVATE_KEY`/`LTI_TOOL_KEY_ID`を出力する
   (`node scripts/dev/generate-lti-keys.mjs`)。
 
-### 授業シリーズと授業回の階層(2026-10)
+### 教科・科目と授業回の階層(2026-10)
 
-「担当・履修する授業シリーズの登録と、各授業回の学習という階層が無い」という指摘を受けて追加した。
-**授業シリーズ(`course_series`、科目・講座)→ 授業回(`courses`、第1回・第2回…)**の2段にし、
-**履修(授業コード・申請・承認・直接登録、`series_enrollments`)だけをシリーズに持たせ、資料・ペルソナ・評価の観点・
+「担当・履修する教科・科目の登録と、各授業回の学習という階層が無い」という指摘を受けて追加した。
+**教科・科目(`course_series`。旧称「授業シリーズ」)→ 授業回(`courses`、第1回・第2回…)**の2段にし、
+**履修(授業コード・申請・承認・直接登録、`series_enrollments`)だけを教科・科目に持たせ、資料・ペルソナ・評価の観点・
 学習の流れ・議論・提出は、すべて授業回(`courses`)ごと**に持つ(利用者の判断。ペルソナ等を回ごとに作る分、設定の
 やり直しは要るが、回ごとに内容を変えやすい)。`courses`テーブルは「授業回」として使い、`series_id`・`lesson_no`
-(シリーズ内で一意)・`released`(公開済みか)を足した(`0039`。**授業シリーズ配下の授業回を指すときも、コード上の
-名前は`courseId`/`courses`のまま**)。`courses.owner_teacher_id`はシリーズの担当教師と同じ値で、所有者チェック
-(`assertOwnsCourse`)はこれまでどおり。シリーズ側は`assertOwnsSeries`(`src/lib/courses/series.ts`)。
-既存の授業は、同名のシリーズの「第1回(公開済み)」に自動で移した(参加コード・履修・記録はそのまま)。
+(教科・科目内で一意)・`released`(公開済みか)を足した(`0039`。**教科・科目配下の授業回を指すときも、コード上の
+名前は`courseId`/`courses`のまま**)。`courses.owner_teacher_id`は教科・科目の担当教師と同じ値で、所有者チェック
+(`assertOwnsCourse`)はこれまでどおり。教科・科目側は`assertOwnsSeries`(`src/lib/courses/series.ts`)。
+既存の授業は、同名の教科・科目の「第1回(公開済み)」に自動で移した(参加コード・履修・記録はそのまま)。
 
-- **画面**: 教師は`/courses`=授業シリーズ一覧(作成)→`/series/[seriesId]`=授業回の一覧・作成(第N回、新しい回は
+- **画面**: 教師は`/courses`=教科・科目一覧(作成)→`/series/[seriesId]`=授業回の一覧・作成(第N回、新しい回は
   「準備中」)と履修登録(授業コード・承認待ち・直接登録)→`/courses/[courseId]`=授業回(ここで「学習者に公開する」。
-  公開するまで学習者には見えない)。学習者は`/learn`=履修中のシリーズ→`/learn/series/[seriesId]`=公開済みの
-  授業回の一覧(進み具合)→`/learn/[courseId]`=授業回の学習。ヘッダーの「授業シリーズ」は`/series`配下でも強調する
-  (`NavItem.alsoUnder`)。授業回の画面のパンくずは`loadLessonCrumbs`(「授業シリーズ一覧 › シリーズ › 第N回」)、
-  一覧や記録で回を名指すときは`loadLessonLabels`(「シリーズ名 第N回 名前」)を使うこと。
-- **ガード**: `isEnrolled`/`requireEnrollment`(`src/lib/courses/enrollment.ts`)は、授業回→シリーズの**承認済みの
+  公開するまで学習者には見えない)。学習者は`/learn`=履修中の教科・科目→`/learn/series/[seriesId]`=公開済みの
+  授業回の一覧(進み具合)→`/learn/[courseId]`=授業回の学習。ヘッダーの「教科・科目」は`/series`配下でも強調する
+  (`NavItem.alsoUnder`)。授業回の画面のパンくずは`loadLessonCrumbs`(「教科・科目一覧 › 教科・科目 › 第N回」)、
+  一覧や記録で回を名指すときは`loadLessonLabels`(「教科・科目名 第N回 名前」)を使うこと。
+- **ガード**: `isEnrolled`/`requireEnrollment`(`src/lib/courses/enrollment.ts`)は、授業回→教科・科目の**承認済みの
   履修**と、回が**公開済み**であることを確かめる(管理者の「学習者として表示」のテスト学習者だけは、公開前の回も
-  確認できる)。授業コードはシリーズのもの(`course_series.join_code`)。LTI経由の自動登録もシリーズに作る。
+  確認できる)。授業コードは教科・科目のもの(`course_series.join_code`)。LTI経由の自動登録も教科・科目に作る。
 - 旧`course_enrollments`と`courses.join_code`は廃止した(上の「`learn/`」の説明にある受講登録の記述は、今は
-  シリーズ単位として読み替えること)。
+  教科・科目単位として読み替えること)。
 
 #### 前の回からの複製(擬似メンバー・評価の観点、2026-10)
 
 回ごとに設定を持つ設計のため、回を重ねるたびの作り直しを減らす。`src/lib/courses/lesson-copy.ts`:
-- **擬似メンバー**(`copyPersonasBetweenLessons`): 同じシリーズの別の授業回から、**状態(使用中など)・アバターもそのまま**複製する
+- **擬似メンバー**(`copyPersonasBetweenLessons`): 同じ教科・科目の別の授業回から、**状態(使用中など)・アバターもそのまま**複製する
   (「同じメンバーで続ける」ため)。共有ライブラリへの公開は引き継がない。**同じ名前が複製先にあれば複製しない**(何度押しても増えない)。
   1授業回の上限(10体)を超えない。複製元の回名を`origin_note`に残す。
 - **評価の観点**(`copyCriteriaBetweenLessons`): 同じ名前の観点を除いて複製し、複製先の末尾の順番に並べる。
-- **同じシリーズの授業回どうしだけ**(別シリーズからは複製しない。シリーズをまたぐ共有は共有ライブラリ(F21))。複製元・複製先の
+- **同じ教科・科目の授業回どうしだけ**(別教科・科目からは複製しない。教科・科目をまたぐ共有は共有ライブラリ(F21))。複製元・複製先の
   両方が自分の授業回であることを確かめる(`lesson-copy-actions.ts`)。
 - 使う場所: ペルソナ設定・評価の観点の各画面の「前の回から複製する」(複製元は、既定で直前の回を選ぶ。結果は`?copied=&skipped=`で表示)と、
   **授業回の作成時の「前の回の擬似メンバーと評価の観点を引き継ぐ」(既定オン)**。
 - 資料・学習の流れ・議題は、この機能では複製しない(回ごとに内容が変わるため。年度をまたぐ引き継ぎ(`carryOverSeries`)では複製する)。
 
-#### 授業シリーズの管理(全回数・年度・アーカイブ・削除、2026-10)
+#### 教科・科目の管理(全回数・年度・アーカイブ・削除、2026-10)
 
 「授業名(全◯回)/第1回、第2回…の形にしたい。一覧から削除や年次処理ができるように」という要望(`0040`)。
 - **全◯回**(`course_series.planned_lessons`、任意): **表示用の予定回数**(「理科1年 光合成(全8回)」「作成済み 3/8回」)。
   回は自動では作らず、先生が1つずつ作る(超えても作れる)。`seriesLabel()`で表示名を作る。
 - **年度**(`fiscal_year`、4月始まり・日本時間。既存は作成日から算出): 一覧を年度で絞り込む。
-- **アーカイブ**(`archived_at`): 年度末などにシリーズを閉じる。**新しい履修登録(授業コード・サインアップ)・発言・提出・
+- **アーカイブ**(`archived_at`): 年度末などに教科・科目を閉じる。**新しい履修登録(授業コード・サインアップ)・発言・提出・
   インプットの完了を受け付けない**(サーバー側は`getOrCreateSessionRow`・`completeStepAction`・参加申請で
-  `isLessonArchived`/`ARCHIVED_MESSAGE`を確かめる。画面は入力欄・提出フォームを隠す)。学習者は「過去のシリーズ」
+  `isLessonArchived`/`ARCHIVED_MESSAGE`を確かめる。画面は入力欄・提出フォームを隠す)。学習者は「過去の教科・科目」
   として記録を見返せる。いつでも解除できる。一覧の「年度末の一括アーカイブ」で、年度ごとにまとめて閉じられる。
-- **削除**(`series-admin.ts`の`deleteSeriesIfEmpty`): **学習者の記録(対話・提出・インプットの進み)が1つも無い
-  シリーズだけ**、資料ファイル・動画ファイルのStorageごと完全に削除する(学習者のポートフォリオが消えるのを防ぐ
-  ため、記録があれば削除できず、アーカイブを促す)。
+- **削除**(`series-admin.ts`の`deleteSeries`、0042以降): **授業の構成**(授業回・資料・擬似メンバー・評価の観点・
+  学習の流れ)を、資料・動画ファイルのStorageごと完全に削除する。**学習者の記録(対話・提出・振り返り・進み・手書き画像・
+  音声)は消えず**、授業の控え(`course_label`)と探究プロジェクトを持ったまま学習者のポートフォリオに残る。記録がある
+  ときは、0042がDBに入っていることを確かめ(`assertRawLogProtection`。入っていないDBで消すと記録が連鎖で消えるため)、
+  控えの抜けを埋めてから(`stampSeriesRecordContext`)消す。以前は「記録が無い教科・科目だけ削除できる」(`deleteSeriesIfEmpty`)だった。
 - **強制削除=「テストデータの消去」**(`forceDeleteSeries`、**管理者のみ**。一般の教師は、学習者の記録を消せない): 学習者の記録がある
-  シリーズを、**記録ごと完全に削除**する(元に戻せない。学習者の
-  ポートフォリオからも消える)。導入初期のテストデータを片付けるための機能で、本物の学習者の記録には使わない。誤操作を防ぐため、**(1)先にアーカイブしてあること、(2)シリーズ名を一字一句入力すること**を
-  サーバー側で求め、画面には消える記録の量(学習者数・対話・提出物)を見せる。削除では、まず対話ログ・ポートフォリオの記録を
-  消してからシリーズを消す(`deleteLearnerRecords`。**擬似メンバーを参照する`dialogue_turns`の外部キーが`NO ACTION`で、
-  まとめて消すと失敗するため**。実DBで見つけた不具合で、順序はテストで固定している)。手書き画像・音声・資料・動画の
+  教科・科目を、**記録ごと完全に削除**する(元に戻せない。学習者の
+  ポートフォリオからも消える)。導入初期のテストデータを片付けるための機能で、本物の学習者の記録には使わない。誤操作を防ぐため、**(1)先にアーカイブしてあること、(2)教科・科目名を一字一句入力すること**を
+  サーバー側で求め、画面には消える記録の量(学習者数・対話・提出物)を見せる。0042以降は授業の構成を消しても記録は
+  連鎖では消えないため、`deleteLearnerRecords`が記録を**明示的に**消す(対話ログ → ポートフォリオの記録 → 成果 →
+  セッション → 進み・学習計画 → 探究プロジェクト(記録が参照しているので最後)。順序はテストで固定している)。手書き画像・音声・資料・動画の
   Storageのファイルも消す(`collectSeriesFiles`)。ただし、F26の横断プロファイル(`learner_profiles`)など、消えた記録から
   作られた要約は残る。
 - **翌年度への引き継ぎ**(`carryOverSeries`): 授業回・資料(ファイルも複製、RAGは複製先で再生成)・擬似メンバー
   (**学習進化型は除く**。特定年度の学習者の記録から作られているため)・評価の観点・学習の流れ(資料は複製先に付け替え、
-  動画ファイルも複製)を、新しい年度のシリーズに複製する。授業回は「準備中」。**履修者・学習者の記録は引き継がず、
-  授業コードは新しくなる**。途中で失敗したら、新しいシリーズごと消して巻き戻す。
-- **履修者の一括整理**: 承認済みの履修者を別のシリーズにも登録する/履修登録を全員分外す(学習者の記録は消えない)。
-- 管理は、`/courses`(一覧の「管理」)と`/series/[seriesId]`(「3. 年度の処理・シリーズの管理」)のどちらからもできる。
+  動画ファイルも複製)を、新しい年度の教科・科目に複製する。授業回は「準備中」。**履修者・学習者の記録は引き継がず、
+  授業コードは新しくなる**。途中で失敗したら、新しい教科・科目ごと消して巻き戻す。
+- **履修者の一括整理**: 承認済みの履修者を別の教科・科目にも登録する/履修登録を全員分外す(学習者の記録は消えない)。
+- 管理は、`/courses`(一覧の「管理」)と`/series/[seriesId]`(「3. 年度の処理・教科・科目の管理」)のどちらからもできる。
+
+### 生ログの保護(0042、要件定義書14章のPart A、2026-10-21)
+
+要件定義書14章「データ基盤の再設計(3層)」の①記録層を、授業から独立させた。**学習者の記録は、授業回・教科・科目・
+擬似メンバー・ステップ(授業の構成)を消しても消えない**。記録ごと消えるのは、学習者本人の全データ削除(F16)と、
+管理者の「テストデータの消去」だけ(どちらもアプリが明示的に消す)。
+
+- **探究プロジェクト**(`inquiry_projects`/`inquiry_project_members`): 記録をまとめる、授業から独立した単位。
+  いまは人間のグループが無いので、すべて「学習者 × 教科・科目」の**個人プロジェクト**(`kind='solo'`、`solo_student_id`、
+  (教科・科目, 本人)で一意)。教科・科目が消えても残る(`series_label`が控え)。
+- **授業の控え**: `learning_sessions`/`submissions`/`step_progress`の`course_label`(「教科・科目名 第N回 名前」)、
+  `step_progress`の`step_title`/`step_kind`、`dialogue_turns`の`persona_name`。授業回が消えると`course_id`等は null になり、
+  控えで文脈を表示する(ポートフォリオ・学習ダッシュボード・F26の材料)。
+- **新しい記録を作るときは、文脈を一緒に書く**: セッション・成果は`src/lib/records/context.ts`の`recordContextFor`
+  (`project_id`と`course_label`)、インプットの進みは`loadLessonContext`の`label`、擬似メンバーの発言は`persona_name`。
+  **①のテーブルに行を足す新しいコードでは、これらを必ず書くこと**(書き忘れても、教科・科目削除の前に
+  `stampSeriesRecordContext`が埋めるが、それに頼らない)。
+- **発言の修正版**: 上の「`[courseId]/audit/`」を参照。
+- 記録を読むコードは、`course_id`が null の行がありうることを前提にする(`.in("course_id", …)`に null を混ぜない、
+  表示は`course_label`にフォールバックする)。
+- 残り(②抽出層・③投射層のテーブル、F26・ペルソナの版1の移し替え)は、草案`docs/drafts/0042_data_foundation_draft.sql`の
+  Part B・Part C(C4〜C6)として、`0043`・`0044`で入れる予定。
 
 ### 画面の文章と「流れ」の見せ方(2026-10)
 

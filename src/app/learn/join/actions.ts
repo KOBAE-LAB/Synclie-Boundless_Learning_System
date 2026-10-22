@@ -5,7 +5,7 @@ import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 
 // 履修登録。教師が発行した授業コード(course_series.join_code)を学習者が入力して
-// 授業シリーズへの履修を申請する(series_enrollments, status='pending')。教師が承認して初めて授業に入れる
+// 教科・科目への履修を申請する(series_enrollments, status='pending')。教師が承認して初めて授業に入れる
 // (授業コードが漏れても、知らない人がそのまま入ってAIを使えないようにするため)。
 // コードは大文字小文字・前後の空白を気にせず受け付ける。
 export async function joinCourseByCodeAction(formData: FormData) {
@@ -27,7 +27,7 @@ export async function joinCourseByCodeAction(formData: FormData) {
   }
 
   if (series.archived_at) {
-    throw new Error("このシリーズは終了しているため、新しく履修登録できません。");
+    throw new Error("この教科・科目は終了しているため、新しく履修登録できません。");
   }
 
   const { data: existing } = await admin
