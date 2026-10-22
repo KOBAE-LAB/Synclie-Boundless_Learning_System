@@ -333,24 +333,24 @@ async function buildCourseActivityLog(
   const studentIds = new Set<string>();
   const lines: string[] = [];
 
+  // 発言は、発言した学習者(author_student_id)ごとに同意を確かめる。探究のグループの議論(0044)では、
+  // 同じ議論に同意していないメンバーがいても、その人の発言だけを除く。
   const { data: sessions } = await admin
     .from("learning_sessions")
     .select("id, student_id")
     .eq("course_id", courseId);
-  const eligibleSessionIds = (sessions ?? [])
-    .filter((s) => consentedIds.has(s.student_id))
-    .map((s) => {
-      studentIds.add(s.student_id);
-      return s.id;
-    });
+  const sessionIds = (sessions ?? []).map((s) => s.id as string);
 
-  if (eligibleSessionIds.length > 0) {
+  if (sessionIds.length > 0) {
     const { data: turns } = await admin
       .from("dialogue_turns")
-      .select("session_id, content")
-      .in("session_id", eligibleSessionIds)
+      .select("session_id, content, author_student_id")
+      .in("session_id", sessionIds)
       .eq("speaker_type", "student");
     for (const turn of turns ?? []) {
+      const author = turn.author_student_id as string | null;
+      if (!author || !consentedIds.has(author)) continue;
+      studentIds.add(author);
       lines.push(`発言: ${turn.content}`);
     }
   }

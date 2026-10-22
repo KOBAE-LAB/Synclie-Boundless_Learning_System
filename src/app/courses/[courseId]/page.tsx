@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { CANONICAL_STAGES } from "@/lib/inquiry/stages";
 import { StepNumber } from "@/components/step-number";
 import { notFound } from "next/navigation";
 import { isAdmin, requireRole } from "@/lib/auth/session";
@@ -94,7 +95,7 @@ export default async function CourseDetailPage({
   const { data: course } = await admin
     .from("courses")
     .select(
-      "id, title, subject, owner_teacher_id, series_id, lesson_no, released, auto_discussion_tempo_seconds, auto_discussion_affects_evaluation, objective, learner_level, discussion_style, ai_member_count, discussion_liveliness, reasoning_depth, time_limit_minutes, time_limit_policy, time_limit_affects_evaluation, ai_close_suggestion",
+      "id, title, subject, owner_teacher_id, series_id, lesson_no, released, auto_discussion_tempo_seconds, auto_discussion_affects_evaluation, objective, learner_level, discussion_style, ai_member_count, discussion_liveliness, reasoning_depth, time_limit_minutes, time_limit_policy, time_limit_affects_evaluation, ai_close_suggestion, expected_stage_key",
     )
     .eq("id", courseId)
     .maybeSingle();
@@ -236,6 +237,25 @@ export default async function CourseDetailPage({
               {Object.entries(DISCUSSION_STYLES).map(([key, style]) => (
                 <option key={key} value={key}>
                   {style.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="min-w-[10rem] flex-1 space-y-1">
+            <label htmlFor="course-expected-stage" className="text-sm font-medium text-ink">
+              この回で想定する探究の段階
+            </label>
+            <select
+              id="course-expected-stage"
+              name="expectedStageKey"
+              defaultValue={course.expected_stage_key ?? ""}
+              className="w-full rounded-md border border-line bg-surface-raised px-3 py-2 text-sm"
+            >
+              <option value="">指定しない</option>
+              {CANONICAL_STAGES.map((stage) => (
+                <option key={stage.key} value={stage.key}>
+                  {stage.label}
                 </option>
               ))}
             </select>

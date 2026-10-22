@@ -17,6 +17,13 @@ import { discussionGate } from "@/lib/flow/steps";
 import { askScene } from "@/lib/ai/persona-scene";
 import { recordContextFor } from "@/lib/records/context";
 import { applyTurnCorrections } from "@/lib/records/corrections";
+import { isEnrolled } from "@/lib/courses/enrollment";
+import { ARCHIVED_MESSAGE, isLessonArchived } from "@/lib/courses/series";
+import { addMarker, loadOwnTurnSession, removeMarker } from "@/lib/inquiry/markers";
+import { transitionStage } from "@/lib/inquiry/project-stage";
+import { enqueueJob, scheduleJobRun } from "@/lib/inquiry/queue";
+import { isStageKey } from "@/lib/inquiry/stages";
+import { resolveSessionScope, scopeSessionQuery } from "@/lib/learn/session-scope";
 import {
   HISTORY_LIMIT,
   getOrCreateSession,
@@ -34,6 +41,9 @@ import {
 export async function autoContinueDiscussionAction(courseId: string) {
   const { user } = await requireRole("student");
   const admin = createAdminClient();
+
+  // グループの議論(0044、時間差が基本)では、沈黙は自然なことなので、AI同士の自動継続はしない。
+  if ((await resolveSessionScope(admin, courseId, user.id)).kind !== "solo") return;
 
   const { data: session } = await admin
     .from("learning_sessions")
@@ -213,12 +223,12 @@ export async function dismissCloseSuggestionAction(courseId: string) {
   const { user } = await requireRole("student");
   const admin = createAdminClient();
 
-  const { data: session } = await admin
-    .from("learning_sessions")
-    .select("id")
-    .eq("course_id", courseId)
-    .eq("student_id", user.id)
-    .is("ended_at", null)
+  // 本人の議論、または本人が入っているグループの議論だけ(0044)。
+  const scope = await resolveSessionScope(admin, courseId, user.id);
+  const { data: session } = await scopeSessionQuery(
+    admin.from("learning_sessions").select("id").eq("course_id", courseId).is("ended_at", null),
+    scope,
+  )
     .order("started_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -719,5 +729,51 @@ export async function judgeDiscussionAction(courseId: string, submissionId: stri
       .eq("id", submissionId);
   }
 
+  revalidatePath(`/learn/${courseId}`);
+}
+
+// 「後輩に残したい」の印(要件定義書14章ステップ5)。学習者本人が、自分の議論の発言(自分・AIの仲間のどちらでも)に付け外しする。
+// 議論が終わった後に付けた場合は、その場面をエピソードにする処理をもう一度積む(すでにエピソードにした範囲は重ねない)。
+export async function toggleKeepForJuniorsAction(courseId: string, turnId: string) {
+  const { user } = await requireRole("student");
+  const admin = createAdminClient();
+
+  // 本人の、この授業回の議論の発言だけ(他人の議論には印を付けられない)
+  const session = await loadOwnTurnSession(admin, { turnId, studentId: user.id, courseId });
+  if (!session) throw new Error("発言が見つかりません。");
+  if (await isLessonArchived(admin, courseId)) throw new Error(ARCHIVED_MESSAGE);
+
+  const { data: existing } = await admin
+    .from("inquiry_markers")
+    .select("id")
+    .eq("turn_id", turnId)
+    .eq("kind", "student_keep")
+    .maybeSingle();
+  if (existing) {
+    await removeMarker(admin, turnId, "student_keep");
+  } else {
+    await addMarker(admin, { turnId, sessionId: session.id, kind: "student_keep", createdBy: user.id });
+    if (session.ended_at && session.project_id) {
+      await enqueueJob(admin, { kind: "extract_session", projectId: session.project_id, sessionId: session.id, round: `keep:${turnId}` });
+      scheduleJobRun({ projectId: session.project_id });
+    }
+  }
+  revalidatePath(`/learn/${courseId}`);
+}
+
+// 探究の段階の宣言(要件定義書14章ステップ5の決定: 教師の想定+学習者の宣言)。学習者が「次の段階へ進んだ」などと選ぶ。
+// 段階が変わると、終わった段階の物語と軌跡が作られる。
+export async function declareStageAction(courseId: string, formData: FormData) {
+  const { user } = await requireRole("student");
+  const admin = createAdminClient();
+  if (!(await isEnrolled(admin, courseId, user.id))) throw new Error("この授業に参加していません。");
+  if (await isLessonArchived(admin, courseId)) throw new Error(ARCHIVED_MESSAGE);
+
+  const stage = formData.get("stage");
+  if (!isStageKey(stage)) throw new Error("段階を選んでください。");
+
+  const context = await recordContextFor(admin, courseId, user.id);
+  if (!context.projectId) throw new Error("探究の記録を用意できませんでした。もう一度お試しください。");
+  await transitionStage(admin, { projectId: context.projectId, to: stage, decidedBy: "learner", profileId: user.id, courseId });
   revalidatePath(`/learn/${courseId}`);
 }

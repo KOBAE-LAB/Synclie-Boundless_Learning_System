@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { closeInquiryForSeries } from "@/lib/inquiry/project-stage";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -15,6 +16,8 @@ export async function createSeriesAction(formData: FormData) {
   const subject = String(formData.get("subject") ?? "").trim().slice(0, 40);
   const planned = Number.parseInt(String(formData.get("plannedLessons") ?? ""), 10);
   const year = Number.parseInt(String(formData.get("fiscalYear") ?? ""), 10);
+  // 探究: 人間のグループで、時間差で議論する(0044)。作成後は変えない(議論の記録の単位が変わるため)。
+  const kind = formData.get("kind") === "inquiry" ? "inquiry" : "standard";
 
   if (!title) {
     throw new Error("教科・科目の名前を入力してください。");
@@ -27,6 +30,7 @@ export async function createSeriesAction(formData: FormData) {
       owner_teacher_id: session.user.id,
       title,
       subject: subject || null,
+      kind,
       planned_lessons: Number.isInteger(planned) && planned >= 1 && planned <= 60 ? planned : null,
       fiscal_year: Number.isInteger(year) && year >= 2000 && year <= 2100 ? year : fiscalYearOfDate(new Date()),
     })
@@ -49,14 +53,17 @@ export async function archiveYearAction(formData: FormData) {
     throw new Error("年度を選んでください。");
   }
   const admin = createAdminClient();
-  const { error } = await admin
+  const { data: archived, error } = await admin
     .from("course_series")
     .update({ archived_at: new Date().toISOString() })
     .eq("owner_teacher_id", session.user.id)
     .eq("fiscal_year", year)
-    .is("archived_at", null);
+    .is("archived_at", null)
+    .select("id");
   if (error) {
     throw new Error(`一括アーカイブに失敗しました: ${error.message}`);
   }
+  // 探究の終了(要件定義書14章ステップ5): 最後の段階の物語と、振り返り版を作る(後処理)。
+  await closeInquiryForSeries(admin, (archived ?? []).map((s) => s.id as string));
   revalidatePath("/courses");
 }

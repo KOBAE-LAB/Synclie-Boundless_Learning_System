@@ -5,6 +5,8 @@ import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { assertOwnsCourse } from "@/lib/courses/ownership";
 import { loadLatestCorrections } from "@/lib/records/corrections";
+import { addMarker, removeMarker } from "@/lib/inquiry/markers";
+import { enqueueJob, scheduleJobRun } from "@/lib/inquiry/queue";
 
 // F15: 教師は擬似メンバーの発言ログを確認し、不適切・不正確な挙動を修正できる。
 // 元の発言(dialogue_turns.content)は書き換えず、修正版を dialogue_turn_corrections に積む
@@ -27,7 +29,7 @@ export async function updateTurnAction(courseId: string, turnId: string, formDat
 
   const { data: session } = await admin
     .from("learning_sessions")
-    .select("id, course_id")
+    .select("id, course_id, ended_at, project_id")
     .eq("id", turn.session_id)
     .maybeSingle();
   if (!session || session.course_id !== courseId) {
@@ -63,6 +65,18 @@ export async function updateTurnAction(courseId: string, turnId: string, formDat
     .eq("id", turnId);
   if (error) {
     throw new Error(`発言の更新に失敗しました: ${error.message}`);
+  }
+
+  // 教師の印(要件定義書14章ステップ5): 探究の大事な場面として、エピソードの抽出で優先させる。
+  // 議論が終わった後に付けた場合は、その議論の抽出をもう一度積む(すでにエピソードにした範囲は重ねない)。
+  if (formData.get("teacherMark") === "on") {
+    await addMarker(admin, { turnId, sessionId: session.id, kind: "teacher_mark", createdBy: user.id, note: teacherNote || null });
+    if (session.ended_at && session.project_id) {
+      await enqueueJob(admin, { kind: "extract_session", projectId: session.project_id, sessionId: session.id, round: `teacher:${turnId}` });
+      scheduleJobRun({ projectId: session.project_id });
+    }
+  } else {
+    await removeMarker(admin, turnId, "teacher_mark");
   }
 
   revalidatePath(`/courses/${courseId}/audit`);

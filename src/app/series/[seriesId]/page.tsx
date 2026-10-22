@@ -21,6 +21,7 @@ import {
   removeEnrollmentAction,
   updateSeriesAction,
 } from "./actions";
+import { GroupsSection } from "./groups-section";
 
 // 教科・科目(科目・講座)のページ。担当教師が、授業回(第1回、第2回…)を重ね、履修登録(授業コード・承認)を管理する。
 // 資料・ペルソナ・学習の流れ・議論は、授業回ごとに持つ。
@@ -30,14 +31,21 @@ const MODE_LABELS: Record<string, string> = {
   solo_study: "独習",
 };
 
-export default async function SeriesPage({ params }: { params: Promise<{ seriesId: string }> }) {
+export default async function SeriesPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ seriesId: string }>;
+  searchParams: Promise<{ group_error?: string }>;
+}) {
   const { seriesId } = await params;
+  const { group_error: groupError } = await searchParams;
   const { user } = await requireRole("teacher");
   const admin = createAdminClient();
 
   const { data: series } = await admin
     .from("course_series")
-    .select("id, title, subject, join_code, owner_teacher_id, planned_lessons, fiscal_year, archived_at")
+    .select("id, title, subject, join_code, owner_teacher_id, planned_lessons, fiscal_year, archived_at, kind")
     .eq("id", seriesId)
     .maybeSingle();
   if (!series || series.owner_teacher_id !== user.id) {
@@ -87,6 +95,7 @@ export default async function SeriesPage({ params }: { params: Promise<{ seriesI
       <Breadcrumbs trail={[{ label: "教科・科目一覧", href: "/courses" }]} current={series.title} />
       <h1 className="mt-3 text-2xl font-semibold text-ink">{seriesLabel(series.title, series.planned_lessons)}</h1>
       <p className="mt-1 text-sm text-ink-muted">
+        {series.kind === "inquiry" ? "探究(グループ)・" : ""}
         {series.fiscal_year}年度{series.subject ? `・${series.subject}` : ""}
         {series.planned_lessons ? `・作成済み ${lessonCount}/${series.planned_lessons}回` : `・${lessonCount}回`}
       </p>
@@ -305,6 +314,20 @@ export default async function SeriesPage({ params }: { params: Promise<{ seriesI
 
       </section>
 
+
+      {series.kind === "inquiry" && (
+        <GroupsSection
+          admin={admin}
+          seriesId={seriesId}
+          archived={Boolean(series.archived_at)}
+          enrolledStudentIds={enrolledStudentIds}
+          nameOf={(id) => {
+            const p = profileById.get(id);
+            return p?.display_name || p?.email || "(履修していない学習者)";
+          }}
+          error={groupError}
+        />
+      )}
 
       <section className="mt-10" id="manage">
         <h2 className="border-b border-line pb-2 text-base font-semibold text-ink">3. 年度の処理・教科・科目の管理</h2>

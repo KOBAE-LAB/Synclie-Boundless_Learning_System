@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { closeInquiryForSeries } from "@/lib/inquiry/project-stage";
+import { leaveSeriesGroups } from "@/lib/inquiry/groups";
 import { redirect } from "next/navigation";
 import { requireAdmin, requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -137,6 +139,7 @@ export async function removeEnrollmentAction(seriesId: string, studentId: string
   if (error) {
     throw new Error(`履修登録の削除に失敗しました: ${error.message}`);
   }
+  await leaveSeriesGroups(admin, seriesId, [studentId]);
   revalidatePath(`/series/${seriesId}`);
 }
 
@@ -214,6 +217,8 @@ export async function archiveSeriesAction(seriesId: string) {
   const { admin } = await guard(seriesId);
   const { error } = await admin.from("course_series").update({ archived_at: new Date().toISOString() }).eq("id", seriesId);
   if (error) throw new Error(`アーカイブに失敗しました: ${error.message}`);
+  // 探究の終了(要件定義書14章ステップ5): 最後の段階の物語と、振り返り版を作る(後処理)。
+  await closeInquiryForSeries(admin, [seriesId]);
   revalidatePath(`/series/${seriesId}`);
   revalidatePath("/courses");
 }
@@ -289,6 +294,7 @@ export async function clearEnrollmentsAction(seriesId: string) {
   const { admin } = await guard(seriesId);
   const { error } = await admin.from("series_enrollments").delete().eq("series_id", seriesId);
   if (error) throw new Error(`履修登録の整理に失敗しました: ${error.message}`);
+  await leaveSeriesGroups(admin, seriesId);
   revalidatePath(`/series/${seriesId}`);
   revalidatePath("/courses");
 }

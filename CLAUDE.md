@@ -850,6 +850,14 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
     (参加コード、列デフォルト式で新規作成時に自動生成)と`course_enrollments`
     (course_id+student_idの組、unique制約)を追加。既存の`learning_sessions`から
     参加登録済み扱いのバックフィルも行う(詳細は8章の`learn/`の説明を参照)
+  - `0044_inquiry_groups.sql` — **探究の教科・科目と人間のグループ**。`course_series.kind`(standard/inquiry)、グループの参加コード
+    (`inquiry_projects.join_code`)、メンバーの脱退(`inquiry_project_members.left_at`)、テーマの変更履歴(`inquiry_theme_changes`)、
+    発言者(`dialogue_turns.author_student_id`、既存の個人の議論は埋め戻し)、グループの議論は授業回×グループで1つ(部分一意索引)。
+    下の「探究の教科・科目と人間のグループ」を参照
+  - `0043_extraction_layer.sql` — **②抽出層**(要件定義書14章の実装(2a))。AIの使用量の記録(`ai_usage_log`、合計用の関数
+    `ai_usage_cost_since`/`ai_usage_summary_since`)、段階(`courses.expected_stage_key`・`inquiry_projects.current_stage_key`・
+    `inquiry_stage_transitions`)、印(`inquiry_markers`)、処理待ち(`inquiry_jobs`)、軌跡・段階の物語・エピソードとその版・出典
+    (`inquiry_trajectories`/`inquiry_stage_stories`/`inquiry_episodes`/`inquiry_episode_versions`/`inquiry_sources`)。下の「②抽出層」を参照
   - `0042_raw_log_protection.sql` — **生ログの保護**(要件定義書14章のPart A)。探究プロジェクト(`inquiry_projects`/`inquiry_project_members`)、
     記録の「授業の控え」(`course_label`ほか)、授業回・教科・科目・擬似メンバー・ステップを消しても記録が残る削除ルール(set null)、
     発言の修正版(`dialogue_turn_corrections`)。既存の記録への控えの埋め戻しと、個人プロジェクトへの束ねも含む(下の「生ログの保護」を参照)
@@ -970,8 +978,66 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
 - **発言の修正版**: 上の「`[courseId]/audit/`」を参照。
 - 記録を読むコードは、`course_id`が null の行がありうることを前提にする(`.in("course_id", …)`に null を混ぜない、
   表示は`course_label`にフォールバックする)。
-- 残り(②抽出層・③投射層のテーブル、F26・ペルソナの版1の移し替え)は、草案`docs/drafts/0042_data_foundation_draft.sql`の
-  Part B・Part C(C4〜C6)として、`0043`・`0044`で入れる予定。
+- ②抽出層は`0043`、探究のグループは`0044`で入れた(次の節)。残り(③投射層のテーブル、F26・ペルソナの版1の移し替え)は、実装(2b)の`0045`で入れる予定。
+
+### ②抽出層とAIの使用量(0043、要件定義書14章の実装(2a)、2026-10-21)
+
+要件定義書14章ステップ5・6の決定に沿って、①の記録から「後輩の参考になる記録」を作る。**③(先輩型・他校型ペルソナ、
+検索、貸し出し)はまだ無い**ので、いまは作るだけで、対話には使っていない(実装(2b))。
+
+- **AIの使用量**(`src/lib/ai/usage.ts`): `openai.ts`のクライアントが、`responses.parse/create/stream`と`embeddings.create`の
+  結果から実際のトークン数を取り、`ai_usage_log`に自動で記録する(呼び出し側の変更は不要。記録の失敗は呼び出しを止めない)。
+  用途は構造化出力の名前(`zodTextFormat`の第2引数)から自動で付く。授業回・用途を明示するときは`withAiContext()`で囲む。
+  金額は`PRICES_PER_MILLION_USD`(公開価格からの目安。**モデルや価格が変わったらここを直す**)。月の上限は環境変数
+  `SYNCLIE_MONTHLY_AI_BUDGET_USD`(未設定なら上限なし)で、超えると抽出を「後回し」にする(対話は止めない)。
+- **印**(`src/lib/inquiry/markers.ts`、AIなし): 論証評価で新しい根拠あり(`evidence_shift`)・根拠を受けて擬似メンバーが譲歩
+  (`persona_conceded`)は`dialogue.ts`が自動で付ける。学習者の「☆ 後輩に残す」(`toggleKeepForJuniorsAction`、本人の議論の発言だけ。
+  境界は`loadOwnTurnSession`でテスト済み)、教師の印(発言の監査画面のチェック)。
+- **段階**(`src/lib/inquiry/stages.ts`・`project-stage.ts`): 既定の4段階。授業回の「この回で想定する探究の段階」(授業の設定)が
+  いまより先なら、その回の議論を始めたときに進める(自動では戻さない)。学習者は授業回の画面の「段階を変える」で宣言できる
+  (`declareStageAction`)。切り替えは`inquiry_stage_transitions`に残る。
+- **処理待ちと後処理**(`src/lib/inquiry/queue.ts`): きっかけで`inquiry_jobs`に積み、そのリクエストの`after()`で実行する
+  (**cronは作らない**)。二重に積まない(`dedupe_key`)・取り合わない(pending→runningを取れた方だけが処理)。失敗・後回しは
+  教師ダッシュボードの「探究の記録づくり」で件数を出し、「やり直す」で再実行する(`retryInquiryJobsAction`)。
+  **プロンプトを改良したら`PROMPT_VERSIONS`を上げる**(同じ対象を新しい版として処理し直せる。古い版は消さない)。
+- **作るもの**(`src/lib/inquiry/pipeline.ts`、AIは`MODEL_JUDGE`):
+  (1)**議論の終了**(`close.ts`)→`extract_session`: 印の付いた場面から、エピソード(最大3件)を**1回の呼び出し**で作る
+  (`src/lib/ai/episode-extraction.ts`)。**印が無い議論ではAIを呼ばない**。原文の抜粋はAIに書かせず発言から切り出し、語り
+  (一人称・その議論より後のことは書かない・400字まで)は名簿の名前を機械的に伏せる(`anonymize.ts`)。出典は`inquiry_sources`。
+  (2)**段階の切り替え**→`build_stage_story`: 終わった段階のエピソードから、段階の物語(当時版)と軌跡の新しい版(800字まで)を
+  1回で作る(`src/lib/ai/stage-story.ts`)。(3)**教科・科目のアーカイブ**(=探究の終了)→最後の段階の物語と、振り返り版。
+  対象は、データ利用に同意している学習者だけ(管理者のテスト学習者は除く)。
+- **消え方**: エピソードは元の対話セッション、段階の物語・軌跡はプロジェクトに連鎖する。学習者本人の全データ削除と、管理者の
+  テストデータの消去では消え、教師の通常の削除では残る(実DBで確認済み)。`ai_usage_log`は学習者の内容を持たないので残る。
+- 後から印が付いた議論(終了後の「後輩に残す」・教師の印)は、`round`を変えてもう一度積み、すでにエピソードにした範囲は重ねない。
+
+### 探究の教科・科目と人間のグループ(0044、2026-10-21)
+
+「今のSynclieの中に探究を加える」(先生の判断)。教科・科目を作るときに**学び方「探究」**を選ぶと(作成後は変えない)、
+その教科・科目の授業回の議論は**学習者のグループで1つ**になる。決定: 議論は**時間差(非同期)が基本**、グループは**教師の割り当てと
+生徒のコード参加の両方**、テーマは**グループが決めて更新し、変更の履歴を残す**。
+
+- **どの議論か**(`src/lib/learn/session-scope.ts`): `resolveSessionScope`が solo(本人の議論)/ group(グループの共有の議論。
+  `learning_sessions.student_id`は null、`project_id`がグループ)/ needs_group(探究でグループ未所属=議論できない)を返す。
+  **議論を探す・作るコードは、`student_id = 本人`で直接絞らず、`scopeSessionQuery`を通すこと**(グループの議論が見えなくなる)。
+  発言には必ず`author_student_id`を書く(`dialogue.ts`)。**学習者ごとの集計は、セッションの`student_id`ではなく発言の
+  `author_student_id`で数える**(教師ダッシュボード`stats.ts`・学習ダッシュボード・学習進化型ペルソナの材料・教科・科目の記録の量)。
+- **AIには氏名を送らない**: グループの発言は「メンバーA・B…」(参加した順、`memberAlias`)としてAIに渡す。擬似メンバーには、
+  グループで時間差で議論していることと、グループが決めたテーマを伝える(テーマは擬似メンバーが変えない)。
+- **グループの決まり**(`src/lib/inquiry/groups.ts`、テストあり): 入れるのは教科・科目の承認済みの履修者だけ、1教科・科目1グループ
+  (別のグループに入ると前のグループから抜ける)、抜けても行は消さない(`left_at`)、アーカイブした教科・科目では変更不可、
+  テーマを変えられるのはメンバーだけ(変わったときだけ履歴を残す)、記録のあるグループは消せない。履修登録を外すと、
+  その教科・科目のグループからも抜ける(`leaveSeriesGroups`)。
+- **画面**: 教師は`/series/[seriesId]`の「グループ」(`groups-section.tsx`・`group-actions.ts`。作成・割り当て・外す・コードの再発行・
+  名前の変更・テーマの変化)。学習者は`/learn/series/[seriesId]`の「あなたのグループ」(コードで入る・抜ける・テーマを決める/更新。
+  `actions.ts`)。授業回の画面は、他のメンバーの発言を名前つきで左に出し、15秒ごとに新しい発言を確かめる
+  (`group-live-refresh.tsx`・`/api/learn/[courseId]/turn-count`、画面が見えている間だけ)。沈黙時の自動継続はグループでは使わない。
+  議論のまとめ(終了)はメンバーの誰でもできる。成果の提出・振り返りは、これまでどおり一人ずつ。
+- **②抽出層**: グループの議論は、**発言したメンバーごとに同意を確かめ、同意していない人の発言はAIにも材料にも使わない**。
+  名前の伏せ字は、メンバー全員と担当教師の名前。
+- **本人の全データ削除(F16)**(`src/lib/inquiry/forget.ts`): グループの議論は消さず、**本人の発言だけ**を消す(手書き・音声の
+  ファイルも)。本人の発言があった議論のエピソードと、そのグループの段階の物語・軌跡も消し、残ったメンバーの記録から作り直す仕事を
+  積む(エピソードは元の段階に置く。`extract_session`の`stage_key`)。テーマの履歴の変更者の印も外す。
 
 ### 画面の文章と「流れ」の見せ方(2026-10)
 

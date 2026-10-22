@@ -4,6 +4,9 @@
 --   そのとき、Part C のうち①だけに関わる C1(控えの埋め戻し)・C2/C3(個人プロジェクトへの束ね)も 0042 に前倒しし、
 --   inquiry_projects に solo_student_id((教科・科目, 本人)で一意)を足した。このファイルの Part A・C1〜C3 は参考として残す。
 --   残り: Part B(0043)と、Part C の C4〜C6(0044)。
+-- 2026-10-21: Part B のうち②(B1〜B5)は supabase/migrations/0043_extraction_layer.sql として実装した。ステップ5・6の決定で
+--   印・処理待ち・段階・使用量の記録を足し、エピソードの版は excerpt / narrated / narrated_cross_org にした(匿名化と語りを1回で作るため)。
+--   残り: Part B の③(B6〜B9: アーカイブ・ペルソナの版・貸し出し)と B10(F26の版)、Part C の C4〜C6 → 0044(実装(2b))。
 --
 -- このファイルは supabase/migrations/ には置かない(置くと db push で適用されてしまう)。
 -- 実装するときに、次の3つのマイグレーションに分けて、順に supabase/migrations/ へ移す:
@@ -23,7 +26,7 @@
 
 -- A1. 探究プロジェクト: ①②③をつなぐ、授業から独立した安定した単位。
 --   グループ × テーマ × 期間。個人の独習は1人のプロジェクト(kind='solo')。複数の授業回にまたがる。
---   授業教科・科目を消しても、プロジェクトと記録は残る(series_id は set null)。
+--   教科・科目を消しても、プロジェクトと記録は残る(series_id は set null)。
 create table if not exists inquiry_projects (
   id uuid primary key default gen_random_uuid(),
   series_id uuid references course_series(id) on delete set null,

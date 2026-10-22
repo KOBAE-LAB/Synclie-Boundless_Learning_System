@@ -56,6 +56,7 @@ export default async function PersonaAuditPage({
 
   const personaTurns: PersonaTurnWithContext[] = [];
   const personaNames = new Map<string, string>();
+  const teacherMarked = new Set<string>();
 
   if (sessionIds.length > 0) {
     const { data: turnRows } = await admin
@@ -67,10 +68,14 @@ export default async function PersonaAuditPage({
       .order("session_id", { ascending: true })
       .order("created_at", { ascending: true });
     const turns = (turnRows ?? []) as TurnRow[];
-    const corrections = await loadLatestCorrections(
-      admin,
-      turns.filter((t) => t.speaker_type === "persona").map((t) => t.id),
-    );
+    const personaTurnIds = turns.filter((t) => t.speaker_type === "persona").map((t) => t.id);
+    const [corrections, { data: markRows }] = await Promise.all([
+      loadLatestCorrections(admin, personaTurnIds),
+      personaTurnIds.length > 0
+        ? admin.from("inquiry_markers").select("turn_id").eq("kind", "teacher_mark").in("turn_id", personaTurnIds)
+        : Promise.resolve({ data: [] as { turn_id: string }[] }),
+    ]);
+    for (const row of markRows ?? []) teacherMarked.add(row.turn_id as string);
 
     // セッションごとに並んでいる前提で、擬似メンバーの発言の直前にある
     // 学習者の発言を文脈として拾う(1件前がstudentでなければ文脈なしとする)。
@@ -170,6 +175,10 @@ export default async function PersonaAuditPage({
                 <label className="flex items-center gap-2 text-xs text-ink-muted">
                   <input type="checkbox" name="flagged" defaultChecked={turn.flagged_by_teacher} />
                   不適切・不正確な発言としてフラグを立てる
+                </label>
+                <label className="flex items-center gap-2 text-xs text-ink-muted">
+                  <input type="checkbox" name="teacherMark" defaultChecked={teacherMarked.has(turn.id)} />
+                  探究の大事な場面として残す(後輩の参考になる記録づくりで優先されます)
                 </label>
                 <button
                   type="submit"
