@@ -9,7 +9,7 @@ import type { SeniorMode } from "./senior";
 type AdminClient = ReturnType<typeof createAdminClient>;
 
 export interface RetrievalRecord {
-  kind: "trajectory" | "stage_story" | "episode";
+  kind: "trajectory" | "stage_story" | "episode" | "aggregate";
   trajectory_id?: string;
   stage_story_id?: string;
   episode_version_id?: string;

@@ -30,6 +30,9 @@ describe("personaInitial(アバターが無いときの頭文字)", () => {
     expect(personaInitial("2025年度の先輩 ミナト(AI)")).toBe("ミ");
     expect(personaInitial("先輩 ソラ(AI)")).toBe("ソ");
     expect(personaInitial("2025年度の先輩 ミナト（AI）")).toBe("ミ");
+    expect(personaInitial("2025年度のみんな ミライ(AI)")).toBe("ミ");
+    expect(personaInitial("2025年度のみんな(AI)")).toBe("み");
+    expect(personaInitial("前の年度のみんな(AI)")).toBe("み");
   });
   it("ふつうのペルソナは、名前の先頭の文字", () => {
     expect(personaInitial("島の漁師")).toBe("島");

@@ -15,7 +15,7 @@ import { SessionControls } from "@/components/session-controls";
 import { getTimeStatus } from "@/lib/learn/session-end";
 import { assignPersonaTones, toneClass, personaInitial } from "@/lib/persona-tones";
 import { loadActiveMembers, loadLoanedPersonaRows } from "@/lib/learn/members";
-import { isSeniorTier } from "@/lib/inquiry/senior";
+import { isAggregateTier, isSeniorTier } from "@/lib/inquiry/senior";
 import { normalizeReplyTempo, type ReplyTempo } from "@/lib/persona-traits";
 import {
   submitOutcomeAction,
@@ -700,10 +700,10 @@ export default async function LearnCourseSessionPage({
                   <span className="persona-chip absolute bottom-2 left-2 max-w-[85%] truncate rounded px-2 py-0.5 text-xs font-medium">
                     {persona.name}
                   </span>
-                  {isSeniorTier(persona.tier) && (
-                    // 本人ではなく、先輩の記録をもとにしたAIであることを常に示す(要件定義書14章ステップ6)。
+                  {(isSeniorTier(persona.tier) || isAggregateTier(persona.tier)) && (
+                    // 本人ではなく、記録をもとにしたAIであることを常に示す(要件定義書14章ステップ6)。
                     <span className="absolute left-2 top-2 rounded bg-black/60 px-1.5 py-0.5 text-[0.6875rem] font-medium text-white">
-                      先輩の記録をもとにしたAI
+                      {isAggregateTier(persona.tier) ? "前の年度の学習者の記録をもとにしたAI" : "先輩の記録をもとにしたAI"}
                     </span>
                   )}
                   {isSpeaker && (

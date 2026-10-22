@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { forgetStudentInGroups } from "@/lib/inquiry/forget";
+import { invalidateAggregatesForStudent } from "@/lib/inquiry/aggregate";
 import { scheduleJobRun } from "@/lib/inquiry/queue";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -91,6 +92,8 @@ export async function deleteMyDataAction() {
           .in("id", [...new Set((groupTurnSessions ?? []).map((t) => t.session_id))])
           .is("student_id", null)
       : { data: [] as { course_id: string | null }[] };
+  // 集約型(0047): この学習者の記録が材料に入っている承認済みの集約型は、下書きに戻す(個人のプロジェクトを消す前に。材料の対応が消えるため)。
+  await invalidateAggregatesForStudent(admin, user.id);
   const forgotten = await forgetStudentInGroups(admin, user.id);
   handwritingPaths.push(...forgotten.handwritingPaths);
   audioPaths.push(...forgotten.audioPaths);

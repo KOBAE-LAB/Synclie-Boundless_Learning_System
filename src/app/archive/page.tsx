@@ -4,6 +4,8 @@ import { Breadcrumbs, BackLink } from "@/components/breadcrumbs";
 import { SubmitButton } from "@/components/submit-button";
 import { StepNumber } from "@/components/step-number";
 import { listArchive, listSourceProjects, MAX_NICKNAME } from "@/lib/inquiry/senior";
+import { listAggregateSources } from "@/lib/inquiry/aggregate";
+import { MIN_AGGREGATE_LEARNERS } from "@/lib/inquiry/aggregate-items";
 import { personaInitial } from "@/lib/persona-tones";
 import {
   createSeniorDraftAction,
@@ -12,6 +14,8 @@ import {
   setSeniorAvatarAction,
   setSeniorStatusAction,
   updateSeniorAction,
+  createAggregateDraftAction,
+  updateAggregateAction,
 } from "./actions";
 
 // 先輩の記録(アーカイブ): 先輩の探究の記録から「先輩のAI」を作り、承認して、同じ学校の授業回で使えるようにする。
@@ -24,9 +28,10 @@ export default async function ArchivePage({ searchParams }: { searchParams: Prom
   const { error } = await searchParams;
   const { user } = await requireRole("teacher");
   const admin = createAdminClient();
-  const [entries, projects, { data: avatarRows }] = await Promise.all([
+  const [entries, projects, aggregateSources, { data: avatarRows }] = await Promise.all([
     listArchive(admin, user.id),
     listSourceProjects(admin, user.id),
+    listAggregateSources(admin, user.id),
     admin.from("avatar_options").select("id, label").order("label", { ascending: true }),
   ]);
 
@@ -55,6 +60,9 @@ export default async function ArchivePage({ searchParams }: { searchParams: Prom
                     </span>
                   )}
                   {e.name}
+                  <span className="rounded-full bg-surface px-2 py-0.5 text-xs font-normal text-ink-muted ring-1 ring-line">
+                    {e.tier === "aggregate" ? "集約型" : "先輩型"}
+                  </span>
                 </span>
                 <span className="flex flex-wrap items-center gap-2 text-xs">
                   <span className={e.status === "draft" ? "font-semibold text-warn" : "text-ink-faint"}>
@@ -71,7 +79,7 @@ export default async function ArchivePage({ searchParams }: { searchParams: Prom
               <p className="mt-1 text-sm text-ink-muted">{e.role}</p>
               <dl className="mt-2 space-y-1 text-sm">
                 <div>
-                  <dt className="inline text-xs text-ink-faint">当時の問い: </dt>
+                  <dt className="inline text-xs text-ink-faint">{e.tier === "aggregate" ? "大事にしている見方: " : "当時の問い: "}</dt>
                   <dd className="inline text-ink">{e.position || "(未設定)"}</dd>
                 </div>
                 <div>
@@ -79,9 +87,17 @@ export default async function ArchivePage({ searchParams }: { searchParams: Prom
                   <dd className="inline text-ink">{e.goal || "(未設定)"}</dd>
                 </div>
               </dl>
+              {e.tier === "aggregate" && e.itemsText && (
+                <ul className="mt-2 list-disc space-y-0.5 pl-5 text-sm text-ink">
+                  {e.itemsText.split("\n").map((line, i) => (
+                    <li key={i}>{line}</li>
+                  ))}
+                </ul>
+              )}
               {e.mine ? (
                 <>
                   {e.sourceTitle && <p className="mt-2 text-xs text-ink-faint">材料: 探究プロジェクト「{e.sourceTitle}」</p>}
+                  {e.sourceSeriesTitle && <p className="mt-2 text-xs text-ink-faint">材料: 教科・科目「{e.sourceSeriesTitle}」の、前の年度の学習者の記録</p>}
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     <span className="text-xs text-ink-faint">アバター: {e.avatarPath ? "設定済み" : "未設定(学習者の画面では、呼び名の頭文字が出ます)"}</span>
                     <form action={recommendSeniorAvatarAction.bind(null, e.id)}>
@@ -103,10 +119,10 @@ export default async function ArchivePage({ searchParams }: { searchParams: Prom
                   </details>
                   <details className="mt-3">
                     <summary className="cursor-pointer text-xs text-ink-muted">内容を確認・修正する</summary>
-                    <form action={updateSeniorAction.bind(null, e.id)} className="mt-2 space-y-2">
+                    <form action={(e.tier === "aggregate" ? updateAggregateAction : updateSeniorAction).bind(null, e.id)} className="mt-2 space-y-2">
                       <label className="block text-xs text-ink-muted">
-                        呼び名(名前は「年度の先輩 呼び名(AI)」になります)
-                        <input name="nickname" defaultValue={e.nickname ?? ""} required maxLength={MAX_NICKNAME} className={input} />
+                        {e.tier === "aggregate" ? "呼び名(任意。名前は「年度のみんな 呼び名(AI)」になります)" : "呼び名(名前は「年度の先輩 呼び名(AI)」になります)"}
+                        <input name="nickname" defaultValue={e.nickname ?? ""} required={e.tier !== "aggregate"} maxLength={MAX_NICKNAME} className={input} />
                       </label>
                       <label className="block text-xs text-ink-muted">
                         役割
@@ -117,13 +133,19 @@ export default async function ArchivePage({ searchParams }: { searchParams: Prom
                         <input name="tone" defaultValue={e.tone} maxLength={80} className={input} />
                       </label>
                       <label className="block text-xs text-ink-muted">
-                        当時の問い・考え
+                        {e.tier === "aggregate" ? "大事にしている見方" : "当時の問い・考え"}
                         <textarea name="position" defaultValue={e.position} maxLength={300} rows={2} className={input} />
                       </label>
                       <label className="block text-xs text-ink-muted">
                         後輩との関わり方
                         <textarea name="goal" defaultValue={e.goal} maxLength={300} rows={2} className={input} />
                       </label>
+                      {e.tier === "aggregate" && (
+                        <label className="block text-xs text-ink-muted">
+                          まとめた項目(1行に1つ。「つまずき(第3回): 内容」「よくある誤解: 内容」「有効だった問い: 内容」の形。授業回は省けます)
+                          <textarea name="items" defaultValue={e.itemsText} rows={6} className={input} />
+                        </label>
+                      )}
                       <SubmitButton pendingText="保存中…" className={small}>保存</SubmitButton>
                     </form>
                   </details>
@@ -194,6 +216,41 @@ export default async function ArchivePage({ searchParams }: { searchParams: Prom
               まだ記録ができた探究はありません。探究の段階が進むか、教科・科目をアーカイブ(探究の終了)すると作られます。
             </li>
           )}
+        </ul>
+      </section>
+
+      <section className="mt-10">
+        <h2 className="border-b border-line pb-2 text-base font-semibold text-ink">集約型のAIを作る(前の年度のみんなの記録から)</h2>
+        <p className="mt-2 text-sm text-ink-muted">
+          前の年度の教科・科目の、複数の学習者の記録から、共通するつまずき・よくある誤解・有効だった問いをまとめて、「前の年度の学習者の記録をもとにしたAI」を作ります。
+          個人の発言は使わず、まとめだけを使います。個人が特定されにくくするため、データの利用に同意している学習者の記録が{MIN_AGGREGATE_LEARNERS}人分以上ないと作れません。
+        </p>
+        <ul className="mt-3 space-y-2">
+          {aggregateSources.map((s) => (
+            <li key={s.seriesId} className="rounded-md border border-line p-3">
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm">
+                <span className="font-medium text-ink">
+                  {s.title}
+                  <span className="ml-2 text-xs font-normal text-ink-faint">
+                    {s.fiscalYear ? `${s.fiscalYear}年度・` : ""}同意した学習者 {s.learnerCount}人分{s.archived ? "・終了済み" : ""}
+                  </span>
+                </span>
+                {s.aggregateCount > 0 && <span className="text-xs text-ink-faint">集約型のAI {s.aggregateCount}人</span>}
+              </div>
+              {s.learnerCount >= MIN_AGGREGATE_LEARNERS ? (
+                <form action={createAggregateDraftAction.bind(null, s.seriesId)} className="mt-2 flex flex-wrap items-center gap-2">
+                  <label htmlFor={`agg-nick-${s.seriesId}`} className="sr-only">呼び名(任意)</label>
+                  <input id={`agg-nick-${s.seriesId}`} name="nickname" maxLength={MAX_NICKNAME} placeholder="呼び名(任意。例: ミライ)" className="w-48 rounded-md border border-line bg-surface-raised px-3 py-1.5 text-sm" />
+                  <SubmitButton pendingText="作成中…" className="rounded-md bg-accent-fill px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-fill-hover disabled:opacity-50">
+                    集約型のAIの下書きを作る
+                  </SubmitButton>
+                </form>
+              ) : (
+                <p className="mt-2 text-xs text-ink-faint">まだ{MIN_AGGREGATE_LEARNERS}人分に足りないため、作れません。</p>
+              )}
+            </li>
+          ))}
+          {aggregateSources.length === 0 && <li className="text-sm text-ink-muted">記録(軌跡や場面)ができている教科・科目が、まだありません。</li>}
         </ul>
       </section>
 

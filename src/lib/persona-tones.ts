@@ -24,6 +24,7 @@ export function toneClass(tone: number | undefined): string {
  * 呼び名(ミナト)の頭文字を使う。それ以外は、名前の先頭の文字。
  */
 export function personaInitial(name: string): string {
-  const senior = name.match(/^(?:\d{4}年度の)?先輩\s*(.+?)(?:[(（]AI[)）])?$/);
-  return Array.from(senior ? senior[1] : name)[0] ?? "";
+  // 先輩型「2025年度の先輩 ミナト(AI)」・集約型「2025年度のみんな ミライ(AI)」「2025年度のみんな(AI)」
+  const archived = name.match(/^(?:\d{4}年度の|前の年度の)?(先輩|みんな)\s*(.*?)(?:[(\uFF08]AI[)\uFF09])?$/);
+  return Array.from(archived ? archived[2] || archived[1] : name)[0] ?? "";
 }

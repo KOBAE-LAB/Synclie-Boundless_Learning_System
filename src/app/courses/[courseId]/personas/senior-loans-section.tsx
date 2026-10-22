@@ -39,7 +39,7 @@ export async function SeniorLoansSection({
   return (
     <section id="seniors" className="mt-8 rounded-lg border border-line p-5">
       <h2 className="text-sm font-medium text-ink">
-        先輩の記録から加える
+        先輩・前の年度のみんなの記録から加える
         <span className="ml-2 text-xs font-normal text-ink-muted">{loans.length}/{MAX_LOANS_PER_LESSON}人</span>
       </h2>
       <p className="mt-1 text-xs text-ink-muted">
@@ -56,11 +56,15 @@ export async function SeniorLoansSection({
                 {l.personaStatus !== "approved" ? "下書きに戻されたため、話しません" : l.status === "active" ? "使用中" : "休止中"}
               </span>
             </div>
-            <form action={setSeniorLoanModeAction.bind(null, courseId, l.loanId)} className="mt-2 flex flex-wrap items-center gap-2">
-              <label htmlFor={`mode-${l.loanId}`} className="sr-only">使い方</label>
-              <ModeSelect id={`mode-${l.loanId}`} defaultValue={l.mode} />
-              <SubmitButton pendingText="保存中…" className={small}>使い方を変える</SubmitButton>
-            </form>
+            {l.tier === "aggregate" ? (
+              <p className="mt-1 text-xs text-ink-faint">前の年度の多くの学習者の記録のまとめです(当時・振り返りの使い分けはありません)。</p>
+            ) : (
+              <form action={setSeniorLoanModeAction.bind(null, courseId, l.loanId)} className="mt-2 flex flex-wrap items-center gap-2">
+                <label htmlFor={`mode-${l.loanId}`} className="sr-only">使い方</label>
+                <ModeSelect id={`mode-${l.loanId}`} defaultValue={l.mode} />
+                <SubmitButton pendingText="保存中…" className={small}>使い方を変える</SubmitButton>
+              </form>
+            )}
             <div className="mt-2 flex flex-wrap items-center gap-3">
               <form action={setSeniorLoanStatusAction.bind(null, courseId, l.loanId, l.status === "active" ? "paused" : "active")}>
                 <button type="submit" className={small}>{l.status === "active" ? "休止する" : "使用中にする"}</button>
@@ -79,16 +83,18 @@ export async function SeniorLoansSection({
             <label htmlFor="senior-pick" className="sr-only">先輩のAI</label>
             <select id="senior-pick" name="personaId" defaultValue="" required className="min-w-0 flex-1 rounded-md border border-line bg-surface-raised px-2 py-1.5 text-sm">
               <option value="" disabled>
-                先輩のAIを選ぶ
+                先輩・集約型のAIを選ぶ
               </option>
               {candidates.map((c) => (
                 <option key={c.id} value={c.id}>
+                  {c.tier === "aggregate" ? "【集約型】" : "【先輩型】"}
                   {c.name}({c.role})
                 </option>
               ))}
             </select>
-            <label htmlFor="senior-mode" className="sr-only">使い方</label>
+            <label htmlFor="senior-mode" className="sr-only">使い方(先輩型のとき)</label>
             <ModeSelect id="senior-mode" defaultValue="then" />
+            <span className="text-xs text-ink-faint">(集約型では使い方は関係ありません)</span>
             <SubmitButton pendingText="加えています…" className={small}>この回に加える</SubmitButton>
           </form>
         ) : (

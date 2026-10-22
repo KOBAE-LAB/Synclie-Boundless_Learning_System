@@ -3,6 +3,8 @@
 // (personas を course_id で直接引くと、先輩型が抜ける)。
 import type { createAdminClient } from "@/lib/supabase/server";
 import { isEligibleLearner } from "@/lib/inquiry/pipeline";
+import { aggregateStillSpeaks } from "@/lib/inquiry/aggregate";
+import { buildAggregateMemoryText, itemsForLesson, parseAggregateItems } from "@/lib/inquiry/aggregate-items";
 import type { SeniorMode } from "@/lib/inquiry/senior";
 import { buildSeniorMemory, type SeniorMemory } from "@/lib/inquiry/senior-memory";
 import { embedQuery, searchMaterialChunks, searchMaterialChunksByEmbedding } from "@/lib/rag/search";
@@ -13,7 +15,7 @@ export interface LessonMember {
   id: string;
   name: string;
   profile: { role?: string; tone?: string } | null;
-  stance: { position?: string; goal?: string } | null;
+  stance: { position?: string; goal?: string; items?: unknown } | null;
   behavior_rules: {
     speakingFrequency?: string;
     teachingDegree?: string;
@@ -54,6 +56,13 @@ export async function loadActiveMembers(admin: AdminClient, courseId: string): P
 
   for (const loan of loans ?? []) {
     const p = byId.get(loan.persona_id as string);
+    // 集約型(0047): 材料は複数のプロジェクト。同意している学習者が MIN 人以上いるときだけ話す。
+    if (p && p.tier === "aggregate") {
+      if (p.status === "approved" && (await aggregateStillSpeaks(admin, p.id as string))) {
+        members.push({ ...(p as LessonMember), sourceProjectId: null, loan: { id: loan.id as string, mode: loan.mode as SeniorMode } });
+      }
+      continue;
+    }
     if (!p || p.status !== "approved" || !p.source_project_id) continue;
     const soloStudent = soloStudentOf.get(p.source_project_id as string);
     if (soloStudent && !(await isEligibleLearner(admin, soloStudent))) continue;
@@ -78,7 +87,20 @@ export async function retrieveForTurn(
   input: { courseId: string; members: LessonMember[]; queryText: string | null; juniorProjectId: string | null },
 ): Promise<{ materialChunks: string[]; memories: Map<string, { memory: SeniorMemory; mode: SeniorMode }> }> {
   const seniors = input.members.filter((m) => m.loan && m.sourceProjectId);
+  const aggregates = input.members.filter((m) => m.loan && m.tier === "aggregate");
   const memories = new Map<string, { memory: SeniorMemory; mode: SeniorMode }>();
+  if (aggregates.length > 0) {
+    // 集約型の記憶は、まとめた項目だけ(検索も埋め込みもAIも要らない)。教科・科目学習モードでは、後輩のいまの授業回までの項目に絞る。
+    const { data: lesson } = await admin.from("courses").select("lesson_no, series_id").eq("id", input.courseId).maybeSingle();
+    const { data: lessonSeries } = lesson?.series_id
+      ? await admin.from("course_series").select("kind").eq("id", lesson.series_id).maybeSingle()
+      : { data: null };
+    const juniorLessonNo = lessonSeries?.kind === "inquiry" ? null : ((lesson?.lesson_no as number | null | undefined) ?? null);
+    for (const a of aggregates) {
+      const items = itemsForLesson(parseAggregateItems(a.stance), juniorLessonNo);
+      memories.set(a.id, { memory: { text: buildAggregateMemoryText(items), retrievals: [{ kind: "aggregate" }] }, mode: "then" });
+    }
+  }
   if (seniors.length === 0) {
     return { materialChunks: input.queryText ? await searchMaterialChunks(input.courseId, input.queryText) : [], memories };
   }

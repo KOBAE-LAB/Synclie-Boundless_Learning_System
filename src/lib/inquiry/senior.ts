@@ -9,6 +9,7 @@ import { withAiContext } from "@/lib/ai/usage";
 import { draftSeniorPersona } from "@/lib/ai/senior-persona-draft";
 import { recommendPersonaAvatar, type AvatarOption } from "@/lib/ai/persona-avatar";
 import { isEligibleLearner } from "./pipeline";
+import { itemsToLines, parseAggregateItems } from "./aggregate-items";
 import { stageLabel } from "./stages";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
@@ -37,6 +38,16 @@ export function isSeniorTier(tier: string | null | undefined): boolean {
   return tier === "senior" || tier === "other_school";
 }
 
+/** 集約型(0047): 前の年度の複数の学習者の記録から作る。先輩型と同じ「先輩の記録」(アーカイブ)に並ぶ。 */
+export function isAggregateTier(tier: string | null | undefined): boolean {
+  return tier === "aggregate";
+}
+
+/** アーカイブに並ぶ種類(授業回に属さず、貸し出して使う): 先輩型・他校型・集約型。 */
+export function isArchiveTier(tier: string | null | undefined): boolean {
+  return isSeniorTier(tier) || isAggregateTier(tier);
+}
+
 async function teacherOrg(admin: AdminClient, teacherId: string): Promise<string | null> {
   const { data } = await admin.from("profiles").select("organization_id").eq("id", teacherId).maybeSingle();
   return (data?.organization_id as string | null) ?? null;
@@ -63,12 +74,12 @@ async function loadArchived(admin: AdminClient, personaId: string): Promise<Arch
     .select("id, tier, status, course_id, created_by, organization_id")
     .eq("id", personaId)
     .maybeSingle();
-  if (!data || !isSeniorTier(data.tier as string) || data.course_id) throw new SeniorRuleError("先輩のペルソナが見つかりません。");
+  if (!data || !isArchiveTier(data.tier as string) || data.course_id) throw new SeniorRuleError("先輩のペルソナが見つかりません。");
   return data as ArchivedPersona;
 }
 
 /** 作った本人だけが直せる・消せる(同じ学校の先生は、使うだけ)。 */
-async function assertCreator(admin: AdminClient, personaId: string, teacherId: string): Promise<ArchivedPersona> {
+export async function assertCreator(admin: AdminClient, personaId: string, teacherId: string): Promise<ArchivedPersona> {
   const persona = await loadArchived(admin, personaId);
   if (persona.created_by !== teacherId) throw new SeniorRuleError("先輩のペルソナを直せるのは、作った先生だけです。");
   return persona;
@@ -186,6 +197,8 @@ export async function createSeniorDraft(
 
 export interface ArchiveEntry {
   id: string;
+  /** senior / other_school / aggregate */
+  tier: string;
   name: string;
   nickname: string | null;
   status: string;
@@ -199,6 +212,9 @@ export interface ArchiveEntry {
   avatarId: string | null;
   /** アバターの画像のパス(public/avatars/…)。未設定は null */
   avatarPath: string | null;
+  /** 集約型だけ: まとめた項目(編集用の文字。1行に1項目)と、材料の教科・科目名 */
+  itemsText: string;
+  sourceSeriesTitle: string | null;
 }
 
 /** この先生が見られる先輩型(自分で作ったもの+同じ学校の先生が作って承認したもの)。 */
@@ -206,9 +222,9 @@ export async function listArchive(admin: AdminClient, teacherId: string): Promis
   const orgId = await teacherOrg(admin, teacherId);
   const { data } = await admin
     .from("personas")
-    .select("id, name, nickname, status, profile, stance, created_by, organization_id, source_project_id, origin_note, tier, course_id, created_at, avatar_id")
+    .select("id, name, nickname, status, profile, stance, created_by, organization_id, source_project_id, source_series_id, origin_note, tier, course_id, created_at, avatar_id")
     .is("course_id", null)
-    .in("tier", ["senior", "other_school"])
+    .in("tier", ["senior", "other_school", "aggregate"])
     .order("created_at", { ascending: false });
   const visible = (data ?? []).filter(
     (p) => canUseArchived(p as ArchivedPersona, teacherId, orgId) && (p.created_by === teacherId || p.status === "approved"),
@@ -217,10 +233,15 @@ export async function listArchive(admin: AdminClient, teacherId: string): Promis
   const { data: projects } =
     projectIds.length > 0 ? await admin.from("inquiry_projects").select("id, title").in("id", projectIds) : { data: [] };
   const titleOf = new Map((projects ?? []).map((p) => [p.id as string, p.title as string]));
+  const seriesIds = [...new Set(visible.map((p) => p.source_series_id as string | null).filter((id): id is string => !!id))];
+  const { data: seriesRows } =
+    seriesIds.length > 0 ? await admin.from("course_series").select("id, title").in("id", seriesIds) : { data: [] };
+  const seriesTitleOf = new Map((seriesRows ?? []).map((s) => [s.id as string, s.title as string]));
   const { data: avatars } = await admin.from("avatar_options").select("id, file_path");
   const pathOf = new Map((avatars ?? []).map((a) => [a.id as string, a.file_path as string]));
   return visible.map((p) => ({
     id: p.id as string,
+    tier: p.tier as string,
     name: p.name as string,
     nickname: (p.nickname as string | null) ?? null,
     status: p.status as string,
@@ -234,6 +255,8 @@ export async function listArchive(admin: AdminClient, teacherId: string): Promis
     originNote: (p.origin_note as string | null) ?? null,
     avatarId: (p.avatar_id as string | null) ?? null,
     avatarPath: p.avatar_id ? (pathOf.get(p.avatar_id as string) ?? null) : null,
+    itemsText: p.tier === "aggregate" ? itemsToLines(parseAggregateItems(p.stance)) : "",
+    sourceSeriesTitle: p.created_by === teacherId && p.source_series_id ? (seriesTitleOf.get(p.source_series_id as string) ?? null) : null,
   }));
 }
 
@@ -241,7 +264,9 @@ export async function updateSeniorPersona(
   admin: AdminClient,
   input: { teacherId: string; personaId: string; nickname: string; role: string; tone: string; position: string; goal: string },
 ) {
-  await assertCreator(admin, input.personaId, input.teacherId);
+  const archived = await assertCreator(admin, input.personaId, input.teacherId);
+  // 集約型は、まとめた項目(stance.items)を持つので、別の関数(updateAggregatePersona)で直す。ここで直すと項目が消える。
+  if (isAggregateTier(archived.tier)) throw new SeniorRuleError("集約型のAIは、集約型の編集から直してください。");
   const nickname = normalizeNickname(input.nickname);
   if (!nickname) throw new SeniorRuleError("呼び名を入力してください。");
   const { data: current } = await admin.from("personas").select("source_fiscal_year").eq("id", input.personaId).maybeSingle();
@@ -273,7 +298,7 @@ export async function setSeniorAvatar(admin: AdminClient, input: { teacherId: st
 /** 先輩型のアバターを、AIが候補の中から推薦する(AIは1回)。いつでも手動で変えられる。 */
 export async function recommendSeniorAvatar(admin: AdminClient, input: { teacherId: string; personaId: string }): Promise<{ avatarId: string }> {
   await assertCreator(admin, input.personaId, input.teacherId);
-  const { data: persona } = await admin.from("personas").select("name, nickname, profile, stance").eq("id", input.personaId).maybeSingle();
+  const { data: persona } = await admin.from("personas").select("name, nickname, profile, stance, tier").eq("id", input.personaId).maybeSingle();
   if (!persona) throw new SeniorRuleError("先輩のペルソナが見つかりません。");
   const { data: rows } = await admin.from("avatar_options").select("id, label, tags");
   const profile = (persona.profile ?? {}) as { role?: string; tone?: string };
@@ -283,7 +308,7 @@ export async function recommendSeniorAvatar(admin: AdminClient, input: { teacher
       {
         name: (persona.nickname as string | null) || (persona.name as string),
         role: profile.role ?? "",
-        developmentalStage: "探究を終えた先輩(学習者)",
+        developmentalStage: persona.tier === "aggregate" ? "前の年度の多くの学習者のまとめ役" : "探究を終えた先輩(学習者)",
         tone: profile.tone ?? "",
         stancePosition: stance.position ?? "",
         stanceGoal: stance.goal ?? "",
@@ -377,6 +402,7 @@ export interface LessonLoan {
   mode: SeniorMode;
   status: string;
   personaStatus: string;
+  tier: string;
 }
 
 export async function listLessonLoans(admin: AdminClient, courseId: string): Promise<LessonLoan[]> {
@@ -387,7 +413,7 @@ export async function listLessonLoans(admin: AdminClient, courseId: string): Pro
     .order("created_at", { ascending: true });
   const ids = (loans ?? []).map((l) => l.persona_id as string);
   if (ids.length === 0) return [];
-  const { data: personas } = await admin.from("personas").select("id, name, status").in("id", ids);
+  const { data: personas } = await admin.from("personas").select("id, name, status, tier").in("id", ids);
   const byId = new Map((personas ?? []).map((p) => [p.id as string, p]));
   return (loans ?? [])
     .filter((l) => byId.has(l.persona_id as string))
@@ -398,5 +424,6 @@ export async function listLessonLoans(admin: AdminClient, courseId: string): Pro
       mode: l.mode as SeniorMode,
       status: l.status as string,
       personaStatus: byId.get(l.persona_id as string)!.status as string,
+      tier: byId.get(l.persona_id as string)!.tier as string,
     }));
 }

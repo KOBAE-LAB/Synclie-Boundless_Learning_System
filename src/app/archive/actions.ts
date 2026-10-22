@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { createAggregateDraft, updateAggregatePersona } from "@/lib/inquiry/aggregate";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import {
@@ -74,4 +75,34 @@ export async function setSeniorAvatarAction(personaId: string, formData: FormDat
   const { user } = await requireRole("teacher");
   const avatarId = String(formData.get("avatarId") ?? "").trim();
   await run(() => setSeniorAvatar(createAdminClient(), { teacherId: user.id, personaId, avatarId }), `#persona-${personaId}`);
+}
+
+// 集約型(0047): 前の年度の教科・科目の記録から、集約型のAIの下書きを作る。同意した学習者が3人分以上ないと作れない。
+export async function createAggregateDraftAction(seriesId: string, formData: FormData) {
+  const { user } = await requireRole("teacher");
+  const admin = createAdminClient();
+  let personaId = "";
+  await run(async () => {
+    personaId = (await createAggregateDraft(admin, { teacherId: user.id, seriesId, nickname: String(formData.get("nickname") ?? "") })).personaId;
+  });
+  redirect(`/archive#persona-${personaId}`);
+}
+
+export async function updateAggregateAction(personaId: string, formData: FormData) {
+  const { user } = await requireRole("teacher");
+  const field = (name: string) => String(formData.get(name) ?? "");
+  await run(
+    () =>
+      updateAggregatePersona(createAdminClient(), {
+        teacherId: user.id,
+        personaId,
+        nickname: field("nickname"),
+        role: field("role"),
+        tone: field("tone"),
+        position: field("position"),
+        goal: field("goal"),
+        itemsText: field("items"),
+      }),
+    `#persona-${personaId}`,
+  );
 }

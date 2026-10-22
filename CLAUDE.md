@@ -850,6 +850,9 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
     (参加コード、列デフォルト式で新規作成時に自動生成)と`course_enrollments`
     (course_id+student_idの組、unique制約)を追加。既存の`learning_sessions`から
     参加登録済み扱いのバックフィルも行う(詳細は8章の`learn/`の説明を参照)
+  - `0047_aggregate_personas.sql` — **集約型ペルソナ**(実装(2c))。`personas.tier`に`aggregate`、`personas.source_series_id`、材料のプロジェクトの対応(`persona_source_projects`、
+    プロジェクトが消えると対応も消える)、検索の記録の種類に`aggregate`。下の「集約型ペルソナ」を参照
+  - `0046_senior_lesson_axis.sql` — 先輩型の当時モードの時間の絞り込みを、教科・科目学習モードでは授業回の番号で行う(`match_inquiry_episodes`に`p_max_lesson_no`、戻り値に`lesson_no`)
   - `0045_senior_personas.sql` — **先輩型ペルソナ**(③投射層、実装(2b-1))。`personas.tier`に`senior`/`other_school`、先輩型の出どころ
     (`source_project_id`、プロジェクトが消えたらペルソナも消える)・`created_by`・`organization_id`・`nickname`・`source_fiscal_year`、
     ペルソナの版(`persona_versions`、トリガーで内容が変わるたびに積む。`personas.current_version`、`dialogue_turns.persona_version_id`もトリガーで書く)、
@@ -1096,6 +1099,26 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
   (`persona_name`の控えで読める)。グループのメンバーが全データを削除したときは、そのグループから作った承認済みの先輩型を下書きに戻す(`forget.ts`)。
 - **ペルソナの版**: 名前・プロフィール・立場・行動ルールが変わるたびに、DBのトリガーが`persona_versions`に積む(どこから作っても・直しても漏れない)。
   発言には、そのときの版(`persona_version_id`)がトリガーで付く。
+
+### 集約型ペルソナ(0047、要件定義書14章の実装(2c)、2026-10-23)
+
+前の年度の教科・科目の、**複数の学習者の記録(②)から、共通するつまずき・よくある誤解・有効だった問いをまとめた**擬似メンバー
+(「前の年度の学習者の記録をもとにしたAI」、名前は「2025年度のみんな ミライ(AI)」)。先輩型(1人の記録)と違い、**特定の誰かの話をしない**。
+先生の決定(おすすめ案): 材料は同じ教科・科目の前の年度の学習者全員の記録、同意した学習者が**3人以上**(`MIN_AGGREGATE_LEARNERS`)、AIに渡すのは要約だけ、
+使い方は先輩型と同じ、F10(学習進化型)は当面残す。
+
+- **作る**(`/archive`の「集約型のAIを作る」、`src/lib/inquiry/aggregate.ts`): 先生が、自分の教科・科目で②の記録(軌跡・場面)があるものを選ぶ。
+  材料は**②だけ**(個人の発言①は使わない)で、`buildMaterialsText`が軌跡と語り化された場面を長さの上限つきで並べてAIに渡す(1回の呼び出し、
+  `src/lib/ai/aggregate-persona.ts`)。**同意している学習者の人数が3人分に満たなければ、AIを呼ばずに作れない**。AIには「2人以上の記録に共通することだけ」
+  「個人が特定される書き方をしない」と指示し、項目(つまずき・誤解・有効な問い、授業回つき)を`personas.stance.items`に持つ。下書き→承認(先輩型と同じ)。
+  項目は1行1項目の文字で編集できる(`aggregate-items.ts`、授業回は省ける)。アバターも先輩型と同じ(AI推薦・手動)。
+- **使う**: 授業回のペルソナ設定の「先輩・前の年度のみんなの記録から加える」で、先輩型と同じ貸し出し(`persona_loans`。集約型では当時/振り返りの使い分けは無い)。
+  `loadActiveMembers`が、承認済みで、**材料の学習者のうち、いまも同意している人が3人以上いる間だけ**話させる(`aggregateStillSpeaks`。撤回で人数が足りなくなれば話さない)。
+  `retrieveForTurn`が、まとめた項目を記憶としてプロンプトに入れる(検索もAIも要らない)。**教科・科目学習モードでは、後輩のいまの授業回までの項目だけ**
+  (授業回が無い項目は全体の共通点として残す)。探究学習モードでは絞らない。学習者の画面には「前の年度の学習者の記録をもとにしたAI」を常に出す。
+- **消え方**: 学習者本人の全データ削除(F16)の前に、その学習者の記録が材料に入っている承認済みの集約型を**下書きに戻す**(`invalidateAggregatesForStudent`。まとめに
+  本人の記録から来た内容が残るかもしれないため。先生に確かめて、必要なら作り直してもらう)。材料のプロジェクトが消えると対応(`persona_source_projects`)も消える。
+- 学習進化型(F10)は、まだ残している(集約型で置き換えるかは、使って比べてから決める)。
 
 ### 画面の文章と「流れ」の見せ方(2026-10)
 
