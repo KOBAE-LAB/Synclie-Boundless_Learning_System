@@ -38,6 +38,7 @@ const NAV_ITEMS: Record<string, NavItem[]> = {
     { label: "教科・科目", href: "/courses", alsoUnder: ["/series"] },
     { label: "組織", href: "/organization" },
     { label: "共有ライブラリ", href: "/library" },
+    { label: "先輩の記録", href: "/archive" },
   ],
   student: [
     { label: "授業", href: "/learn" },

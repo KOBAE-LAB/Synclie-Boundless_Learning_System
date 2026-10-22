@@ -7,6 +7,8 @@
 // 別ファイルに切り出している。
 export function isPersonaMentioned(personaName: string, message: string): boolean {
   const MIN_SUFFIX_LEN = 3;
+  // 先輩型の名前「2025年度の先輩 ミナト(AI)」は、末尾の「(AI)」を除いて判定する(「ミナト先輩」「ミナトさん」で呼ばれるため)。
+  personaName = personaName.replace(/[((]AI[))]$/, "").trim();
   for (let len = personaName.length; len >= MIN_SUFFIX_LEN; len--) {
     if (message.includes(personaName.slice(-len))) return true;
   }

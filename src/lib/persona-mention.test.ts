@@ -27,3 +27,10 @@ describe("isPersonaMentioned", () => {
     expect(isPersonaMentioned("討論好きの山田くん", "討論するのは楽しいですね")).toBe(false);
   });
 });
+
+describe("先輩型の名前", () => {
+  it("末尾の(AI)を除いて、呼び名で名指しを判定する", () => {
+    expect(isPersonaMentioned("2025年度の先輩 ミナト(AI)", "ミナトさんはどう思う?")).toBe(true);
+    expect(isPersonaMentioned("2025年度の先輩 ミナト(AI)", "AIはどう思う?")).toBe(false);
+  });
+});

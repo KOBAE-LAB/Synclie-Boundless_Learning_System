@@ -24,7 +24,11 @@ const report = (name, ok, detail) => {
 };
 
 // 個人情報を持つ主なテーブル。権限が無いので、エラーになる(または行が返らない)のが正しい。
-for (const table of ["profiles", "submissions", "dialogue_turns", "reflections", "consent_records", "course_series", "personas"]) {
+for (const table of [
+  "profiles", "submissions", "dialogue_turns", "reflections", "consent_records", "course_series", "personas",
+  // 探究の記録(0042〜0045)
+  "inquiry_projects", "inquiry_episode_versions", "inquiry_trajectories", "inquiry_theme_changes", "persona_versions", "persona_loans", "dialogue_turn_retrievals",
+]) {
   const r = await c.from(table).select("*").limit(1);
   report(`read ${table}`, !!r.error || (r.data ?? []).length === 0, r.error ? `denied (${r.error.code})` : `rows=${r.data.length}`);
 }
@@ -38,6 +42,15 @@ const rpc = await c.rpc("match_material_chunks", {
   p_match_count: 1,
 });
 report("rpc match_material_chunks", !!rpc.error || (rpc.data ?? []).length === 0, rpc.error ? `denied (${rpc.error.code})` : `rows=${rpc.data?.length}`);
+
+const rpc2 = await c.rpc("match_inquiry_episodes", {
+  p_project_id: "00000000-0000-0000-0000-000000000000",
+  p_stage_keys: null,
+  p_kind: "narrated",
+  p_query_embedding: Array(1536).fill(0),
+  p_match_count: 1,
+});
+report("rpc match_inquiry_episodes", !!rpc2.error || (rpc2.data ?? []).length === 0, rpc2.error ? `denied (${rpc2.error.code})` : `rows=${rpc2.data?.length}`);
 
 for (const bucket of ["materials", "handwriting", "audio"]) {
   const r = await c.storage.from(bucket).list("");

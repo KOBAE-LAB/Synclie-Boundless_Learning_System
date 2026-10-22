@@ -22,6 +22,7 @@ import { assignPersonaTones, toneClass } from "@/lib/persona-tones";
 import { loadLessonCrumbs, loadSiblingLessons } from "@/lib/courses/series";
 import { LessonCopyForm } from "@/components/lesson-copy-form";
 import { copyPersonasFromLessonAction } from "../lesson-copy-actions";
+import { SeniorLoansSection } from "./senior-loans-section";
 import { Breadcrumbs, BackLink } from "@/components/breadcrumbs";
 
 type AvatarStatus = "pending" | "done" | "failed";
@@ -82,10 +83,10 @@ export default async function PersonasPage({
   searchParams,
 }: {
   params: Promise<{ courseId: string }>;
-  searchParams: Promise<{ copied?: string; skipped?: string }>;
+  searchParams: Promise<{ copied?: string; skipped?: string; senior_error?: string }>;
 }) {
   const { courseId } = await params;
-  const { copied: copiedParam, skipped: skippedParam } = await searchParams;
+  const { copied: copiedParam, skipped: skippedParam, senior_error: seniorError } = await searchParams;
   const { user } = await requireRole("teacher");
 
   const admin = createAdminClient();
@@ -424,6 +425,8 @@ export default async function PersonasPage({
           <li className="text-sm text-ink-muted">まだペルソナがありません。上のフォームから作成してください。</li>
         )}
       </ul>
+
+      <SeniorLoansSection admin={admin} courseId={courseId} teacherId={user.id} error={seniorError} />
 
       <details className="mt-6 rounded-lg border border-line p-5">
         <summary className="cursor-pointer text-sm font-medium text-ink">

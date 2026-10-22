@@ -4,7 +4,7 @@
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { createAdminClient } from "@/lib/supabase/server";
-import { searchMaterialChunks } from "@/lib/rag/search";
+import { loadActiveMembers, recordRetrievals, retrieveForTurn, type LessonMember } from "@/lib/learn/members";
 import { askPersona, askPersonaStream, type PersonaProfile, type ChatTurn } from "@/lib/ai/persona";
 import { askScene, maxMessagesFor, type ScenePersona } from "@/lib/ai/persona-scene";
 import { evaluateArgument } from "@/lib/ai/argument-evaluation";
@@ -40,19 +40,8 @@ export const HISTORY_LIMIT = 10;
 // なる」という懸念の両方を踏まえた上限で、page.tsx側の表示にも同じ値を使うが、
 // "use server"ファイルはasync関数以外をexportできないためここでは再exportしない。
 
-export interface ActivePersonaRow {
-  id: string;
-  name: string;
-  profile: { role?: string; tone?: string } | null;
-  stance: { position?: string; goal?: string } | null;
-  behavior_rules: {
-    speakingFrequency?: string;
-    teachingDegree?: string;
-    interventionCondition?: string;
-    thinkingDepth?: string;
-    replyTempo?: string;
-  } | null;
-}
+/** 授業回で話す擬似メンバー(先輩型を含む。@/lib/learn/members)。 */
+export type ActivePersonaRow = LessonMember;
 
 export interface SessionRow {
   id: string;
@@ -60,11 +49,12 @@ export interface SessionRow {
   ended_at: string | null;
   close_suggested_at: string | null;
   close_suggest_after_turn: number;
+  project_id: string | null;
   /** 学習者本人の議論か、グループの共有の議論か(0044) */
   scope: SessionScope;
 }
 
-const SESSION_COLUMNS = "id, started_at, ended_at, close_suggested_at, close_suggest_after_turn";
+const SESSION_COLUMNS = "id, started_at, ended_at, close_suggested_at, close_suggest_after_turn, project_id";
 
 /** セッションのIDだけが要る呼び出し用。終了済みの議論への発言などは、既定では拒否する。 */
 export async function getOrCreateSession(
@@ -187,14 +177,8 @@ export async function pickRespondingPersona(
   sessionId: string,
   latestMessage: string,
 ): Promise<{ chosen: ActivePersonaRow; others: ActivePersonaRow[] } | null> {
-  const { data: activePersonasData } = await admin
-    .from("personas")
-    .select("id, name, profile, stance, behavior_rules")
-    .eq("course_id", courseId)
-    .eq("status", "active")
-    .order("created_at", { ascending: true });
-
-  const activePersonas = (activePersonasData ?? []) as ActivePersonaRow[];
+  // 授業回のペルソナ+貸し出し中の先輩型(0045)
+  const activePersonas = await loadActiveMembers(admin, courseId);
   if (activePersonas.length === 0) return null;
   if (activePersonas.length === 1) return { chosen: activePersonas[0], others: [] };
 
@@ -255,7 +239,7 @@ export function buildBehaviorNotes(rules: ActivePersonaRow["behavior_rules"]): s
 // 授業RAG(F02)から関連資料を検索したうえで、使用中のペルソナ(F04)に1回だけ発言させる。
 // sourceはF12(手書き)/F13(音声)用: 確定した発言がどの入力手段由来かを記録する。
 /** 使用中のペルソナの行を、場面の生成(persona-scene.ts)に渡す形にする。 */
-export function toScenePersona(p: ActivePersonaRow): ScenePersona {
+export function toScenePersona(p: ActivePersonaRow, memory?: string): ScenePersona {
   return {
     id: p.id,
     name: p.name,
@@ -267,6 +251,7 @@ export function toScenePersona(p: ActivePersonaRow): ScenePersona {
     teachingDegree: p.behavior_rules?.teachingDegree ?? "問い返すのみ",
     interventionCondition: p.behavior_rules?.interventionCondition ?? "",
     thinkingDepth: normalizeThinkingDepth(p.behavior_rules?.thinkingDepth),
+    memory,
   };
 }
 
@@ -358,9 +343,10 @@ export async function postStudentMessageAndRespond(
 
   // 資料検索(埋め込みAPI+DB)、直近の履歴、個別最適化の提案は互いに独立なので並行して取得する
   // (以前は1つずつ待っていたため、その分だけ返答が遅れていた)。
-  const [materialChunks, recentTurns, { data: personalization }, { count: studentTurnCount }] =
+  // 先輩型(0045)がいれば、発言の埋め込みを1回だけ作り、教材の検索と先輩の記録の検索で共用する。
+  const [{ materialChunks, memories }, recentTurns, { data: personalization }, { count: studentTurnCount }] =
     await Promise.all([
-    searchMaterialChunks(courseId, message),
+    retrieveForTurn(admin, { courseId, members: [persona, ...others], queryText: message, juniorProjectId: session.project_id }),
     // 教師が監査で直した発言は、直した内容をAIに渡す(元の発言は①として残る)。
     admin
       .from("dialogue_turns")
@@ -519,6 +505,7 @@ export async function postStudentMessageAndRespond(
     turnGuidance: guidanceLines.length > 0 ? guidanceLines.join("\n") : undefined,
     otherParticipants,
     courseContext: withStepContext(withStepContext(buildCourseContext(course), stepContext), groupNote),
+    memory: memories.get(persona.id)?.memory.text,
   };
 
   // 返答: 擬似メンバーが1人なら従来どおり1人が答える。2人以上いる授業では、各メンバーの
@@ -538,7 +525,7 @@ export async function postStudentMessageAndRespond(
     if (activeMembers.length >= 2) {
       const sceneMessages = await askScene(
         {
-          personas: activeMembers.map(toScenePersona),
+          personas: activeMembers.map((m) => toScenePersona(m, memories.get(m.id)?.memory.text)),
           courseContext: withStepContext(withStepContext(buildCourseContext(course), stepContext), groupNote),
           materialText,
           turnGuidance: guidanceLines.length > 0 ? guidanceLines.join("\n") : undefined,
@@ -547,7 +534,7 @@ export async function postStudentMessageAndRespond(
           reasoningEffort,
         },
         history,
-        toScenePersona(persona),
+        toScenePersona(persona, memories.get(persona.id)?.memory.text),
         onEvent ? (messages) => onEvent({ type: "scene", messages }) : undefined,
       );
       for (const m of sceneMessages) replies.push({ personaId: m.personaId, text: m.reply, conceded: m.conceded });
@@ -587,6 +574,9 @@ export async function postStudentMessageAndRespond(
     if (personaTurnError || !personaTurn) {
       throw new Error(`擬似メンバーの発言保存に失敗しました: ${personaTurnError?.message ?? "不明なエラー"}`);
     }
+    // 先輩型の発言には、使った記録(軌跡・段階の物語・エピソード)を残す(発言の根拠をたどれるように)。
+    const used = memories.get(reply.personaId);
+    if (used) await recordRetrievals(admin, { turnId: personaTurn.id, personaId: reply.personaId, memory: used.memory, mode: used.mode });
     // 印(要件定義書14章ステップ5): 根拠を受けてAIの仲間が考えを変えた瞬間。AIは呼ばない。
     if (reply.conceded && hasNewEvidence) {
       await addMarker(admin, { turnId: personaTurn.id, sessionId, kind: "persona_conceded" });

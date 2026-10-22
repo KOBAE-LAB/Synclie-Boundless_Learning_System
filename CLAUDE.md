@@ -850,6 +850,11 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
     (参加コード、列デフォルト式で新規作成時に自動生成)と`course_enrollments`
     (course_id+student_idの組、unique制約)を追加。既存の`learning_sessions`から
     参加登録済み扱いのバックフィルも行う(詳細は8章の`learn/`の説明を参照)
+  - `0045_senior_personas.sql` — **先輩型ペルソナ**(③投射層、実装(2b-1))。`personas.tier`に`senior`/`other_school`、先輩型の出どころ
+    (`source_project_id`、プロジェクトが消えたらペルソナも消える)・`created_by`・`organization_id`・`nickname`・`source_fiscal_year`、
+    ペルソナの版(`persona_versions`、トリガーで内容が変わるたびに積む。`personas.current_version`、`dialogue_turns.persona_version_id`もトリガーで書く)、
+    貸し出し(`persona_loans`)、検索の記録(`dialogue_turn_retrievals`)、エピソードの検索関数`match_inquiry_episodes`(service_roleだけ)。
+    下の「先輩型ペルソナ」を参照
   - `0044_inquiry_groups.sql` — **探究の教科・科目と人間のグループ**。`course_series.kind`(standard/inquiry)、グループの参加コード
     (`inquiry_projects.join_code`)、メンバーの脱退(`inquiry_project_members.left_at`)、テーマの変更履歴(`inquiry_theme_changes`)、
     発言者(`dialogue_turns.author_student_id`、既存の個人の議論は埋め戻し)、グループの議論は授業回×グループで1つ(部分一意索引)。
@@ -978,7 +983,8 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
 - **発言の修正版**: 上の「`[courseId]/audit/`」を参照。
 - 記録を読むコードは、`course_id`が null の行がありうることを前提にする(`.in("course_id", …)`に null を混ぜない、
   表示は`course_label`にフォールバックする)。
-- ②抽出層は`0043`、探究のグループは`0044`で入れた(次の節)。残り(③投射層のテーブル、F26・ペルソナの版1の移し替え)は、実装(2b)の`0045`で入れる予定。
+- ②抽出層は`0043`、探究のグループは`0044`、同じ学校の先輩型ペルソナとペルソナの版は`0045`で入れた(次の節)。残りは、他校型(2b-2)と、
+  集約型(F10の置き換え)・F26の版(2c)。
 
 ### ②抽出層とAIの使用量(0043、要件定義書14章の実装(2a)、2026-10-21)
 
@@ -1038,6 +1044,30 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
 - **本人の全データ削除(F16)**(`src/lib/inquiry/forget.ts`): グループの議論は消さず、**本人の発言だけ**を消す(手書き・音声の
   ファイルも)。本人の発言があった議論のエピソードと、そのグループの段階の物語・軌跡も消し、残ったメンバーの記録から作り直す仕事を
   積む(エピソードは元の段階に置く。`extract_session`の`stage_key`)。テーマの履歴の変更者の印も外す。
+
+### 先輩型ペルソナ(0045、要件定義書14章の実装(2b-1)、2026-10-22)
+
+要件定義書14章ステップ6の設計のうち、**同じ学校(組織)の先輩型**まで。他校型(組織をまたぐ貸し出しの承認・他校向けの匿名化の版)は(2b-2)。
+
+- **作る**(`/archive`「先輩の記録」、`src/lib/inquiry/senior.ts`): 教師が、自分の教科・科目の探究プロジェクト(軌跡ができているもの)を選び、
+  呼び名を付けると、AIが役割・口調・当時の問い・後輩との関わり方の下書きを作る(`src/lib/ai/senior-persona-draft.ts`、1回の呼び出し)。
+  名前は「2025年度の先輩 ミナト(AI)」(`seniorDisplayName`)。**先輩型は授業回に属さない**(`course_id`は null、`created_by`・`organization_id`を持つ)。
+  確認・修正して承認する(下書き→承認済み)。直せる・消せるのは作った先生だけ。個人の探究は、その学習者が同意していないと作れない。
+- **使う**(授業回のペルソナ設定の「先輩の記録から加える」、`senior-loans-section.tsx`): 同じ組織の先生(組織が無ければ作った本人)が、
+  承認済みの先輩型を授業回に**貸し出す**(`persona_loans`、参照だけ。1授業回3人まで=`MAX_LOANS_PER_LESSON`)。モード(当時/振り返り)は貸し出しごとに選ぶ
+  (既定は当時)。休止・外すもできる。
+- **授業回で話す擬似メンバーは、`src/lib/learn/members.ts`の`loadActiveMembers`を通して読むこと**(授業回のペルソナ+貸し出し中の先輩型。
+  personasを`course_id`で直接引くと先輩型が抜ける)。下書きに戻された先輩型・同意を撤回した学習者の個人の探究から作った先輩型は話さない。
+- **記憶**(`src/lib/inquiry/senior-memory.ts`、AIは呼ばない): 発言のたびに、軌跡(当時モードは後輩のいまの段階までの版、振り返りモードは振り返り版)と、
+  後輩の発言にいちばん近いエピソード1件+親(その段階の物語)を、そのメンバーのプロンプトに入れる。当時モードはエピソードの検索も
+  後輩のいまの段階までに絞る(結論を先取りしない)。ガードレール(`SENIOR_GUARDRAILS`: 本人ではなく記録をもとにしたAI・記録にないことは
+  「覚えていない」・押し付けず問い返す・名前を出さない)。**発言の埋め込みは教材の検索と共用**(`retrieveForTurn`。`embedQuery`は1回)、
+  先輩型がいる回は教材を5件→3件に減らす(費用の見直し)。使った記録は`dialogue_turn_retrievals`に残り、発言の監査画面で見られる。
+- **画面**: 学習者の映像タイルに「先輩の記録をもとにしたAI」を常に出す。名指しの判定は、名前の末尾の「(AI)」を除いて行う(`persona-mention.ts`)。
+- **消え方**: 材料のプロジェクトが消えると(学習者本人の全データ削除など)、先輩型・貸し出し・版も消える。後輩の対話の記録は残る
+  (`persona_name`の控えで読める)。グループのメンバーが全データを削除したときは、そのグループから作った承認済みの先輩型を下書きに戻す(`forget.ts`)。
+- **ペルソナの版**: 名前・プロフィール・立場・行動ルールが変わるたびに、DBのトリガーが`persona_versions`に積む(どこから作っても・直しても漏れない)。
+  発言には、そのときの版(`persona_version_id`)がトリガーで付く。
 
 ### 画面の文章と「流れ」の見せ方(2026-10)
 
