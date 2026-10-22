@@ -170,7 +170,7 @@ export default async function SubmissionsReviewPage({
               )}
 
               {feedbackItems.length > 0 && (
-                <div className="mt-4 space-y-4 border-t border-line pt-3">
+                <div className="mt-4 space-y-4 border-t border-line-soft pt-3">
                   {feedbackItems.map((item) => {
                     const boundUpdateAction = updateFeedbackAction.bind(null, courseId, item.id);
                     return (
@@ -221,7 +221,7 @@ export default async function SubmissionsReviewPage({
               )}
 
               {judgment && (
-                <div className="mt-4 space-y-1 border-t border-line pt-3 text-xs">
+                <div className="mt-4 space-y-1 border-t border-line-soft pt-3 text-xs">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <p className="font-medium text-ink">
                       AIジャッジ: 議論全体を通しての評価
@@ -248,7 +248,7 @@ export default async function SubmissionsReviewPage({
               )}
 
               {reflection && (
-                <div className="mt-4 space-y-1 border-t border-line pt-3 text-xs">
+                <div className="mt-4 space-y-1 border-t border-line-soft pt-3 text-xs">
                   <p className="font-medium text-ink">
                     振り返り(学習者が共有)
                   </p>
@@ -269,7 +269,7 @@ export default async function SubmissionsReviewPage({
 
               <form
                 action={saveTeacherAssessmentAction.bind(null, courseId, submission.id)}
-                className="mt-4 space-y-2 border-t border-line pt-3 text-xs"
+                className="mt-4 space-y-2 border-t border-line-soft pt-3 text-xs"
               >
                 <p className="font-medium text-ink">教師の評価(学習者のポートフォリオに表示されます)</p>
                 <p className="text-ink-faint">AIの評価は材料です。最終的な評価は先生が決めます。</p>

@@ -43,7 +43,7 @@ export async function SeniorLoansSection({
         <span className="ml-2 text-xs font-normal text-ink-muted">{loans.length}/{MAX_LOANS_PER_LESSON}人</span>
       </h2>
       <p className="mt-1 text-xs text-ink-muted">
-        先輩の探究の記録をもとにしたAIを、この回の議論に加えます(任意)。先輩のAIは <Link href="/archive" className="underline">先輩の記録</Link> で作り、承認します。
+        先輩・集約型のAIを、この回に加えます(任意)。作成は<Link href="/archive" className="mx-0.5 underline underline-offset-2">先輩の記録</Link>で行います。
       </p>
       {error && <p className="mt-2 rounded-md border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
 
@@ -70,7 +70,7 @@ export async function SeniorLoansSection({
                 <button type="submit" className={small}>{l.status === "active" ? "休止する" : "使用中にする"}</button>
               </form>
               <form action={removeSeniorLoanAction.bind(null, courseId, l.loanId)}>
-                <button type="submit" className="text-xs text-ink-faint hover:text-danger hover:underline">この回から外す</button>
+                <button type="submit" className="text-xs text-ink-faint underline underline-offset-2 hover:text-danger">この回から外す</button>
               </form>
             </div>
           </li>

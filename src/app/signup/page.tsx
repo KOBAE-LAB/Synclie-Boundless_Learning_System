@@ -31,7 +31,7 @@ export default function SignupPage() {
           </span>
         </Link>
 
-        <Link href="/login" className="inline-block text-sm text-ink-muted hover:underline">
+        <Link href="/login" className="inline-block text-sm text-ink-muted underline underline-offset-2">
           ← ログインに戻る
         </Link>
       </div>

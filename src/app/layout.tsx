@@ -68,10 +68,17 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   const navRole = viewingAsStudent ? "student" : (user?.role ?? "");
 
   return (
-    <html lang="ja" className="h-full antialiased">
+    <html lang="ja" className="h-full">
       <body className="min-h-full flex flex-col font-sans">
+        {/* キーボード・スクリーンリーダーの人が、メニューを飛ばして本文へ行けるようにする(Tabの最初に出る)。 */}
+        <a
+          href="#main"
+          className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded-md focus:bg-accent-fill focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white"
+        >
+          本文へ移動
+        </a>
         {viewingAsStudent && (
-          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-warn bg-warn-soft px-4 py-2 text-sm text-warn">
+          <aside aria-label="学習者として表示中" className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-warn bg-warn-soft px-4 py-2 text-sm text-warn">
             <span>
               <strong>学習者として表示中</strong>(動作確認。発言・提出は、テスト学習者のデータとして記録されます)
             </span>
@@ -83,7 +90,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
                 管理者に戻る
               </button>
             </form>
-          </div>
+          </aside>
         )}
         {user && (
           <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-t-[3px] border-line border-t-accent-fill px-4 py-2">
@@ -100,7 +107,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
                 {user.name ?? user.email ?? ""}
                 {user.role && ROLE_LABELS[user.role] ? `(${ROLE_LABELS[user.role]})` : ""}
               </span>
-              <Link href="/account/password" className="text-xs text-ink-muted hover:underline">
+              <Link href="/account/password" className="text-xs text-ink-muted underline underline-offset-2">
                 パスワード変更
               </Link>
               <form action={logoutAction}>
@@ -114,7 +121,9 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
             </div>
           </header>
         )}
-        <div className="flex-1">{children}</div>
+        <main id="main" tabIndex={-1} className="flex-1 focus:outline-none">
+          {children}
+        </main>
       </body>
     </html>
   );

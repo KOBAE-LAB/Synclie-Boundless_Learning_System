@@ -3,6 +3,7 @@ import { requireConsent } from "@/lib/consent";
 import { createAdminClient } from "@/lib/supabase/server";
 import { joinCourseByCodeAction } from "./actions";
 import { Breadcrumbs } from "@/components/breadcrumbs";
+import { SubmitButton } from "@/components/submit-button";
 
 // 履修登録。教師から伝えられた授業コードを入力して、教科・科目を履修する。
 export default async function JoinCoursePage() {
@@ -31,12 +32,12 @@ export default async function JoinCoursePage() {
           autoCapitalize="characters"
           className="w-full rounded-md border border-line px-3 py-2 text-sm uppercase tracking-widest bg-surface-raised"
         />
-        <button
-          type="submit"
-          className="rounded-md bg-accent-fill px-4 py-2 text-sm font-medium text-white hover:bg-accent-fill-hover"
+        <SubmitButton
+          pendingText="申請中…"
+          className="rounded-md bg-accent-fill px-4 py-2 text-sm font-medium text-white hover:bg-accent-fill-hover disabled:opacity-60"
         >
           申請する
-        </button>
+        </SubmitButton>
       </form>
     </div>
   );

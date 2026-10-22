@@ -152,14 +152,14 @@ export default async function LearnSeriesPage({
               </div>
               {!series.archived_at && (
                 <form action={leaveGroupAction.bind(null, seriesId)} className="mt-4">
-                  <button type="submit" className="text-xs text-ink-faint hover:text-danger hover:underline">このグループを抜ける(これまでの記録は残ります)</button>
+                  <button type="submit" className="text-xs text-ink-faint underline underline-offset-2 hover:text-danger">このグループを抜ける(これまでの記録は残ります)</button>
                 </form>
               )}
             </>
           ) : (
             <>
               <p className="mt-2 text-sm text-ink-muted">
-                グループに入らなくても、一人で探究できます。グループで探究するときは、先生に割り当ててもらうか、グループのコードを入力してください。
+                一人でも探究できます。グループに入るには、先生に割り当ててもらうか、コードを入力します。
               </p>
               <div className="mt-4">
                 <h3 className="text-xs font-medium text-ink-faint">あなたの探究のテーマ</h3>
@@ -195,7 +195,7 @@ export default async function LearnSeriesPage({
                 )}
               </div>
               {!series.archived_at && (
-                <form action={joinGroupAction.bind(null, seriesId)} className="mt-5 flex flex-wrap gap-2 border-t border-line pt-4">
+                <form action={joinGroupAction.bind(null, seriesId)} className="mt-5 flex flex-wrap gap-2 border-t border-line-soft pt-4">
                   <label htmlFor="group-code" className="sr-only">グループのコード</label>
                   <input
                     id="group-code"

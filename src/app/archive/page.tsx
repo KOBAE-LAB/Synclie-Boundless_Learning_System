@@ -40,12 +40,12 @@ export default async function ArchivePage({ searchParams }: { searchParams: Prom
       <Breadcrumbs trail={[{ label: "教科・科目一覧", href: "/courses" }]} current="先輩の記録" />
       <h1 className="mt-3 text-2xl font-semibold text-ink">先輩の記録</h1>
       <p className="mt-1 text-sm text-ink-muted">
-        先輩の探究の記録から「先輩のAI」を作ります。承認すると、同じ学校の先生が、授業回のペルソナ設定で後輩の議論に加えられます。
+        先輩の探究の記録から「先輩のAI」を作り、承認すると、授業回で使えます。
       </p>
       {error && <p className="mt-3 rounded-md border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
 
       <section className="mt-8">
-        <h2 className="border-b border-line pb-2 text-base font-semibold text-ink">先輩のAI({entries.length})</h2>
+        <h2 className="border-b border-line-soft pb-2 text-base font-semibold text-ink">先輩のAI({entries.length})</h2>
         <ul className="mt-3 space-y-3">
           {entries.map((e) => (
             <li key={e.id} id={`persona-${e.id}`} className="rounded-lg border border-line p-4">
@@ -99,7 +99,7 @@ export default async function ArchivePage({ searchParams }: { searchParams: Prom
                   {e.sourceTitle && <p className="mt-2 text-xs text-ink-faint">材料: 探究プロジェクト「{e.sourceTitle}」</p>}
                   {e.sourceSeriesTitle && <p className="mt-2 text-xs text-ink-faint">材料: 教科・科目「{e.sourceSeriesTitle}」の、前の年度の学習者の記録</p>}
                   <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <span className="text-xs text-ink-faint">アバター: {e.avatarPath ? "設定済み" : "未設定(学習者の画面では、呼び名の頭文字が出ます)"}</span>
+                    <span className="text-xs text-ink-faint">アバター: {e.avatarPath ? "設定済み" : "未設定"}</span>
                     <form action={recommendSeniorAvatarAction.bind(null, e.id)}>
                       <SubmitButton pendingText="推薦中…" className={small}>AIに推薦させる</SubmitButton>
                     </form>
@@ -142,7 +142,7 @@ export default async function ArchivePage({ searchParams }: { searchParams: Prom
                       </label>
                       {e.tier === "aggregate" && (
                         <label className="block text-xs text-ink-muted">
-                          まとめた項目(1行に1つ。「つまずき(第3回): 内容」「よくある誤解: 内容」「有効だった問い: 内容」の形。授業回は省けます)
+                          まとめた項目(1行に1つ。例「つまずき(第3回): 内容」)
                           <textarea name="items" defaultValue={e.itemsText} rows={6} className={input} />
                         </label>
                       )}
@@ -162,7 +162,7 @@ export default async function ArchivePage({ searchParams }: { searchParams: Prom
                       </form>
                     )}
                     <form action={deleteSeniorAction.bind(null, e.id)}>
-                      <button type="submit" className="text-xs text-ink-faint hover:text-danger hover:underline">削除する</button>
+                      <button type="submit" className="text-xs text-ink-faint underline underline-offset-2 hover:text-danger">削除する</button>
                     </form>
                   </div>
                 </>
@@ -176,10 +176,9 @@ export default async function ArchivePage({ searchParams }: { searchParams: Prom
       </section>
 
       <section className="mt-10">
-        <h2 className="border-b border-line pb-2 text-base font-semibold text-ink">記録から先輩のAIを作る</h2>
+        <h2 className="border-b border-line-soft pb-2 text-base font-semibold text-ink">記録から先輩のAIを作る</h2>
         <p className="mt-2 text-sm text-ink-muted">
-          あなたの教科・科目の探究で、記録(軌跡)ができているものです。呼び名を決めると、AIが役割・口調・当時の問いの下書きを作ります。
-          データの利用に同意している学習者の記録だけを使います。
+          記録ができた探究から、先輩のAIの下書きを作ります。同意した学習者の記録だけを使います。
         </p>
         <ul className="mt-3 space-y-2">
           {projects.map((p) => (
@@ -220,10 +219,9 @@ export default async function ArchivePage({ searchParams }: { searchParams: Prom
       </section>
 
       <section className="mt-10">
-        <h2 className="border-b border-line pb-2 text-base font-semibold text-ink">集約型のAIを作る(前の年度のみんなの記録から)</h2>
+        <h2 className="border-b border-line-soft pb-2 text-base font-semibold text-ink">集約型のAIを作る(前の年度のみんなの記録から)</h2>
         <p className="mt-2 text-sm text-ink-muted">
-          前の年度の教科・科目の、複数の学習者の記録から、共通するつまずき・よくある誤解・有効だった問いをまとめて、「前の年度の学習者の記録をもとにしたAI」を作ります。
-          個人の発言は使わず、まとめだけを使います。個人が特定されにくくするため、データの利用に同意している学習者の記録が{MIN_AGGREGATE_LEARNERS}人分以上ないと作れません。
+          前の年度の複数の学習者の記録から、共通するつまずきをまとめたAIを作ります。同意した3人分以上の記録が要ります。
         </p>
         <ul className="mt-3 space-y-2">
           {aggregateSources.map((s) => (

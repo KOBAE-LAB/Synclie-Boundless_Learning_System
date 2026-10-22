@@ -126,8 +126,8 @@ export default async function SeriesPage({
       </details>
 
       <section className="mt-10">
-        <h2 className="border-b border-line pb-2 text-base font-semibold text-ink">1. 授業回({(lessons ?? []).length}回)</h2>
-        <p className="mt-2 text-sm text-ink-muted">回ごとに、資料・擬似メンバー・学習の流れを設定します。公開した回だけ、履修している学習者が開けます。</p>
+        <h2 className="border-b border-line-soft pb-2 text-base font-semibold text-ink">1. 授業回({(lessons ?? []).length}回)</h2>
+        <p className="mt-2 text-sm text-ink-muted">回ごとに資料・擬似メンバー・学習の流れを設定します。公開した回だけ、学習者が開けます。</p>
         <ul className="mt-3 space-y-2">
           {(lessons ?? []).map((lesson) => (
             <li key={lesson.id}>
@@ -180,7 +180,7 @@ export default async function SeriesPage({
       </section>
 
       <section className="mt-10">
-        <h2 className="border-b border-line pb-2 text-base font-semibold text-ink">2. 履修登録</h2>
+        <h2 className="border-b border-line-soft pb-2 text-base font-semibold text-ink">2. 履修登録</h2>
         <p className="mt-2 text-sm text-ink-muted">授業コードを伝え、申請を承認します。教科・科目の全授業回に共通です。</p>
       <details open className="mt-4 rounded-lg border border-line p-5">
         <summary className="cursor-pointer text-sm font-medium text-ink">
@@ -190,7 +190,7 @@ export default async function SeriesPage({
           </span>
         </summary>
         <p className="mt-1 text-sm text-ink-muted">
-          このコードを学習者に伝えます。学習者が入力すると申請になり、下の「承認待ち」で承認すると授業に入れます。
+          このコードを学習者に伝えます。入力すると申請になり、「承認待ち」で承認すると入れます。
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
           <span className="rounded-md border border-line bg-surface-raised px-3 py-1.5 font-mono text-lg tracking-widest text-ink">
@@ -230,7 +230,7 @@ export default async function SeriesPage({
                         </button>
                       </form>
                       <form action={boundRejectAction}>
-                        <button type="submit" className="text-xs text-ink-faint hover:text-danger hover:underline">
+                        <button type="submit" className="text-xs text-ink-faint underline underline-offset-2 hover:text-danger">
                           却下する
                         </button>
                       </form>
@@ -256,7 +256,7 @@ export default async function SeriesPage({
               >
                 <span className="text-ink-muted">{profile?.display_name || profile?.email || studentId}</span>
                 <form action={boundRemoveAction}>
-                  <button type="submit" className="text-xs text-ink-faint hover:text-danger hover:underline">
+                  <button type="submit" className="text-xs text-ink-faint underline underline-offset-2 hover:text-danger">
                     参加登録を外す
                   </button>
                 </form>
@@ -268,11 +268,10 @@ export default async function SeriesPage({
           )}
         </ul>
 
-        <form action={boundRegisterStudentAction} className="mt-5 space-y-2 border-t border-line pt-4">
+        <form action={boundRegisterStudentAction} className="mt-5 space-y-2 border-t border-line-soft pt-4">
           <h3 className="text-xs font-medium text-ink-faint">学習者を直接登録する</h3>
           <p className="text-xs text-ink-muted">
-            アカウントが無ければ、この初期パスワードで作ります(本人に伝え、ログイン後に変更してもらう)。
-            既にある場合は、参加登録だけ行います。
+            アカウントが無ければ、この初期パスワードで作ります(本人にログイン後に変えてもらう)。
           </p>
           <div className="flex flex-wrap gap-2">
             <label className="sr-only" htmlFor="reg-name">お名前</label>
@@ -331,7 +330,7 @@ export default async function SeriesPage({
       )}
 
       <section className="mt-10" id="manage">
-        <h2 className="border-b border-line pb-2 text-base font-semibold text-ink">3. 年度の処理・教科・科目の管理</h2>
+        <h2 className="border-b border-line-soft pb-2 text-base font-semibold text-ink">3. 年度の処理・教科・科目の管理</h2>
         <div className="mt-4 space-y-3">
           <details className="rounded-lg border border-line p-4">
             <summary className="cursor-pointer text-sm font-medium text-ink">翌年度へ引き継ぐ(複製)</summary>
@@ -367,7 +366,7 @@ export default async function SeriesPage({
             ) : (
               <p className="mt-3 text-xs text-ink-faint">登録先にできる(アーカイブしていない)他の教科・科目がありません。</p>
             )}
-            <form action={clearEnrollmentsAction.bind(null, seriesId)} className="mt-3 border-t border-line pt-3">
+            <form action={clearEnrollmentsAction.bind(null, seriesId)} className="mt-3 border-t border-line-soft pt-3">
               <p className="text-xs text-ink-muted">この教科・科目の履修登録を、全員分(申請中も)外します。学習者は、この教科・科目の授業回を開けなくなります。</p>
               <SubmitButton pendingText="整理中…" className="mt-2 rounded-md border border-line px-3 py-1.5 text-xs font-medium text-danger hover:bg-surface disabled:opacity-50">
                 履修登録を全員分外す

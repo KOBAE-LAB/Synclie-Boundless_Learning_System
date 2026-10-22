@@ -3,7 +3,7 @@ export function StepNumber({ n }: { n: number }) {
   return (
     <span
       aria-hidden="true"
-      className="mr-1.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent-soft text-[0.6875rem] font-semibold text-accent"
+      className="mr-1.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent-soft text-xs font-semibold text-accent"
     >
       {n}
     </span>

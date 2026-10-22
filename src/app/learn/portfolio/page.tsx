@@ -57,7 +57,7 @@ export default async function PortfolioPage({
       <Breadcrumbs trail={[{ label: "授業一覧", href: "/learn" }]} current="ポートフォリオ" />
       <h1 className="mt-2 text-2xl font-semibold text-ink">ポートフォリオ</h1>
       <p className="mt-1 text-sm text-ink-muted">
-        全授業の成果・フィードバック・振り返りが時系列で集まります。持ち出すことも、見せる範囲を選ぶこともできます。
+        全授業の成果・フィードバック・振り返りが、時系列で集まります。
       </p>
 
       <section className="mt-6 rounded-lg border border-line p-4">
@@ -95,8 +95,8 @@ export default async function PortfolioPage({
       <section className="mt-6 rounded-lg border border-line p-4">
         <h2 className="text-sm font-semibold text-ink">公開リンク(見せる相手に渡す)</h2>
         <p className="mt-1 text-xs text-ink-muted">
-          「公開用」にした成果({sharedCount}件)だけを、リンクを知る人が見られます(振り返り・AIフィードバックは含みません)。
-          期限切れか取り消しで見られなくなります。進級・転校先に渡すときも、この方法を使います。
+          「公開用」にした成果({sharedCount}件)だけを、リンクを知る人が見られます(振り返りは含みません)。
+          期限切れか取り消しで見られなくなります。
         </p>
         <form action={createShareLinkAction} className="mt-3 flex flex-wrap items-end gap-3">
           <div>
@@ -157,7 +157,7 @@ export default async function PortfolioPage({
               <PortfolioEntryBody entry={entry} />
             </div>
 
-            <form action={saveSelfAssessmentAction.bind(null, entry.submissionId)} className="mt-4 space-y-2 border-t border-line pt-3">
+            <form action={saveSelfAssessmentAction.bind(null, entry.submissionId)} className="mt-4 space-y-2 border-t border-line-soft pt-3">
               <p className="text-xs font-medium text-ink-muted">自己評価(AIの評価は材料です。決めるのはあなたです)</p>
               <fieldset className="flex flex-wrap gap-3 text-sm">
                 <legend className="sr-only">自分の評価</legend>

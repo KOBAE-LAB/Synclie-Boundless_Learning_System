@@ -46,7 +46,7 @@ export default async function AdminTeachersPage() {
                 </button>
               </form>
               <form action={rejectTeacherAction.bind(null, t.id)}>
-                <button type="submit" className="text-xs text-ink-faint hover:text-danger hover:underline">
+                <button type="submit" className="text-xs text-ink-faint underline underline-offset-2 hover:text-danger">
                   却下する
                 </button>
               </form>
@@ -66,7 +66,7 @@ export default async function AdminTeachersPage() {
                   {t.display_name} {t.email}
                 </span>
                 <form action={approveTeacherAction.bind(null, t.id)}>
-                  <button type="submit" className="text-xs text-ink-faint hover:underline">
+                  <button type="submit" className="text-xs text-ink-faint underline underline-offset-2">
                     あらためて承認する
                   </button>
                 </form>

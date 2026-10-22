@@ -44,7 +44,7 @@ export function Breadcrumbs({ trail, current }: { trail: Crumb[]; current: strin
 /** 長い画面の最後に置く「戻る」。最後まで読んだあとに、上まで戻らなくてよいようにする。 */
 export function BackLink({ href, label }: { href: string; label: string }) {
   return (
-    <div className="mt-10 border-t border-line pt-4">
+    <div className="mt-10 border-t border-line-soft pt-4">
       <Link
         href={href}
         className="inline-flex items-center gap-1 rounded-md border border-line px-3 py-1.5 text-sm font-medium text-ink hover:bg-surface"

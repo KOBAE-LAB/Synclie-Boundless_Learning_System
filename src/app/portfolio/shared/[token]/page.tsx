@@ -37,7 +37,7 @@ export default async function SharedPortfolioPage({ params }: { params: Promise<
               <PortfolioEntryBody entry={entry} />
             </div>
             {entry.selfAssessment && (
-              <p className="mt-3 border-t border-line pt-3 text-sm">
+              <p className="mt-3 border-t border-line-soft pt-3 text-sm">
                 <span className="text-ink-muted">本人の自己評価: </span>
                 {entry.selfAssessment.rating && `${RATING_LABELS[entry.selfAssessment.rating]} `}
                 {entry.selfAssessment.comment}

@@ -1,5 +1,6 @@
 "use server";
 
+import { hasRecentIdenticalSubmission, tryAcquireSubmissionLock } from "@/lib/learn/duplicate-guard";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -513,21 +514,37 @@ export async function submitOutcomeAction(courseId: string, formData: FormData) 
     throw new Error("授業が見つかりません。");
   }
 
-  const sessionId = await getOrCreateSession(admin, courseId, user.id, { allowEnded: true });
-  // 生ログの保護(0042): 授業回が消えても文脈が残るよう、探究プロジェクトと授業の控えを一緒に書く。
-  const context = await recordContextFor(admin, courseId, user.id);
+  // 二重送信(ボタンの二重押し・再送)で、同じ成果が2件できないようにする。
+  // (1)同じ提出が処理中なら何もしない(ほぼ同時の2リクエスト)、(2)ついさっき同じ内容を出していれば何もしない。
+  const release = tryAcquireSubmissionLock(user.id, courseId, content);
+  if (!release) {
+    revalidatePath(`/learn/${courseId}`);
+    return;
+  }
+  try {
+    if (await hasRecentIdenticalSubmission(admin, { studentId: user.id, courseId, content })) {
+      revalidatePath(`/learn/${courseId}`);
+      return;
+    }
 
-  const { error } = await admin.from("submissions").insert({
-    course_id: courseId,
-    student_id: user.id,
-    session_id: sessionId,
-    kind: "text",
-    content,
-    project_id: context.projectId,
-    course_label: context.courseLabel,
-  });
-  if (error) {
-    throw new Error(`成果の提出に失敗しました: ${error.message}`);
+    const sessionId = await getOrCreateSession(admin, courseId, user.id, { allowEnded: true });
+    // 生ログの保護(0042): 授業回が消えても文脈が残るよう、探究プロジェクトと授業の控えを一緒に書く。
+    const context = await recordContextFor(admin, courseId, user.id);
+
+    const { error } = await admin.from("submissions").insert({
+      course_id: courseId,
+      student_id: user.id,
+      session_id: sessionId,
+      kind: "text",
+      content,
+      project_id: context.projectId,
+      course_label: context.courseLabel,
+    });
+    if (error) {
+      throw new Error(`成果の提出に失敗しました: ${error.message}`);
+    }
+  } finally {
+    release();
   }
 
   revalidatePath(`/learn/${courseId}`);

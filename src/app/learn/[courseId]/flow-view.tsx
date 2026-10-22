@@ -23,7 +23,7 @@ export function FlowStepper({ courseId, flow, viewingId }: { courseId: string; f
           const label = (
             <>
               <span aria-hidden="true">{done ? "✓" : i + 1}</span> {step.title}
-              <span className="ml-1 text-[0.6875rem] opacity-70">{STEP_KIND_LABELS[step.kind]}</span>
+              <span className="ml-1 text-xs">{STEP_KIND_LABELS[step.kind]}</span>
             </>
           );
           const base = "inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs";
@@ -190,7 +190,7 @@ export async function InputStepView({
           {pdfUrl ? (
             <>
               <iframe src={pdfUrl} title={materialTitle} className="mt-3 h-[32rem] w-full rounded-md border border-line" />
-              <a href={pdfUrl} target="_blank" rel="noreferrer noopener" className="mt-2 inline-block text-xs text-accent hover:underline">
+              <a href={pdfUrl} target="_blank" rel="noreferrer noopener" className="mt-2 inline-block text-xs text-accent underline underline-offset-2">
                 新しいタブで開く →
               </a>
             </>
@@ -200,7 +200,7 @@ export async function InputStepView({
             <p className="mt-2 text-sm text-ink-muted">この資料はまだ表示できる形になっていません(先生が準備中です)。</p>
           )}
           {sourceUrl && (
-            <a href={sourceUrl} target="_blank" rel="noreferrer noopener" className="mt-2 inline-block text-xs text-accent hover:underline">
+            <a href={sourceUrl} target="_blank" rel="noreferrer noopener" className="mt-2 inline-block text-xs text-accent underline underline-offset-2">
               元のページを開く →
             </a>
           )}
@@ -220,7 +220,7 @@ export async function InputStepView({
               ))}
             </ul>
           )}
-          <Link href={`/learn/${courseId}`} className="mt-3 inline-block text-xs text-accent hover:underline">
+          <Link href={`/learn/${courseId}`} className="mt-3 inline-block text-xs text-accent underline underline-offset-2">
             いまのステップに戻る →
           </Link>
         </section>

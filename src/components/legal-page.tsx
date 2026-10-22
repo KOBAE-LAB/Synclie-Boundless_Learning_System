@@ -17,14 +17,14 @@ export function LegalPage({
       <h1 className="text-2xl font-semibold text-ink">{title}</h1>
       <p className="mt-1 text-xs text-ink-faint">最終更新日: {updatedAt}</p>
       <div className="mt-8 space-y-8 text-sm leading-7 text-ink-muted">{children}</div>
-      <nav className="mt-12 flex flex-wrap gap-x-4 gap-y-2 border-t border-line pt-6 text-sm text-ink-muted">
-        <Link href="/privacy" className="hover:underline">
+      <nav className="mt-12 flex flex-wrap gap-x-4 gap-y-2 border-t border-line-soft pt-6 text-sm text-ink-muted">
+        <Link href="/privacy" className="underline underline-offset-2">
           プライバシーポリシー
         </Link>
-        <Link href="/terms" className="hover:underline">
+        <Link href="/terms" className="underline underline-offset-2">
           利用規約
         </Link>
-        <Link href="/" className="hover:underline">
+        <Link href="/" className="underline underline-offset-2">
           トップへ戻る
         </Link>
       </nav>

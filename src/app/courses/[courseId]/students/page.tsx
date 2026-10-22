@@ -170,7 +170,7 @@ export default async function StudentsPage({
               )}
 
               {status === "done" && (
-                <div className="mt-3 space-y-2 border-t border-line pt-3">
+                <div className="mt-3 space-y-2 border-t border-line-soft pt-3">
                   <p>
                     <span className="text-xs font-medium text-ink-muted">得意な点: </span>
                     {profile?.strengths}
@@ -192,7 +192,7 @@ export default async function StudentsPage({
               )}
 
               {status === "done" && (
-                <div className="mt-3 border-t border-line pt-3">
+                <div className="mt-3 border-t border-line-soft pt-3">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <span className="text-xs font-medium text-ink">
                       個別最適化の提案

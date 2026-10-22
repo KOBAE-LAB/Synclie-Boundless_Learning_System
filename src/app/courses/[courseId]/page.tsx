@@ -75,7 +75,7 @@ function MenuCard({
         {step !== undefined && <StepNumber n={step} />}
         {title}
         {badge && (
-          <span className="ml-2 rounded-full bg-accent-soft px-2 py-0.5 text-[0.6875rem] font-medium text-accent">{badge}</span>
+          <span className="ml-2 rounded-full bg-accent-soft px-2 py-0.5 text-xs font-medium text-accent">{badge}</span>
         )}
       </span>
       <span className="text-xs leading-5 text-ink-muted">{description}</span>
@@ -177,14 +177,14 @@ export default async function CourseDetailPage({
       </details>
 
       <section className="mt-10">
-        <h2 className="border-b border-line pb-2 text-base font-semibold text-ink">1. 授業を準備する</h2>
-        <p className="mt-2 text-sm text-ink-muted">授業のねらいや資料を入れ、擬似メンバーを用意します。ここが整うほど、議論が授業の目的に沿います。</p>
+        <h2 className="border-b border-line-soft pb-2 text-base font-semibold text-ink">1. 授業を準備する</h2>
+        <p className="mt-2 text-sm text-ink-muted">ねらいや資料を入れ、擬似メンバーを用意します。</p>
       <details open className="mt-4 rounded-lg border border-line p-5">
         <summary className="cursor-pointer text-sm font-medium text-ink"><StepNumber n={1} />授業の設定</summary>
       <form action={boundUpdateCourseSettingsAction} className="mt-4 space-y-4">
         <div>
           <p className="mt-1 text-sm text-ink-muted">
-            AI擬似メンバーの発言と、ペルソナ案の作成に反映されます。「ねらい・議題」を書くと、議論がそれにくくなります。
+            AIの発言とペルソナ案に反映されます。「ねらい・議題」を書くと、議論が授業の目的に沿います。
           </p>
         </div>
 
@@ -281,7 +281,7 @@ export default async function CourseDetailPage({
           </div>
         </div>
 
-        <div className="space-y-1 border-t border-line pt-4">
+        <div className="space-y-1 border-t border-line-soft pt-4">
           <label htmlFor="course-liveliness" className="text-sm font-medium text-ink">
             擬似メンバーの発言の活発さ
           </label>
@@ -298,12 +298,11 @@ export default async function CourseDetailPage({
             ))}
           </select>
           <p className="text-xs text-ink-muted">
-            学習者の発言のあと、擬似メンバーが続けて話してよい発言数の上限です(2人以上のとき)。
-            誰が話すかは、各メンバーの性格・視点から、AIが場面ごとに決めます。
+            学習者の発言のあと、擬似メンバーが続けて話せる発言数の上限(2人以上のとき)。
           </p>
         </div>
 
-        <div className="space-y-1 border-t border-line pt-4">
+        <div className="space-y-1 border-t border-line-soft pt-4">
           <label htmlFor="course-reasoning" className="text-sm font-medium text-ink">
             AIの推論の深さ
           </label>
@@ -320,12 +319,11 @@ export default async function CourseDetailPage({
             ))}
           </select>
           <p className="text-xs text-ink-muted">
-            擬似メンバーの発言を作るAIの考える深さです。深いほど的確になりやすい反面、遅く、費用も増えます。
-            論証評価や議論のまとめには適用されません(計測の条件をそろえるため)。
+            擬似メンバーの発言を作るAIの考える深さ。深いほど、遅く、費用も増えます。
           </p>
         </div>
 
-        <div className="space-y-3 border-t border-line pt-4">
+        <div className="space-y-3 border-t border-line-soft pt-4">
           <h3 className="text-xs font-medium text-ink-faint">議論の終わり</h3>
           <div className="flex flex-wrap gap-4">
             <div className="min-w-[10rem] space-y-1">
@@ -375,8 +373,7 @@ export default async function CourseDetailPage({
               className="mt-1"
             />
             <span>
-              時間の超過を、評価の参考にする(学習者の画面には「評価の参考にされます」と表示されます。
-              AIが点数を変えるわけではなく、先生が振り返るときの目印です)
+              時間の超過を、評価の参考にする(先生が振り返るときの目印。点数は変わりません)
             </span>
           </label>
           <label className="flex items-start gap-2 text-sm text-ink-muted">
@@ -387,8 +384,7 @@ export default async function CourseDetailPage({
               className="mt-1"
             />
             <span>
-              AIが議論の状態(結論が出た・堂々めぐり・脱線)を見て、「そろそろまとめましょう」と提案する
-              (AIが勝手に止めることはありません。判定は数発言ごとに1回AIを呼びます)
+              AIが議論の状態を見て、「そろそろまとめましょう」と提案する(止めることはしません)
             </span>
           </label>
         </div>
@@ -595,10 +591,10 @@ export default async function CourseDetailPage({
       </section>
 
       <section className="mt-10">
-        <h2 className="border-b border-line pb-2 text-base font-semibold text-ink">2. 学習者の進め方</h2>
+        <h2 className="border-b border-line-soft pb-2 text-base font-semibold text-ink">2. 学習者の進め方</h2>
         <p className="mt-2 text-sm text-ink-muted">
           履修登録(授業コード・承認)は、教科・科目のページで管理します。
-          <Link href={`/series/${course.series_id}`} className="ml-1 text-accent hover:underline">履修登録を開く →</Link>
+          <Link href={`/series/${course.series_id}`} className="ml-1 text-accent underline underline-offset-2 hover:text-accent-dark">履修登録を開く →</Link>
         </p>
       <details className="mt-4 rounded-lg border border-line p-5">
         <summary className="cursor-pointer text-sm font-medium text-ink">沈黙時の自動継続(テンポ・任意)</summary>
@@ -641,7 +637,7 @@ export default async function CourseDetailPage({
       </section>
 
       <section className="mt-10">
-        <h2 className="border-b border-line pb-2 text-base font-semibold text-ink">3. 学習の様子を確認する</h2>
+        <h2 className="border-b border-line-soft pb-2 text-base font-semibold text-ink">3. 学習の様子を確認する</h2>
         <p className="mt-2 text-sm text-ink-muted">参加状況・提出物・擬似メンバーの挙動を見て、指導や設定の見直しに活かします。</p>
       <nav aria-label="学習の様子を確認するメニュー" className="mt-4 grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-3">
         <MenuCard

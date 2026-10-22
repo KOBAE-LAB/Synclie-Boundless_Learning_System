@@ -285,7 +285,7 @@ export function ChatComposer({
       <div ref={liveEndRef} />
 
       {/* 入力欄は、画面の下に固定する(会話が長くなっても、いつでも発言できるように) */}
-      <div className="sticky bottom-0 z-10 -mx-6 border-t border-line bg-canvas/95 px-6 py-3 backdrop-blur">
+      <div className="sticky bottom-0 z-10 -mx-6 border-t border-line-soft bg-canvas/95 px-6 py-3 backdrop-blur">
         <form
           method="post"
           onSubmit={(event) => {

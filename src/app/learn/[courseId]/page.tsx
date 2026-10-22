@@ -455,7 +455,7 @@ export default async function LearnCourseSessionPage({
       )}
       <Link
         href={`/learn/${courseId}/portfolio`}
-        className="mt-1 inline-block text-sm text-ink-muted hover:underline"
+        className="mt-1 inline-block text-sm text-ink-muted underline underline-offset-2"
       >
         ポートフォリオを見る→
       </Link>
@@ -466,7 +466,7 @@ export default async function LearnCourseSessionPage({
         </span>
         {!seriesArchived && (
           <details className="text-xs">
-            <summary className="cursor-pointer text-ink-muted hover:underline">段階を変える</summary>
+            <summary className="cursor-pointer text-ink-muted underline underline-offset-2">段階を変える</summary>
             <form action={declareStageAction.bind(null, courseId)} className="mt-2 flex flex-wrap items-center gap-2">
               <label htmlFor="stage-select" className="sr-only">
                 いまの探究の段階
@@ -702,12 +702,12 @@ export default async function LearnCourseSessionPage({
                   </span>
                   {(isSeniorTier(persona.tier) || isAggregateTier(persona.tier)) && (
                     // 本人ではなく、記録をもとにしたAIであることを常に示す(要件定義書14章ステップ6)。
-                    <span className="absolute left-2 top-2 rounded bg-black/60 px-1.5 py-0.5 text-[0.6875rem] font-medium text-white">
+                    <span className="absolute left-2 top-2 rounded bg-black/60 px-1.5 py-0.5 text-xs font-medium text-white">
                       {isAggregateTier(persona.tier) ? "前の年度の学習者の記録をもとにしたAI" : "先輩の記録をもとにしたAI"}
                     </span>
                   )}
                   {isSpeaker && (
-                    <span className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[0.6875rem] font-medium text-white">
+                    <span className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-xs font-medium text-white">
                       <span className="persona-dot h-1.5 w-1.5 rounded-full" aria-hidden="true" />
                       発言中
                     </span>
@@ -1012,7 +1012,7 @@ export default async function LearnCourseSessionPage({
         </>
       )}
 
-      <div className="mt-12 border-t border-line pt-8" id="submit-outcome">
+      <div className="mt-12 border-t border-line-soft pt-8" id="submit-outcome">
         {seriesArchived ? (
           <p className="text-sm text-ink-muted">この教科・科目は終了しているため、新しい成果は提出できません。</p>
         ) : null}
@@ -1037,12 +1037,12 @@ export default async function LearnCourseSessionPage({
             placeholder="議論をふまえた自分の考えをまとめて書く"
             className="w-full rounded-md border border-line px-3 py-2 text-sm bg-surface-raised"
           />
-          <button
-            type="submit"
-            className="rounded-md bg-accent-fill px-4 py-2 text-sm font-medium text-white hover:bg-accent-fill-hover"
+          <SubmitButton
+            pendingText="提出中…"
+            className="rounded-md bg-accent-fill px-4 py-2 text-sm font-medium text-white hover:bg-accent-fill-hover disabled:opacity-60"
           >
             提出する
-          </button>
+          </SubmitButton>
         </form>
 
           </>
@@ -1131,7 +1131,7 @@ export default async function LearnCourseSessionPage({
                   )}
 
                   {feedbackItems.length > 0 && (
-                    <div className="mt-4 space-y-3 border-t border-line pt-3">
+                    <div className="mt-4 space-y-3 border-t border-line-soft pt-3">
                       {feedbackItems.map((item) => (
                         <div key={item.id}>
                           <p className="text-xs font-medium text-ink-muted">
@@ -1154,7 +1154,7 @@ export default async function LearnCourseSessionPage({
                   )}
 
                   {judgment && (
-                    <div className="mt-4 space-y-1 border-t border-line pt-3">
+                    <div className="mt-4 space-y-1 border-t border-line-soft pt-3">
                       <p className="text-xs font-medium text-ink">
                         AIジャッジ: 議論全体を通しての評価
                       </p>
@@ -1170,7 +1170,7 @@ export default async function LearnCourseSessionPage({
                   )}
 
                   {submission.feedback_status === "done" && (
-                    <div className="mt-4 border-t border-line pt-3">
+                    <div className="mt-4 border-t border-line-soft pt-3">
                       <p className="text-xs font-medium text-ink">
                         <StepNumber n={3} />
                         振り返り{reflection && "(記入済み・編集できます)"}
@@ -1217,12 +1217,12 @@ export default async function LearnCourseSessionPage({
                           />
                           教師に共有する
                         </label>
-                        <button
-                          type="submit"
-                          className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface"
+                        <SubmitButton
+                          pendingText="保存中…"
+                          className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface disabled:opacity-60"
                         >
                           {reflection ? "更新する" : "振り返りを保存"}
-                        </button>
+                        </SubmitButton>
                       </form>
                     </div>
                   )}
@@ -1246,7 +1246,7 @@ function KeepToggle({ courseId, turnId, kept }: { courseId: string; turnId: stri
         type="submit"
         aria-pressed={kept}
         title={kept ? "印を外す" : "この場面を、後輩の探究の参考に残す"}
-        className={`text-xs hover:underline ${kept ? "font-medium text-warn" : "text-ink-faint"}`}
+        className={`text-xs underline underline-offset-2 ${kept ? "font-medium text-warn" : "text-ink-faint"}`}
       >
         {kept ? "★ 後輩に残す" : "☆ 後輩に残す"}
       </button>

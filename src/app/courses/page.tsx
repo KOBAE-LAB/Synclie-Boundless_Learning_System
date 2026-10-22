@@ -156,7 +156,7 @@ export default async function CoursesPage({
                   )}
                 </span>
               </Link>
-              <details className="border-t border-line px-4 py-2">
+              <details className="border-t border-line-soft px-4 py-2">
                 <summary className="cursor-pointer text-xs text-ink-muted">管理</summary>
                 <div className="mt-2 flex flex-wrap items-center gap-2 pb-1">
                   {series.archived_at ? (
@@ -174,7 +174,7 @@ export default async function CoursesPage({
                     <SubmitButton pendingText="複製中…" className={small}>翌年度へ引き継ぐ</SubmitButton>
                   </form>
                   {hasRecords ? (
-                    <Link href={`/series/${series.id}#manage`} className="text-xs text-ink-muted hover:underline">
+                    <Link href={`/series/${series.id}#manage`} className="text-xs text-ink-muted underline underline-offset-2">
                       学習者の記録あり(削除は教科・科目のページから。記録は学習者に残ります)
                     </Link>
                   ) : (
@@ -202,7 +202,7 @@ export default async function CoursesPage({
 
       <details className="mt-6 rounded-lg border border-line p-5">
         <summary className="cursor-pointer text-sm font-medium text-ink">年度末の一括アーカイブ</summary>
-        <p className="mt-2 text-sm text-ink-muted">選んだ年度の、まだ閉じていない教科・科目をまとめてアーカイブします(学習者は記録を見返せます。教科・科目ごとに解除できます)。</p>
+        <p className="mt-2 text-sm text-ink-muted">選んだ年度の教科・科目を、まとめてアーカイブします(いつでも解除できます)。</p>
         <form action={archiveYearAction} className="mt-3 flex flex-wrap items-center gap-2">
           <label htmlFor="archive-year" className="sr-only">年度</label>
           <select id="archive-year" name="fiscalYear" defaultValue={String(selectedYear ?? currentYear)} className="rounded-md border border-line bg-surface-raised px-2 py-1.5 text-sm">
@@ -216,7 +216,7 @@ export default async function CoursesPage({
 
       <details open={allSeries.length === 0} className="mt-4 rounded-lg border border-line p-5">
         <summary className="cursor-pointer text-sm font-medium text-ink">新しく作成する(学習モードを選ぶ)</summary>
-        <p className="mt-2 text-sm text-ink-muted">履修登録(授業コード)の単位です。作成後、その中に授業回(第1回、第2回…)を作ります。学習モードは、作成後は変えられません。</p>
+        <p className="mt-2 text-sm text-ink-muted">作成後、授業回(第1回、第2回…)を作ります。学習モードは後から変えられません。</p>
         <form action={createSeriesAction} className="mt-4 space-y-3">
           <label htmlFor="series-title" className="sr-only">名前</label>
           <input

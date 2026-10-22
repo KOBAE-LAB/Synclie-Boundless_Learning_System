@@ -239,13 +239,24 @@ export async function addStudyPlanItemAction(formData: FormData) {
   const courseId = String(formData.get("courseId") ?? "").trim() || null;
 
   const admin = createAdminClient();
-  const { error } = await admin.from("study_plan_items").insert({
-    student_id: user.id,
-    course_id: courseId,
-    content,
-  });
-  if (error) {
-    throw new Error(`学習計画の追加に失敗しました: ${error.message}`);
+  // 二重送信で同じ項目が2つできないよう、未完了の同じ内容があれば何もしない。
+  const { data: duplicate } = await admin
+    .from("study_plan_items")
+    .select("id")
+    .eq("student_id", user.id)
+    .eq("content", content)
+    .eq("done", false)
+    .limit(1)
+    .maybeSingle();
+  if (!duplicate) {
+    const { error } = await admin.from("study_plan_items").insert({
+      student_id: user.id,
+      course_id: courseId,
+      content,
+    });
+    if (error) {
+      throw new Error(`学習計画の追加に失敗しました: ${error.message}`);
+    }
   }
 
   revalidatePath("/learn/dashboard");

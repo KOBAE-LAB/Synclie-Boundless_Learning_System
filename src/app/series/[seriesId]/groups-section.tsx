@@ -39,10 +39,9 @@ export async function GroupsSection({
 
   return (
     <section id="groups" className="mt-10">
-      <h2 className="border-b border-line pb-2 text-base font-semibold text-ink">グループ({groups.length})</h2>
+      <h2 className="border-b border-line-soft pb-2 text-base font-semibold text-ink">グループ({groups.length})</h2>
       <p className="mt-2 text-sm text-ink-muted">
-        グループに入った学習者は、グループごとに1つの議論を時間差で進めます(メンバーを割り当てるか、グループのコードを伝えて入ってもらいます。1人1グループ)。
-        グループに入らない学習者は、一人で探究します。グループは、作らなくても構いません。
+        グループは任意です。入った学習者はグループで、入らない学習者は一人で探究します(1人1グループ)。
       </p>
       {error && <p className="mt-3 rounded-md border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
       {ungrouped.length > 0 && (
@@ -73,7 +72,7 @@ export async function GroupsSection({
                   <span className="rounded-md border border-line bg-surface-raised px-2 py-0.5 font-mono tracking-widest text-ink">{g.joinCode}</span>
                   {!archived && (
                     <form action={regenerateGroupCodeAction.bind(null, seriesId, g.id)}>
-                      <button type="submit" className="text-xs text-ink-faint hover:underline">再発行</button>
+                      <button type="submit" className="text-xs text-ink-faint underline underline-offset-2">再発行</button>
                     </form>
                   )}
                 </span>
@@ -87,7 +86,7 @@ export async function GroupsSection({
                   <span className="text-ink-muted">{nameOf(m.studentId)}</span>
                   {!archived && (
                     <form action={removeMemberAction.bind(null, seriesId, g.id, m.studentId)}>
-                      <button type="submit" className="text-xs text-ink-faint hover:text-danger hover:underline">グループから外す</button>
+                      <button type="submit" className="text-xs text-ink-faint underline underline-offset-2 hover:text-danger">グループから外す</button>
                     </form>
                   )}
                 </li>
@@ -135,7 +134,7 @@ export async function GroupsSection({
                   <SubmitButton pendingText="保存中…" className={small}>保存</SubmitButton>
                 </form>
                 <form action={deleteGroupAction.bind(null, seriesId, g.id)} className="mt-2">
-                  <button type="submit" className="text-xs text-ink-faint hover:text-danger hover:underline">
+                  <button type="submit" className="text-xs text-ink-faint underline underline-offset-2 hover:text-danger">
                     このグループを消す(議論の記録が無いときだけ)
                   </button>
                 </form>

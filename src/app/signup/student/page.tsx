@@ -90,7 +90,7 @@ export default async function SignupStudentPage({
           </SubmitButton>
         </form>
 
-        <Link href="/signup" className="inline-block text-sm text-ink-muted hover:underline">
+        <Link href="/signup" className="inline-block text-sm text-ink-muted underline underline-offset-2">
           ← 戻る
         </Link>
       </div>

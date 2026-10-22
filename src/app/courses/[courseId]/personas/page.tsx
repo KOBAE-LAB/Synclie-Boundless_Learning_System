@@ -165,7 +165,7 @@ export default async function PersonasPage({
         lessons={siblingLessons}
         action={copyPersonasFromLessonAction.bind(null, courseId)}
         title="前の回から擬似メンバーを複製する"
-        description="同じ教科・科目の別の授業回の擬似メンバーを、この回にそのまま複製します(状態・アバターも同じ。同じ名前がある場合は複製しません)。"
+        description="同じ教科・科目の別の回から、擬似メンバーを複製します(同じ名前は複製しません)。"
         copied={copiedParam}
         skipped={skippedParam}
       />
@@ -173,8 +173,7 @@ export default async function PersonasPage({
       <div className="mt-8 rounded-lg border border-line p-5">
         <h2 className="text-sm font-medium text-ink">AIにペルソナ案を作ってもらう</h2>
         <p className="mt-1 text-sm text-ink-muted">
-          授業設定と資料をもとに、互いに補い合う案を作ります。案は<strong>下書き</strong>として下に並び、
-          確認・修正して承認→「使用中」にして初めて使われます。
+          授業設定と資料をもとに、案を<strong>下書き</strong>として作ります。承認して「使用中」にすると使われます。
         </p>
         {!course.objective && (
           <p className="mt-2 rounded-md border border-warn bg-warn-soft px-3 py-2 text-sm text-warn">
@@ -222,8 +221,7 @@ export default async function PersonasPage({
             ペルソナ案を作る
           </SubmitButton>
           <p className="text-xs text-ink-faint">
-            AI呼び出しを1回行います(数秒〜十数秒かかります)。人数を1にして、ヒントを書くと、
-            1体ずつ追加できます。
+            AIを1回呼びます(数秒かかります)。人数を1にすると、ヒントつきで1体ずつ作れます。
           </p>
         </form>
       </div>
@@ -286,7 +284,7 @@ export default async function PersonasPage({
                 </Link>
 
                 <div className="flex shrink-0 items-center gap-2">
-                  <ol className="flex items-center gap-1 text-[0.6875rem]" aria-label={`状態: ${STATUS_LABELS[persona.status]}`}>
+                  <ol className="flex items-center gap-1 text-xs" aria-label={`状態: ${STATUS_LABELS[persona.status]}`}>
                     {(["draft", "approved", "active"] as const).map((st, idx) => {
                       const order = { draft: 0, approved: 1, active: 2 } as const;
                       const reached = order[persona.status] >= idx;
@@ -375,7 +373,7 @@ export default async function PersonasPage({
                   )
                 )}
               </div>
-              <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-line pt-2">
+              <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-line-soft pt-2">
                 <span className="text-xs text-ink-faint">
                   アバター: {AVATAR_STATUS_LABELS[persona.avatar_status]}
                   {avatar && ` — ${avatar.label}`}
@@ -442,7 +440,7 @@ export default async function PersonasPage({
           学習進化型ペルソナ
         </summary>
         <p className="mt-1 text-sm text-ink-muted">
-          同意済みの学習者の記録から、3〜5個の下書きを作ります。個人が特定されないよう、同意済みが3人以上になるまで作れません。
+          同意済みの学習者の記録から、3〜5個の下書きを作ります(同意済みが3人以上のとき)。
         </p>
         <form action={boundGenerateEvolvedAction} className="mt-3">
           <SubmitButton

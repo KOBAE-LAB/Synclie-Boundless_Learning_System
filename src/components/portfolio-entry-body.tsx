@@ -13,7 +13,7 @@ export function PortfolioEntryBody({ entry }: { entry: PortfolioEntry }) {
       </div>
 
       {entry.discussion && (
-        <div className="border-t border-line pt-3">
+        <div className="border-t border-line-soft pt-3">
           <p className="text-xs font-medium text-ink-muted">議論のまとめ</p>
           <p className="mt-1 whitespace-pre-wrap">{entry.discussion.summary}</p>
           {entry.discussion.keyPoints.length > 0 && (
@@ -27,7 +27,7 @@ export function PortfolioEntryBody({ entry }: { entry: PortfolioEntry }) {
       )}
 
       {entry.teacherAssessment && (
-        <div className="border-t border-line pt-3">
+        <div className="border-t border-line-soft pt-3">
           <p className="text-xs font-medium text-ink-muted">
             教師のコメント
             {entry.teacherAssessment.rating && `(${RATING_LABELS[entry.teacherAssessment.rating]})`}
@@ -37,7 +37,7 @@ export function PortfolioEntryBody({ entry }: { entry: PortfolioEntry }) {
       )}
 
       {(entry.feedback.length > 0 || entry.judgment) && (
-        <div className="border-t border-line pt-3">
+        <div className="border-t border-line-soft pt-3">
           <p className="text-xs font-medium text-ink-muted">AIフィードバック</p>
           <p className="text-xs text-ink-faint">{AI_NOTE}</p>
           {entry.feedback.map((f, i) => (
@@ -64,7 +64,7 @@ export function PortfolioEntryBody({ entry }: { entry: PortfolioEntry }) {
       )}
 
       {entry.reflection && (
-        <div className="border-t border-line pt-3">
+        <div className="border-t border-line-soft pt-3">
           <p className="text-xs font-medium text-ink-muted">振り返り</p>
           <p>
             <span className="text-ink-muted">学んだこと: </span>

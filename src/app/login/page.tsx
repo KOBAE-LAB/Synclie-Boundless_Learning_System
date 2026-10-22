@@ -23,7 +23,7 @@ export default async function LoginPage({
   // SSO側で入れなかった理由(Auth.jsは ?error= で返す)。承認待ちの教師アカウントなどが該当する。
   const errorMessage = error
     ? error === "AccessDenied"
-      ? "このアカウントではログインできませんでした。承認待ちの教師アカウントや、メールアドレスの確認ができなかった場合などが考えられます。"
+      ? "ログインできませんでした。承認待ちの教師アカウントなどが考えられます。"
       : "ログインに失敗しました。もう一度お試しください。"
     : null;
 
@@ -107,10 +107,10 @@ export default async function LoginPage({
         </p>
 
         <p className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-ink-faint">
-          <Link href="/privacy" className="hover:underline">
+          <Link href="/privacy" className="underline underline-offset-2">
             プライバシーポリシー
           </Link>
-          <Link href="/terms" className="hover:underline">
+          <Link href="/terms" className="underline underline-offset-2">
             利用規約
           </Link>
         </p>

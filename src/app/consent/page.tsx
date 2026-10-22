@@ -100,7 +100,7 @@ export default async function ConsentPage() {
       {isActive ? (
         <p className="mt-6 text-sm text-ink-muted">
           {new Date(consent!.granted_at).toLocaleString("ja-JP")} に同意済みです。
-          <Link href="/learn" className="ml-2 hover:underline">
+          <Link href="/learn" className="ml-2 underline underline-offset-2">
             授業一覧へ →
           </Link>
         </p>

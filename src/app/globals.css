@@ -14,8 +14,11 @@
   --color-canvas: #ffffff; /* ページの地 */
   --color-surface: #f6f3f1; /* カード・吹き出しの下地(わずかに温かい灰色) */
   --color-surface-raised: #ffffff; /* 入力欄など。白地+枠線で、押せる・書ける面だと分かるように */
-  --color-line: #e2dcd8;
-  --color-line-strong: #bdb4ae;
+  /* 枠線: ボタン・入力欄・カードの境界は、白地で3:1以上(WCAG 1.4.11)。以前の #e2dcd8(1.4:1)はほとんど見えなかった。
+     line-soft は、見出しの下線など「なくても分かる」飾りの区切り専用(コントラストの基準の対象外)。 */
+  --color-line: #948b85; /* 白地で3.3:1 */
+  --color-line-strong: #6f6660; /* 白地で5.3:1。強調したい境界 */
+  --color-line-soft: #e2dcd8;
 
   --color-ink: #231f1d; /* 本文 */
   --color-ink-muted: #4d4540;
@@ -71,6 +74,12 @@ body {
   font-weight: 500;
   line-height: 1.7;
   text-rendering: optimizeLegibility;
+}
+
+/* 押せる大きさ: 枠のあるボタンは、指でも押しやすいよう高さを確保する(WCAGの最小は24px、学校のタブレットを想定して40px)。 */
+button.border,
+button[type="submit"].border {
+  min-height: 2.5rem;
 }
 
 /* 操作したことが必ず分かるように、フォーカスリングはブランドカラーで強調する(F18)。 */

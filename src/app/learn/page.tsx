@@ -64,11 +64,10 @@ export default async function LearnCoursesPage({
 
       {not_enrolled && (
         <p className="mt-4 rounded-md border border-warn bg-warn-soft px-4 py-3 text-sm text-warn">
-          その授業はまだ開けません(履修登録が未了、または公開前です)。履修登録は、担当の先生から授業コードをもらい、
-          <Link href="/learn/join" className="mx-1 underline">
-            こちら
+          その授業は、まだ開けません。履修登録が済んでいないか、公開前です。
+          <Link href="/learn/join" className="ml-1 font-semibold underline underline-offset-2">
+            履修登録へ
           </Link>
-          から参加してください。
         </p>
       )}
 

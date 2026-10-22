@@ -115,7 +115,7 @@ export default async function CourseDashboardPage({
           <p className="mt-2 text-xs text-danger">{guidanceRow.error}</p>
         )}
         {guidance && (
-          <div className="mt-4 space-y-4 border-t border-line pt-4 text-sm">
+          <div className="mt-4 space-y-4 border-t border-line-soft pt-4 text-sm">
             <div>
               <p className="text-xs font-medium text-ink-muted">授業全体の様子</p>
               <p className="mt-1">{guidance.classOverview}</p>
@@ -140,7 +140,7 @@ export default async function CourseDashboardPage({
                     <li key={item.studentId} className="rounded-md border border-line px-3 py-2">
                       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                         <span className="font-medium text-ink">{studentNames.get(item.studentId) ?? "(不明な学習者)"}</span>
-                        <Link href={`/courses/${courseId}/students#${item.studentId}`} className="text-xs text-ink-muted hover:underline">
+                        <Link href={`/courses/${courseId}/students#${item.studentId}`} className="text-xs text-ink-muted underline underline-offset-2">
                           プロファイル・提案を見る →
                         </Link>
                       </div>
@@ -182,7 +182,7 @@ export default async function CourseDashboardPage({
                 </span>
                 <Link
                   href={`/courses/${courseId}/students#${stat.studentId}`}
-                  className="shrink-0 text-xs text-ink-muted hover:underline"
+                  className="shrink-0 text-xs text-ink-muted underline underline-offset-2"
                 >
                   プロファイル・提案を見る→
                 </Link>
@@ -231,14 +231,14 @@ export default async function CourseDashboardPage({
       </ul>
       <Link
         href={`/courses/${courseId}/conformity`}
-        className="mt-2 inline-block text-xs text-ink-muted hover:underline"
+        className="mt-2 inline-block text-xs text-ink-muted underline underline-offset-2"
       >
         発言単位の詳細を見る→
       </Link>
       <br />
       <Link
         href={`/courses/${courseId}/audit`}
-        className="mt-1 inline-block text-xs text-ink-muted hover:underline"
+        className="mt-1 inline-block text-xs text-ink-muted underline underline-offset-2"
       >
         発言を確認・修正する→
       </Link>

@@ -213,7 +213,7 @@ export default async function StudentDashboardPage() {
       <section className="mt-6 rounded-lg border border-line p-5">
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
           <h2 className="text-sm font-medium text-ink">ポートフォリオ</h2>
-          <Link href="/learn/portfolio" className="text-xs text-accent hover:underline">
+          <Link href="/learn/portfolio" className="text-xs text-accent underline underline-offset-2">
             すべて見る・書き出す →
           </Link>
         </div>
@@ -257,8 +257,7 @@ export default async function StudentDashboardPage() {
           次の学びに向けて(横断的な学びの記録とAIの提案)
         </h2>
         <p className="mt-1 text-xs text-ink-muted">
-          全授業の記録から、次の学びに向けた努力の方向を提案します。押したときだけ生成されます。
-          AIの提案は材料で、取り入れるかは自分で決めます。
+          全授業の記録から、次の学びへの提案を作ります(押したときだけ)。取り入れるかは、自分で決めます。
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <span className="text-xs text-ink-faint">
@@ -277,7 +276,7 @@ export default async function StudentDashboardPage() {
           <p className="mt-2 text-xs text-danger">{learnerProfile.error}</p>
         )}
         {learnerProfile?.status === "done" && (
-          <div className="mt-3 space-y-2 border-t border-line pt-3 text-sm">
+          <div className="mt-3 space-y-2 border-t border-line-soft pt-3 text-sm">
             <p>
               <span className="text-xs font-medium text-ink-muted">得意な点: </span>
               {learnerProfile.strengths}
@@ -291,7 +290,7 @@ export default async function StudentDashboardPage() {
               {learnerProfile.summary}
             </p>
 
-            <div className="mt-3 border-t border-line pt-3">
+            <div className="mt-3 border-t border-line-soft pt-3">
               <form action={generateLearnerSuggestionsAction}>
                 <SubmitButton
                   pendingText="生成中…"
@@ -339,7 +338,7 @@ export default async function StudentDashboardPage() {
               <Link href={`/learn/${stat.courseId}`} className="font-medium text-ink hover:underline">
                 {stat.title}
               </Link>
-              <Link href={`/learn/${stat.courseId}/portfolio`} className="shrink-0 text-xs text-ink-muted hover:underline">
+              <Link href={`/learn/${stat.courseId}/portfolio`} className="shrink-0 text-xs text-ink-muted underline underline-offset-2">
                 ポートフォリオ→
               </Link>
             </div>
@@ -404,12 +403,12 @@ export default async function StudentDashboardPage() {
             </option>
           ))}
         </select>
-        <button
-          type="submit"
-          className="shrink-0 rounded-md bg-accent-fill px-4 py-2 text-sm font-medium text-white hover:bg-accent-fill-hover"
+        <SubmitButton
+          pendingText="追加中…"
+          className="shrink-0 rounded-md bg-accent-fill px-4 py-2 text-sm font-medium text-white hover:bg-accent-fill-hover disabled:opacity-60"
         >
           追加する
-        </button>
+        </SubmitButton>
       </form>
 
       <ul className="mt-4 space-y-2">
