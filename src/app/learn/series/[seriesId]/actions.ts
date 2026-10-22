@@ -8,6 +8,7 @@ import { hasConsent } from "@/lib/consent";
 import { isEnrolledInSeries } from "@/lib/courses/enrollment";
 import { findActiveGroup } from "@/lib/learn/session-scope";
 import { GroupRuleError, joinByCode, leaveGroup, setGroupTheme } from "@/lib/inquiry/groups";
+import { setSoloTheme } from "@/lib/inquiry/solo";
 
 // 探究の教科・科目のグループ(学習者の操作): コードで入る・抜ける・テーマを決める/更新する。
 // 決まりは @/lib/inquiry/groups にある。決まりに反するときは、画面に理由を出す(?group_error=)。
@@ -54,4 +55,10 @@ export async function setThemeAction(seriesId: string, formData: FormData) {
   const group = await findActiveGroup(admin, seriesId, user.id);
   if (!group) redirect(`/learn/series/${seriesId}`);
   await run(seriesId, () => setGroupTheme(admin, { projectId: group.id, studentId: user.id, theme: String(formData.get("theme") ?? "") }));
+}
+
+// 個人の探究(グループに入っていないとき)のテーマを決める・更新する。
+export async function setSoloThemeAction(seriesId: string, formData: FormData) {
+  const { user, admin } = await guard(seriesId);
+  await run(seriesId, () => setSoloTheme(admin, { seriesId, studentId: user.id, theme: String(formData.get("theme") ?? "") }));
 }

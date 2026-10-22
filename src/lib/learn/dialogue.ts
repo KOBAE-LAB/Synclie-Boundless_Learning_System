@@ -22,7 +22,6 @@ import { addMarker } from "@/lib/inquiry/markers";
 import { applyExpectedStage } from "@/lib/inquiry/project-stage";
 import {
   memberAlias,
-  NEEDS_GROUP_MESSAGE,
   resolveSessionScope,
   scopeSessionQuery,
   type SessionScope,
@@ -110,9 +109,8 @@ export async function getOrCreateSessionRow(
     throw new Error(ARCHIVED_MESSAGE);
   }
 
-  // 探究の教科・科目(0044): グループの共有の議論。グループに入っていなければ議論できない。
+  // 探究学習モード(0044): グループに入っていればグループの共有の議論、入っていなければ個人の探究(本人の議論)。
   const scope = await resolveSessionScope(admin, courseId, studentId);
-  if (scope.kind === "needs_group") throw new Error(NEEDS_GROUP_MESSAGE);
 
   const findLatest = async () =>
     (
@@ -292,7 +290,11 @@ export async function postStudentMessageAndRespond(
       ? `- この議論は、学習者のグループ(${session.scope.memberIds.map((id) => memberAlias(session.scope.kind === "group" ? session.scope.memberIds : [], id)).join("・")})と、時間差で行っている。発言の先頭の「メンバーA:」などが発言者。メンバー同士の考えの違いも取り上げ、まだ発言していないメンバーにも問いかけてよい。${
           session.scope.theme ? `\n- グループが決めた探究のテーマ: 「${session.scope.theme}」(テーマはグループが決める。擬似メンバーが勝手に変えない)` : ""
         }`
-      : undefined;
+      : session.scope.kind === "solo" && session.scope.inquiry
+        ? `- この議論は、探究学習モードでの、学習者一人の探究(時間差で進める)である。${
+            session.scope.theme ? `\n- 学習者が決めた探究のテーマ: 「${session.scope.theme}」(テーマは学習者が決める。擬似メンバーが勝手に変えない)` : ""
+          }`
+        : undefined;
 
   // 学習の流れ(インプット/アウトプット)。順番を強制する授業では、インプットの間は議論に入れない。
   const flow = await assertDiscussionAllowed(admin, courseId, studentId);

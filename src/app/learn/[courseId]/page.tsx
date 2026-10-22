@@ -167,7 +167,7 @@ export default async function LearnCourseSessionPage({
   const { user } = await requireRole("student");
 
   const admin = createAdminClient();
-  // 探究の教科・科目(0044)では、グループの共有の議論を表示する。グループに入っていなければ議論できない。
+  // 探究学習モード(0044)では、グループに入っていればグループの共有の議論、入っていなければ個人の探究(本人の議論)を表示する。
   const scope = await resolveSessionScope(admin, courseId, user.id);
 
   // 画面の表示に必要なデータは、依存関係のあるものだけ順番に、あとは並行して取得する
@@ -436,7 +436,7 @@ export default async function LearnCourseSessionPage({
       })
     : null;
   const seriesArchived = lessonCrumbs?.archived ?? false;
-  const inputLocked = ended || seriesArchived || scope.kind === "needs_group" || (timeStatus?.blocksInput ?? false);
+  const inputLocked = ended || seriesArchived || (timeStatus?.blocksInput ?? false);
   const END_REASON_LABELS: Record<string, string> = {
     time_limit: "制限時間になったため",
     ai_suggested: "AIの提案に応じて",
@@ -495,15 +495,19 @@ export default async function LearnCourseSessionPage({
         )}
       </div>
 
-      {scope.kind === "needs_group" && (
-        <p className="mt-4 rounded-md border border-warn bg-warn-soft px-4 py-3 text-sm text-ink">
-          この探究の授業では、グループで議論します。
-          {lessonCrumbs?.learnerTrail?.[1]?.href ? (
-            <Link href={lessonCrumbs.learnerTrail[1].href} className="ml-1 font-medium underline">
-              教科・科目の画面でグループに参加する
-            </Link>
+      {scope.kind === "solo" && scope.inquiry && (
+        <p className="mt-3 text-sm text-ink-muted">
+          探究学習モードで、一人で探究しています。都合のよいときに発言しましょう。
+          {scope.theme ? (
+            <span className="mt-1 block">
+              あなたの探究のテーマ: <span className="text-ink">{scope.theme}</span>
+            </span>
           ) : (
-            "教科・科目の画面で、グループに参加してください。"
+            lessonCrumbs?.learnerTrail?.[1]?.href && (
+              <Link href={lessonCrumbs.learnerTrail[1].href} className="ml-1 font-medium underline">
+                テーマを決める
+              </Link>
+            )
           )}
         </p>
       )}
@@ -806,9 +810,7 @@ export default async function LearnCourseSessionPage({
 
       {inputLocked ? (
         <p className="mt-6 rounded-md border border-line bg-surface px-4 py-3 text-sm text-ink-muted">
-          {scope.kind === "needs_group"
-            ? "グループに参加すると、ここで議論できます。"
-            : seriesArchived
+          {seriesArchived
             ? "この教科・科目は終了しています。記録は見返せますが、新しい発言はできません。"
             : ended
               ? "この議論は終了しました。上の「議論のまとめ」を確認して、成果を提出しましょう。"

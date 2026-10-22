@@ -8,8 +8,9 @@ import { isEnrolledInSeries } from "@/lib/courses/enrollment";
 import { lessonName, seriesLabel } from "@/lib/courses/series";
 import { Breadcrumbs, BackLink } from "@/components/breadcrumbs";
 import { SubmitButton } from "@/components/submit-button";
+import { loadSoloInquiry } from "@/lib/inquiry/solo";
 import { findActiveGroup, loadActiveMemberIds } from "@/lib/learn/session-scope";
-import { joinGroupAction, leaveGroupAction, setThemeAction } from "./actions";
+import { joinGroupAction, leaveGroupAction, setSoloThemeAction, setThemeAction } from "./actions";
 
 const dateFmt = new Intl.DateTimeFormat("ja-JP", { timeZone: "Asia/Tokyo", month: "numeric", day: "numeric" });
 
@@ -34,9 +35,10 @@ export default async function LearnSeriesPage({
   const { data: series } = await admin.from("course_series").select("id, title, subject, planned_lessons, archived_at, kind").eq("id", seriesId).maybeSingle();
   if (!series) notFound();
 
-  // 探究の教科・科目: グループで議論する。いま入っているグループと、そのメンバー・テーマ。
+  // 探究学習モード: グループで議論する(グループに入っていなければ、一人で探究する)。いま入っているグループと、そのメンバー・テーマ。
   const inquiry = series.kind === "inquiry";
   const group = inquiry ? await findActiveGroup(admin, seriesId, user.id) : null;
+  const solo = inquiry && !group ? await loadSoloInquiry(admin, seriesId, user.id) : null;
   let groupDetail: { theme: string | null; memberNames: string[]; history: { theme: string; created_at: string }[] } | null = null;
   if (group) {
     const memberIds = await loadActiveMemberIds(admin, group.id);
@@ -108,7 +110,7 @@ export default async function LearnSeriesPage({
 
       {inquiry && (
         <section className="mt-6 rounded-lg border border-line p-5">
-          <h2 className="text-sm font-medium text-ink">あなたのグループ</h2>
+          <h2 className="text-sm font-medium text-ink">{group ? "あなたのグループ" : "あなたの探究"}</h2>
           {groupError && <p className="mt-2 rounded-md border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">{groupError}</p>}
           {group && groupDetail ? (
             <>
@@ -156,9 +158,44 @@ export default async function LearnSeriesPage({
             </>
           ) : (
             <>
-              <p className="mt-2 text-sm text-ink-muted">この探究は、グループで議論します。先生に割り当ててもらうか、先生から聞いたグループのコードを入力してください。</p>
+              <p className="mt-2 text-sm text-ink-muted">
+                グループに入らなくても、一人で探究できます。グループで探究するときは、先生に割り当ててもらうか、グループのコードを入力してください。
+              </p>
+              <div className="mt-4">
+                <h3 className="text-xs font-medium text-ink-faint">あなたの探究のテーマ</h3>
+                <p className="mt-1 text-sm text-ink">{solo?.theme ?? "まだ決まっていません。自分が調べたいことを、テーマにしましょう。"}</p>
+                {!series.archived_at && (
+                  <form action={setSoloThemeAction.bind(null, seriesId)} className="mt-2 flex flex-wrap gap-2">
+                    <label htmlFor="solo-theme" className="sr-only">テーマ</label>
+                    <input
+                      id="solo-theme"
+                      name="theme"
+                      required
+                      maxLength={200}
+                      defaultValue={solo?.theme ?? ""}
+                      placeholder="例: 島の過疎を、どうすれば食い止められるか?"
+                      className="min-w-0 flex-1 rounded-md border border-line bg-surface-raised px-3 py-1.5 text-sm"
+                    />
+                    <SubmitButton pendingText="保存中…" className="rounded-md border border-line px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface disabled:opacity-50">
+                      {solo?.theme ? "テーマを更新する" : "テーマを決める"}
+                    </SubmitButton>
+                  </form>
+                )}
+                {solo && solo.history.length > 1 && (
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-xs text-ink-muted">テーマの変化</summary>
+                    <ol className="mt-1 space-y-1 text-sm text-ink-muted">
+                      {solo.history.map((h, i) => (
+                        <li key={i}>
+                          <span className="text-xs text-ink-faint">{dateFmt.format(new Date(h.created_at))}</span> {h.theme}
+                        </li>
+                      ))}
+                    </ol>
+                  </details>
+                )}
+              </div>
               {!series.archived_at && (
-                <form action={joinGroupAction.bind(null, seriesId)} className="mt-3 flex flex-wrap gap-2">
+                <form action={joinGroupAction.bind(null, seriesId)} className="mt-5 flex flex-wrap gap-2 border-t border-line pt-4">
                   <label htmlFor="group-code" className="sr-only">グループのコード</label>
                   <input
                     id="group-code"
@@ -168,7 +205,7 @@ export default async function LearnSeriesPage({
                     placeholder="グループのコード"
                     className="w-48 rounded-md border border-line bg-surface-raised px-3 py-1.5 font-mono text-sm uppercase tracking-widest"
                   />
-                  <SubmitButton pendingText="参加中…" className="rounded-md bg-accent-fill px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-fill-hover disabled:opacity-50">
+                  <SubmitButton pendingText="参加中…" className="rounded-md border border-line px-3 py-1.5 text-sm font-medium text-ink hover:bg-surface disabled:opacity-50">
                     グループに入る
                   </SubmitButton>
                 </form>

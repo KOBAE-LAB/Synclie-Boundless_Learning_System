@@ -10,11 +10,22 @@ describe("resolveSessionScope(誰の議論を見るか・書くかの境界)", (
     const admin = fakeAdmin({ tables: { courses: [{ series_id: "s1" }], course_series: [{ kind: "standard" }] } });
     expect(await resolveSessionScope(asAdmin(admin), "c1", "u1")).toEqual({ kind: "solo", studentId: "u1" });
   });
-  it("探究の教科・科目でグループに入っていなければ、議論できない", async () => {
+  it("探究学習モードでグループに入っていなければ、個人の探究(本人の議論)。テーマは本人の個人プロジェクトから", async () => {
     const admin = fakeAdmin({
-      tables: { courses: [{ series_id: "s1" }], course_series: [{ kind: "inquiry" }], inquiry_project_members: [] },
+      tables: {
+        courses: [{ series_id: "s1" }],
+        course_series: [{ kind: "inquiry" }],
+        inquiry_project_members: [],
+        inquiry_projects: [{ id: "p1", theme: "島の過疎" }],
+      },
     });
-    expect(await resolveSessionScope(asAdmin(admin), "c1", "u1")).toEqual({ kind: "needs_group" });
+    expect(await resolveSessionScope(asAdmin(admin), "c1", "u1")).toEqual({ kind: "solo", studentId: "u1", inquiry: true, theme: "島の過疎" });
+  });
+  it("個人の探究で、テーマをまだ決めていなければ null", async () => {
+    const admin = fakeAdmin({
+      tables: { courses: [{ series_id: "s1" }], course_series: [{ kind: "inquiry" }], inquiry_project_members: [], inquiry_projects: [] },
+    });
+    expect(await resolveSessionScope(asAdmin(admin), "c1", "u1")).toEqual({ kind: "solo", studentId: "u1", inquiry: true, theme: null });
   });
   it("探究の教科・科目でグループに入っていれば、グループの共有の議論", async () => {
     const admin = fakeAdmin({
@@ -50,11 +61,12 @@ describe("scopeSessionQuery", () => {
     scopeSessionQuery(q, { kind: "group", projectId: "g1", groupTitle: "", theme: null, memberIds: [] } as SessionScope);
     expect(q.calls).toEqual(["eq:project_id=g1", "is:student_id=null"]);
   });
-  it("グループに入っていないときは、何も見つからないように絞る", () => {
+  it("個人の探究・通常の議論は、学習者本人の議論に絞る", () => {
     const q = recorder();
-    scopeSessionQuery(q, { kind: "needs_group" });
-    expect(q.calls).toEqual(["eq:id=00000000-0000-0000-0000-000000000000"]);
+    scopeSessionQuery(q, { kind: "solo", studentId: "u1", inquiry: true, theme: null });
+    expect(q.calls).toEqual(["eq:student_id=u1"]);
   });
+
 });
 
 describe("memberAlias(AIには氏名を送らない)", () => {

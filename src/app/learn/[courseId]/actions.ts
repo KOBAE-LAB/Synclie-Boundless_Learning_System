@@ -43,8 +43,9 @@ export async function autoContinueDiscussionAction(courseId: string) {
   const { user } = await requireRole("student");
   const admin = createAdminClient();
 
-  // グループの議論(0044、時間差が基本)では、沈黙は自然なことなので、AI同士の自動継続はしない。
-  if ((await resolveSessionScope(admin, courseId, user.id)).kind !== "solo") return;
+  // 探究学習モード(0044、時間差が基本)では、グループでも個人でも、沈黙は自然なことなので、AI同士の自動継続はしない。
+  const autoScope = await resolveSessionScope(admin, courseId, user.id);
+  if (autoScope.kind !== "solo" || autoScope.inquiry) return;
 
   const { data: session } = await admin
     .from("learning_sessions")
