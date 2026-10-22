@@ -83,6 +83,13 @@ export async function retrieveForTurn(
     return { materialChunks: input.queryText ? await searchMaterialChunks(input.courseId, input.queryText) : [], memories };
   }
   const embedding = input.queryText ? await embedQuery(input.queryText) : null;
+  // 当時モードの時間の軸: 探究学習モードは「段階」、教科・科目学習モードは「授業回の番号」(0046)。
+  const { data: lesson } = await admin.from("courses").select("lesson_no, series_id").eq("id", input.courseId).maybeSingle();
+  const { data: lessonSeries } = lesson?.series_id
+    ? await admin.from("course_series").select("kind").eq("id", lesson.series_id).maybeSingle()
+    : { data: null };
+  const timeAxis: "stage" | "lesson" = lessonSeries?.kind === "inquiry" ? "stage" : "lesson";
+  const juniorLessonNo = (lesson?.lesson_no as number | null | undefined) ?? null;
   const juniorStage = input.juniorProjectId
     ? (((await admin.from("inquiry_projects").select("current_stage_key").eq("id", input.juniorProjectId).maybeSingle()).data
         ?.current_stage_key as string | null) ?? null)
@@ -94,6 +101,8 @@ export async function retrieveForTurn(
         projectId: s.sourceProjectId as string,
         mode: s.loan!.mode,
         juniorStageKey: juniorStage,
+        timeAxis,
+        juniorLessonNo,
         queryEmbedding: embedding,
       });
       memories.set(s.id, { memory, mode: s.loan!.mode });

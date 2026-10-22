@@ -154,6 +154,38 @@ describe("先輩の記憶(当時モードと振り返りモード)", () => {
     await buildSeniorMemory(asAdmin(admin), { projectId: "pr1", mode: "then", juniorStageKey: "information_gathering", queryEmbedding: [0.1] });
     expect(admin.rpcCalls[0].args).toMatchObject({ p_stage_keys: ["problem_setting", "information_gathering"], p_kind: "narrated", p_match_count: 1 });
   });
+  it("教科・科目学習モードの当時モードは、後輩のいまの授業回までの場面だけを検索する。軌跡と段階の物語は使わない", async () => {
+    const admin = fakeAdmin({
+      tables: { inquiry_trajectories: rows, inquiry_stage_stories: [{ id: "s1", body: "段階の物語", kind: "live", version: 1 }] },
+      rpc: { match_inquiry_episodes: [{ episode_id: "e", version_id: "v", stage_key: "problem_setting", context_header: "h", body: "第2回の場面", similarity: 0.8, lesson_no: 2 }] },
+    });
+    const memory = await buildSeniorMemory(asAdmin(admin), {
+      projectId: "pr1",
+      mode: "then",
+      juniorStageKey: null,
+      queryEmbedding: [0.1],
+      timeAxis: "lesson",
+      juniorLessonNo: 3,
+    });
+    expect(admin.rpcCalls[0].args).toMatchObject({ p_stage_keys: null, p_max_lesson_no: 3 });
+    expect(memory.retrievals.map((r) => r.kind)).toEqual(["episode"]);
+    expect(memory.text).toContain("第3回");
+    expect(memory.text).toContain("第2回の頃");
+    expect(memory.text).not.toContain("段階の物語");
+    expect(memory.text).not.toContain("課題設定まで");
+  });
+  it("探究学習モードの当時モードは、これまでどおり段階で絞る(授業回の絞り込みは付けない)", async () => {
+    const admin = fakeAdmin({ tables: { inquiry_trajectories: rows, inquiry_stage_stories: [] }, rpc: { match_inquiry_episodes: [] } });
+    await buildSeniorMemory(asAdmin(admin), { projectId: "pr1", mode: "then", juniorStageKey: "analysis", queryEmbedding: [0.1], timeAxis: "stage", juniorLessonNo: 3 });
+    expect(admin.rpcCalls[0].args).toMatchObject({ p_stage_keys: ["problem_setting", "information_gathering", "analysis"] });
+    expect(admin.rpcCalls[0].args).not.toHaveProperty("p_max_lesson_no");
+  });
+  it("振り返りモードは、教科・科目学習モードでも授業回で絞らない", async () => {
+    const admin = fakeAdmin({ tables: { inquiry_trajectories: rows, inquiry_stage_stories: [] }, rpc: { match_inquiry_episodes: [] } });
+    await buildSeniorMemory(asAdmin(admin), { projectId: "pr1", mode: "retrospective", juniorStageKey: null, queryEmbedding: [0.1], timeAxis: "lesson", juniorLessonNo: 3 });
+    expect(admin.rpcCalls[0].args).toMatchObject({ p_stage_keys: null });
+    expect(admin.rpcCalls[0].args).not.toHaveProperty("p_max_lesson_no");
+  });
   it("振り返りモードは、すべての段階から検索する。使った記録を返す", async () => {
     const admin = fakeAdmin({
       tables: { inquiry_trajectories: rows, inquiry_stage_stories: [{ id: "s1", body: "物語", kind: "retrospective", version: 1 }] },

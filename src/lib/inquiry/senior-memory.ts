@@ -30,6 +30,7 @@ export const SENIOR_GUARDRAILS = `# 先輩の記録をもとにしたAIとして
 - 人の名前・学校名・地名は話さない(記録の「〇〇」は伏せた名前なので、そのまま伏せておく)。`;
 
 const THEN_RULE = `- いまのあなたは、後輩と同じ段階にいたときの自分として話す。自分の探究の結論や、その後の展開は話さない(まだ知らないものとして話す)。`;
+const THEN_RULE_LESSON = `- いまのあなたは、後輩と同じ回(第{N}回)の頃の自分として話す。それより後の回のことや、最終的にどうなったかは話さない(まだ知らないものとして話す)。`;
 const RETRO_RULE = `- いまのあなたは、探究を終えた立場から、振り返って話す。結論を先に教えるのではなく、迷いの意味を一緒に考える材料にする。`;
 
 interface TrajectoryRow {
@@ -58,15 +59,29 @@ export function pickRetrospectiveTrajectory(rows: TrajectoryRow[]): TrajectoryRo
 
 export async function buildSeniorMemory(
   admin: AdminClient,
-  input: { projectId: string; mode: SeniorMode; juniorStageKey: string | null; queryEmbedding: number[] | null },
+  input: {
+    projectId: string;
+    mode: SeniorMode;
+    juniorStageKey: string | null;
+    queryEmbedding: number[] | null;
+    /**
+     * 当時モードの時間の軸。stage(既定)= 探究の段階(探究学習モード)/ lesson = 授業回の番号(教科・科目学習モード)。
+     * lesson のときは、後輩のいまの回(juniorLessonNo)までの場面だけを読む。軌跡と段階の物語は、段階ごとに作られていて
+     * 「この回まで」に絞れない(後の回のことを含みうる)ので、当時モードでは使わない。
+     */
+    timeAxis?: "stage" | "lesson";
+    juniorLessonNo?: number | null;
+  },
 ): Promise<SeniorMemory> {
   const retrievals: RetrievalRecord[] = [];
+  const byLesson = input.mode === "then" && input.timeAxis === "lesson" && typeof input.juniorLessonNo === "number";
   const { data: trajectoryRows } = await admin
     .from("inquiry_trajectories")
     .select("id, body, version, kind, up_to_stage_key")
     .eq("project_id", input.projectId);
-  const trajectory =
-    input.mode === "then"
+  const trajectory = byLesson
+    ? null
+    : input.mode === "then"
       ? pickThenTrajectory((trajectoryRows ?? []) as TrajectoryRow[], input.juniorStageKey)
       : pickRetrospectiveTrajectory((trajectoryRows ?? []) as TrajectoryRow[]);
   if (trajectory) retrievals.push({ kind: "trajectory", trajectory_id: trajectory.id });
@@ -76,10 +91,11 @@ export async function buildSeniorMemory(
   if (input.queryEmbedding) {
     const { data: matches } = await admin.rpc("match_inquiry_episodes", {
       p_project_id: input.projectId,
-      p_stage_keys: input.mode === "then" ? stagesUpTo(input.juniorStageKey) : null,
+      p_stage_keys: input.mode === "then" && !byLesson ? stagesUpTo(input.juniorStageKey) : null,
       p_kind: "narrated",
       p_query_embedding: input.queryEmbedding,
       p_match_count: 1,
+      ...(byLesson ? { p_max_lesson_no: input.juniorLessonNo } : {}),
     });
     const match = ((matches ?? []) as {
       episode_id: string;
@@ -88,6 +104,7 @@ export async function buildSeniorMemory(
       context_header: string | null;
       body: string;
       similarity: number;
+      lesson_no?: number | null;
     }[])[0];
     if (match) {
       retrievals.push({ kind: "episode", episode_version_id: match.version_id, rank: 1, similarity: match.similarity });
@@ -99,18 +116,19 @@ export async function buildSeniorMemory(
         .eq("stage_key", match.stage_key)
         .order("version", { ascending: false });
       const pick = (kind: string) => (stories ?? []).find((s) => s.kind === kind) ?? null;
-      const story = input.mode === "retrospective" ? (pick("retrospective") ?? pick("live")) : pick("live");
+      const story = byLesson ? null : input.mode === "retrospective" ? (pick("retrospective") ?? pick("live")) : pick("live");
       if (story) retrievals.push({ kind: "stage_story", stage_story_id: story.id as string });
-      episodeBlock = `## いまの話題に近い、あなたの場面(${stageLabel(match.stage_key)})
+      const when = byLesson && match.lesson_no ? `第${match.lesson_no}回の頃` : stageLabel(match.stage_key);
+      episodeBlock = `## いまの話題に近い、あなたの場面(${when})
 ${match.context_header ? `${match.context_header}\n` : ""}${match.body}
 ${story ? `\n## その段階の、あなたの物語\n${story.body}\n` : ""}`;
     }
   }
 
   const text = `# あなたの探究の記録
-${input.mode === "then" ? THEN_RULE : RETRO_RULE}
+${input.mode === "retrospective" ? RETRO_RULE : byLesson ? THEN_RULE_LESSON.replace("{N}", String(input.juniorLessonNo)) : THEN_RULE}
 ## これまでの流れ
-${trajectory?.body ?? "(この段階までの記録は、まだ少ない。覚えていないことは、覚えていないと答える。)"}
+${trajectory?.body ?? (byLesson ? "(この回までの全体の流れは、まとめていない。下の場面に書かれていることだけを話す。覚えていないことは、覚えていないと答える。)" : "(この段階までの記録は、まだ少ない。覚えていないことは、覚えていないと答える。)")}
 ${episodeBlock ? `\n${episodeBlock}` : ""}
 ${SENIOR_GUARDRAILS}`;
   return { text, retrievals };
