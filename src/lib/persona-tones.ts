@@ -18,3 +18,12 @@ export function assignPersonaTones(personaIdsInCreationOrder: string[]): Record<
 export function toneClass(tone: number | undefined): string {
   return tone === undefined ? "tone-neutral" : `tone-${((tone % TONE_COUNT) + TONE_COUNT) % TONE_COUNT}`;
 }
+
+/**
+ * アバターが無いときに、丸の中に出す頭文字。先輩型の名前(「2025年度の先輩 ミナト(AI)」)は、先頭が年度の数字なので、
+ * 呼び名(ミナト)の頭文字を使う。それ以外は、名前の先頭の文字。
+ */
+export function personaInitial(name: string): string {
+  const senior = name.match(/^(?:\d{4}年度の)?先輩\s*(.+?)(?:[(（]AI[)）])?$/);
+  return Array.from(senior ? senior[1] : name)[0] ?? "";
+}

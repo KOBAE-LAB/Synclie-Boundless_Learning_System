@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
-import { toneClass } from "@/lib/persona-tones";
+import { toneClass, personaInitial } from "@/lib/persona-tones";
 import { computePacing, type ReplyTempo } from "@/lib/persona-traits";
 
 /**
@@ -246,7 +246,7 @@ export function ChatComposer({
                     aria-hidden="true"
                     className="persona-chip flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold"
                   >
-                    {bubble.name.slice(0, 1)}
+                    {personaInitial(bubble.name)}
                   </span>
                 )}
                 <div className="min-w-0 flex-1">

@@ -7,6 +7,7 @@ import type { createAdminClient } from "@/lib/supabase/server";
 import { assertOwnsCourse } from "@/lib/courses/ownership";
 import { withAiContext } from "@/lib/ai/usage";
 import { draftSeniorPersona } from "@/lib/ai/senior-persona-draft";
+import { recommendPersonaAvatar, type AvatarOption } from "@/lib/ai/persona-avatar";
 import { isEligibleLearner } from "./pipeline";
 import { stageLabel } from "./stages";
 
@@ -195,6 +196,9 @@ export interface ArchiveEntry {
   mine: boolean;
   sourceTitle: string | null;
   originNote: string | null;
+  avatarId: string | null;
+  /** アバターの画像のパス(public/avatars/…)。未設定は null */
+  avatarPath: string | null;
 }
 
 /** この先生が見られる先輩型(自分で作ったもの+同じ学校の先生が作って承認したもの)。 */
@@ -202,7 +206,7 @@ export async function listArchive(admin: AdminClient, teacherId: string): Promis
   const orgId = await teacherOrg(admin, teacherId);
   const { data } = await admin
     .from("personas")
-    .select("id, name, nickname, status, profile, stance, created_by, organization_id, source_project_id, origin_note, tier, course_id, created_at")
+    .select("id, name, nickname, status, profile, stance, created_by, organization_id, source_project_id, origin_note, tier, course_id, created_at, avatar_id")
     .is("course_id", null)
     .in("tier", ["senior", "other_school"])
     .order("created_at", { ascending: false });
@@ -213,6 +217,8 @@ export async function listArchive(admin: AdminClient, teacherId: string): Promis
   const { data: projects } =
     projectIds.length > 0 ? await admin.from("inquiry_projects").select("id, title").in("id", projectIds) : { data: [] };
   const titleOf = new Map((projects ?? []).map((p) => [p.id as string, p.title as string]));
+  const { data: avatars } = await admin.from("avatar_options").select("id, file_path");
+  const pathOf = new Map((avatars ?? []).map((a) => [a.id as string, a.file_path as string]));
   return visible.map((p) => ({
     id: p.id as string,
     name: p.name as string,
@@ -226,6 +232,8 @@ export async function listArchive(admin: AdminClient, teacherId: string): Promis
     // 同じ学校の先生には、材料のプロジェクト名(学習者の探究の名前)は見せない。作った先生だけが見る。
     sourceTitle: p.created_by === teacherId ? (titleOf.get(p.source_project_id as string) ?? null) : null,
     originNote: (p.origin_note as string | null) ?? null,
+    avatarId: (p.avatar_id as string | null) ?? null,
+    avatarPath: p.avatar_id ? (pathOf.get(p.avatar_id as string) ?? null) : null,
   }));
 }
 
@@ -248,6 +256,43 @@ export async function updateSeniorPersona(
     })
     .eq("id", input.personaId);
   if (error) throw new Error(`保存できませんでした: ${error.message}`);
+}
+
+/** 先輩型のアバターを選ぶ(作った先生だけ)。候補は全授業共通のアバター候補(avatar_options)。 */
+export async function setSeniorAvatar(admin: AdminClient, input: { teacherId: string; personaId: string; avatarId: string }) {
+  await assertCreator(admin, input.personaId, input.teacherId);
+  const { data: option } = await admin.from("avatar_options").select("id").eq("id", input.avatarId).maybeSingle();
+  if (!option) throw new SeniorRuleError("アバターを選んでください。");
+  const { error } = await admin
+    .from("personas")
+    .update({ avatar_id: input.avatarId, avatar_status: "done", avatar_error: null })
+    .eq("id", input.personaId);
+  if (error) throw new Error(`アバターを設定できませんでした: ${error.message}`);
+}
+
+/** 先輩型のアバターを、AIが候補の中から推薦する(AIは1回)。いつでも手動で変えられる。 */
+export async function recommendSeniorAvatar(admin: AdminClient, input: { teacherId: string; personaId: string }): Promise<{ avatarId: string }> {
+  await assertCreator(admin, input.personaId, input.teacherId);
+  const { data: persona } = await admin.from("personas").select("name, nickname, profile, stance").eq("id", input.personaId).maybeSingle();
+  if (!persona) throw new SeniorRuleError("先輩のペルソナが見つかりません。");
+  const { data: rows } = await admin.from("avatar_options").select("id, label, tags");
+  const profile = (persona.profile ?? {}) as { role?: string; tone?: string };
+  const stance = (persona.stance ?? {}) as { position?: string; goal?: string };
+  const { avatarId } = await withAiContext({ purpose: "senior_avatar" }, () =>
+    recommendPersonaAvatar(
+      {
+        name: (persona.nickname as string | null) || (persona.name as string),
+        role: profile.role ?? "",
+        developmentalStage: "探究を終えた先輩(学習者)",
+        tone: profile.tone ?? "",
+        stancePosition: stance.position ?? "",
+        stanceGoal: stance.goal ?? "",
+      },
+      (rows ?? []) as AvatarOption[],
+    ),
+  );
+  await setSeniorAvatar(admin, { ...input, avatarId });
+  return { avatarId };
 }
 
 /** 承認する(下書き→承認済み)/下書きに戻す。下書きに戻すと、貸し出し中の授業回でも話さなくなる。 */

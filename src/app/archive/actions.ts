@@ -7,7 +7,9 @@ import { createAdminClient } from "@/lib/supabase/server";
 import {
   createSeniorDraft,
   deleteSeniorPersona,
+  recommendSeniorAvatar,
   SeniorRuleError,
+  setSeniorAvatar,
   setSeniorStatus,
   updateSeniorPersona,
 } from "@/lib/inquiry/senior";
@@ -61,4 +63,15 @@ export async function setSeniorStatusAction(personaId: string, status: "draft" |
 export async function deleteSeniorAction(personaId: string) {
   const { user } = await requireRole("teacher");
   await run(() => deleteSeniorPersona(createAdminClient(), { teacherId: user.id, personaId }));
+}
+
+export async function recommendSeniorAvatarAction(personaId: string) {
+  const { user } = await requireRole("teacher");
+  await run(() => recommendSeniorAvatar(createAdminClient(), { teacherId: user.id, personaId }), `#persona-${personaId}`);
+}
+
+export async function setSeniorAvatarAction(personaId: string, formData: FormData) {
+  const { user } = await requireRole("teacher");
+  const avatarId = String(formData.get("avatarId") ?? "").trim();
+  await run(() => setSeniorAvatar(createAdminClient(), { teacherId: user.id, personaId, avatarId }), `#persona-${personaId}`);
 }

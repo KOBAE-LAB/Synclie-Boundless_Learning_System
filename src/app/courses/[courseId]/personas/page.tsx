@@ -18,7 +18,7 @@ import {
   type PersonaStatus,
 } from "./actions";
 import { PersonaForm } from "./persona-form";
-import { assignPersonaTones, toneClass } from "@/lib/persona-tones";
+import { assignPersonaTones, toneClass, personaInitial } from "@/lib/persona-tones";
 import { loadLessonCrumbs, loadSiblingLessons } from "@/lib/courses/series";
 import { LessonCopyForm } from "@/components/lesson-copy-form";
 import { copyPersonasFromLessonAction } from "../lesson-copy-actions";
@@ -271,7 +271,7 @@ export default async function PersonasPage({
                       aria-hidden="true"
                       className="persona-chip flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold"
                     >
-                      {persona.name.slice(0, 1)}
+                      {personaInitial(persona.name)}
                     </span>
                   )}
                   <span className="min-w-0">

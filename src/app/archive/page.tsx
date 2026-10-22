@@ -4,7 +4,15 @@ import { Breadcrumbs, BackLink } from "@/components/breadcrumbs";
 import { SubmitButton } from "@/components/submit-button";
 import { StepNumber } from "@/components/step-number";
 import { listArchive, listSourceProjects, MAX_NICKNAME } from "@/lib/inquiry/senior";
-import { createSeniorDraftAction, deleteSeniorAction, setSeniorStatusAction, updateSeniorAction } from "./actions";
+import { personaInitial } from "@/lib/persona-tones";
+import {
+  createSeniorDraftAction,
+  deleteSeniorAction,
+  recommendSeniorAvatarAction,
+  setSeniorAvatarAction,
+  setSeniorStatusAction,
+  updateSeniorAction,
+} from "./actions";
 
 // 先輩の記録(アーカイブ): 先輩の探究の記録から「先輩のAI」を作り、承認して、同じ学校の授業回で使えるようにする。
 // 使うときは、授業回のペルソナ設定の「先輩の記録から加える」で選ぶ(当時モード/振り返りモード)。
@@ -16,7 +24,11 @@ export default async function ArchivePage({ searchParams }: { searchParams: Prom
   const { error } = await searchParams;
   const { user } = await requireRole("teacher");
   const admin = createAdminClient();
-  const [entries, projects] = await Promise.all([listArchive(admin, user.id), listSourceProjects(admin, user.id)]);
+  const [entries, projects, { data: avatarRows }] = await Promise.all([
+    listArchive(admin, user.id),
+    listSourceProjects(admin, user.id),
+    admin.from("avatar_options").select("id, label").order("label", { ascending: true }),
+  ]);
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
@@ -33,7 +45,17 @@ export default async function ArchivePage({ searchParams }: { searchParams: Prom
           {entries.map((e) => (
             <li key={e.id} id={`persona-${e.id}`} className="rounded-lg border border-line p-4">
               <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-                <span className="font-medium text-ink">{e.name}</span>
+                <span className="flex items-center gap-3 font-medium text-ink">
+                  {e.avatarPath ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={e.avatarPath} alt="" className="h-10 w-10 shrink-0 rounded-full border border-line bg-surface object-cover object-top" />
+                  ) : (
+                    <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-line bg-surface text-sm font-semibold text-ink-muted">
+                      {personaInitial(e.name)}
+                    </span>
+                  )}
+                  {e.name}
+                </span>
                 <span className="flex flex-wrap items-center gap-2 text-xs">
                   <span className={e.status === "draft" ? "font-semibold text-warn" : "text-ink-faint"}>
                     <StepNumber n={1} />
@@ -60,6 +82,25 @@ export default async function ArchivePage({ searchParams }: { searchParams: Prom
               {e.mine ? (
                 <>
                   {e.sourceTitle && <p className="mt-2 text-xs text-ink-faint">材料: 探究プロジェクト「{e.sourceTitle}」</p>}
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-ink-faint">アバター: {e.avatarPath ? "設定済み" : "未設定(学習者の画面では、呼び名の頭文字が出ます)"}</span>
+                    <form action={recommendSeniorAvatarAction.bind(null, e.id)}>
+                      <SubmitButton pendingText="推薦中…" className={small}>AIに推薦させる</SubmitButton>
+                    </form>
+                  </div>
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-xs text-ink-muted">アバターを手動で選ぶ</summary>
+                    <form action={setSeniorAvatarAction.bind(null, e.id)} className="mt-2 flex flex-wrap items-center gap-2">
+                      <label htmlFor={`avatar-${e.id}`} className="sr-only">アバター</label>
+                      <select id={`avatar-${e.id}`} name="avatarId" defaultValue={e.avatarId ?? ""} required className={`${input} max-w-xs`}>
+                        <option value="" disabled>選んでください</option>
+                        {(avatarRows ?? []).map((a) => (
+                          <option key={a.id as string} value={a.id as string}>{a.label as string}</option>
+                        ))}
+                      </select>
+                      <SubmitButton pendingText="保存中…" className={small}>変更する</SubmitButton>
+                    </form>
+                  </details>
                   <details className="mt-3">
                     <summary className="cursor-pointer text-xs text-ink-muted">内容を確認・修正する</summary>
                     <form action={updateSeniorAction.bind(null, e.id)} className="mt-2 space-y-2">

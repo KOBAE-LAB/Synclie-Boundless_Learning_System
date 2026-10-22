@@ -13,7 +13,7 @@ import { GroupLiveRefresh } from "@/components/group-live-refresh";
 import { memberAlias, resolveSessionScope, scopeSessionQuery } from "@/lib/learn/session-scope";
 import { SessionControls } from "@/components/session-controls";
 import { getTimeStatus } from "@/lib/learn/session-end";
-import { assignPersonaTones, toneClass } from "@/lib/persona-tones";
+import { assignPersonaTones, toneClass, personaInitial } from "@/lib/persona-tones";
 import { loadActiveMembers, loadLoanedPersonaRows } from "@/lib/learn/members";
 import { isSeniorTier } from "@/lib/inquiry/senior";
 import { normalizeReplyTempo, type ReplyTempo } from "@/lib/persona-traits";
@@ -693,7 +693,7 @@ export default async function LearnCourseSessionPage({
                   ) : (
                     <span className="absolute inset-0 flex items-center justify-center" aria-hidden="true">
                       <span className="persona-chip flex aspect-square h-1/2 items-center justify-center rounded-full text-[clamp(1rem,4vw,1.75rem)] font-semibold shadow-md">
-                        {persona.name.slice(0, 1)}
+                        {personaInitial(persona.name)}
                       </span>
                     </span>
                   )}
@@ -783,7 +783,7 @@ export default async function LearnCourseSessionPage({
                   aria-hidden="true"
                   className="persona-chip flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold"
                 >
-                  {personaName.slice(0, 1)}
+                  {personaInitial(personaName)}
                 </span>
               )}
               <div className="min-w-0 flex-1">
