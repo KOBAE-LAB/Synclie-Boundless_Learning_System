@@ -1,3 +1,4 @@
+import { StudyModeBadge } from "@/components/study-mode-badge";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -27,7 +28,7 @@ export default async function LearnCoursesPage({
     enrolledSeriesIds.length > 0
       ? await admin
           .from("course_series")
-          .select("id, title, subject, planned_lessons, archived_at")
+          .select("id, title, subject, kind, planned_lessons, archived_at")
           .in("id", enrolledSeriesIds)
           .order("created_at", { ascending: false })
       : { data: [] };
@@ -132,7 +133,7 @@ function SeriesLink({
   series,
   releasedCount,
 }: {
-  series: { id: string; title: string; subject: string | null; planned_lessons: number | null };
+  series: { id: string; title: string; subject: string | null; kind: string; planned_lessons: number | null };
   releasedCount: number;
 }) {
   return (
@@ -143,6 +144,7 @@ function SeriesLink({
       <span>
         <span className="font-medium text-ink">{seriesLabel(series.title, series.planned_lessons)}</span>
         {series.subject && <span className="ml-2 text-ink-muted">({series.subject})</span>}
+        <span className="ml-2"><StudyModeBadge kind={series.kind} /></span>
       </span>
       <span className="text-xs text-ink-muted">公開中 {releasedCount}回</span>
     </Link>

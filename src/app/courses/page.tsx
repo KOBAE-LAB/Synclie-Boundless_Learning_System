@@ -1,3 +1,5 @@
+import { StudyModeBadge } from "@/components/study-mode-badge";
+import { STUDY_MODE_LABELS, STUDY_MODE_SUMMARIES } from "@/lib/courses/study-mode";
 import Link from "next/link";
 import { isAdmin, requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -36,7 +38,7 @@ export default async function CoursesPage({
 
   const { data: seriesRows } = await admin
     .from("course_series")
-    .select("id, title, subject, planned_lessons, fiscal_year, archived_at, created_at")
+    .select("id, title, subject, kind, planned_lessons, fiscal_year, archived_at, created_at")
     .eq("owner_teacher_id", user.id)
     .order("fiscal_year", { ascending: false })
     .order("created_at", { ascending: false });
@@ -141,6 +143,7 @@ export default async function CoursesPage({
                 <span>
                   <span className="font-medium text-ink">{seriesLabel(series.title, series.planned_lessons)}</span>
                   <span className="ml-2 text-xs text-ink-faint">{series.fiscal_year}年度</span>
+                  <span className="ml-2"><StudyModeBadge kind={series.kind} /></span>
                   {series.subject && <span className="ml-2 text-ink-muted">({series.subject})</span>}
                   {series.archived_at && (
                     <span className="ml-2 rounded-full bg-warn-soft px-2 py-0.5 text-xs font-medium text-warn">アーカイブ済み</span>
@@ -212,14 +215,14 @@ export default async function CoursesPage({
       </details>
 
       <details open={allSeries.length === 0} className="mt-4 rounded-lg border border-line p-5">
-        <summary className="cursor-pointer text-sm font-medium text-ink">新しい教科・科目を作成</summary>
-        <p className="mt-2 text-sm text-ink-muted">履修登録(授業コード)の単位です。作成後、その中に授業回(第1回、第2回…)を作ります。</p>
+        <summary className="cursor-pointer text-sm font-medium text-ink">新しく作成する(学習モードを選ぶ)</summary>
+        <p className="mt-2 text-sm text-ink-muted">履修登録(授業コード)の単位です。作成後、その中に授業回(第1回、第2回…)を作ります。学習モードは、作成後は変えられません。</p>
         <form action={createSeriesAction} className="mt-4 space-y-3">
-          <label htmlFor="series-title" className="sr-only">教科・科目の名前</label>
+          <label htmlFor="series-title" className="sr-only">名前</label>
           <input
             id="series-title"
             name="title"
-            placeholder="教科・科目の名前(例: 理科、数学I、情報)"
+            placeholder="名前(例: 理科、数学I、情報、探究のテーマ名)"
             required
             maxLength={80}
             className="w-full rounded-md border border-line bg-surface-raised px-3 py-2 text-sm"
@@ -242,16 +245,20 @@ export default async function CoursesPage({
               <input name="fiscalYear" type="number" min={2000} max={2100} defaultValue={currentYear} className="mt-1 block w-28 rounded-md border border-line bg-surface-raised px-3 py-2 text-sm" />
             </label>
           </div>
-          <fieldset className="space-y-1">
-            <legend className="text-xs text-ink-muted">学び方(作成後は変えられません)</legend>
-            <label className="flex items-start gap-2 text-sm text-ink">
-              <input type="radio" name="kind" value="standard" defaultChecked className="mt-1" />
-              <span>通常 — 一人ひとりが擬似メンバーと議論します</span>
-            </label>
-            <label className="flex items-start gap-2 text-sm text-ink">
-              <input type="radio" name="kind" value="inquiry" className="mt-1" />
-              <span>探究 — 学習者のグループで、時間差で議論します(グループは先生の割り当てか、グループのコードで作ります)</span>
-            </label>
+          <fieldset className="space-y-2">
+            <legend className="text-xs text-ink-muted">学習モード(作成後は変えられません)</legend>
+            {(["standard", "inquiry"] as const).map((mode) => (
+              <label
+                key={mode}
+                className="flex cursor-pointer items-start gap-3 rounded-md border border-line px-3 py-2 text-sm has-[:checked]:border-accent has-[:checked]:bg-accent-soft"
+              >
+                <input type="radio" name="kind" value={mode} defaultChecked={mode === "standard"} className="mt-1" />
+                <span>
+                  <span className="block font-medium text-ink">{STUDY_MODE_LABELS[mode]}</span>
+                  <span className="block text-xs text-ink-muted">{STUDY_MODE_SUMMARIES[mode]}</span>
+                </span>
+              </label>
+            ))}
           </fieldset>
           <SubmitButton pendingText="作成中…" className="rounded-md bg-accent-fill px-4 py-2 text-sm font-medium text-white hover:bg-accent-fill-hover disabled:opacity-50">
             作成する

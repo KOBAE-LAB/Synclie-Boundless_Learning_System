@@ -1,3 +1,4 @@
+import { StudyModeBadge } from "@/components/study-mode-badge";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
@@ -97,6 +98,7 @@ export default async function LearnSeriesPage({
     <div className="mx-auto max-w-2xl px-6 py-12">
       <Breadcrumbs trail={[{ label: "授業一覧", href: "/learn" }]} current={series.title} />
       <h1 className="mt-3 text-2xl font-semibold text-ink">{seriesLabel(series.title, series.planned_lessons)}</h1>
+      <p className="mt-1"><StudyModeBadge kind={series.kind} /></p>
       {series.subject && <p className="mt-1 text-sm text-ink-muted">{series.subject}</p>}
       {series.archived_at && (
         <p className="mt-3 rounded-md border border-warn bg-warn-soft px-4 py-3 text-sm text-warn">

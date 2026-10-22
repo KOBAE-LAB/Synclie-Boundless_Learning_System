@@ -1,3 +1,4 @@
+import { studyModeLabel } from "@/lib/courses/study-mode";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { isAdmin, requireRole } from "@/lib/auth/session";
@@ -95,7 +96,7 @@ export default async function SeriesPage({
       <Breadcrumbs trail={[{ label: "教科・科目一覧", href: "/courses" }]} current={series.title} />
       <h1 className="mt-3 text-2xl font-semibold text-ink">{seriesLabel(series.title, series.planned_lessons)}</h1>
       <p className="mt-1 text-sm text-ink-muted">
-        {series.kind === "inquiry" ? "探究(グループ)・" : ""}
+        {studyModeLabel(series.kind)}・
         {series.fiscal_year}年度{series.subject ? `・${series.subject}` : ""}
         {series.planned_lessons ? `・作成済み ${lessonCount}/${series.planned_lessons}回` : `・${lessonCount}回`}
       </p>
