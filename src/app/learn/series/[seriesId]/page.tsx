@@ -1,3 +1,4 @@
+import { lessonStatus } from "@/lib/courses/lesson-status";
 import { StudyModeBadge } from "@/components/study-mode-badge";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
@@ -57,7 +58,7 @@ export default async function LearnSeriesPage({
 
   const { data: lessons } = await admin
     .from("courses")
-    .select("id, title, lesson_no, mode")
+    .select("id, title, lesson_no, mode, released, closed_at")
     .eq("series_id", seriesId)
     .eq("released", true)
     .order("lesson_no", { ascending: true });
@@ -219,7 +220,8 @@ export default async function LearnSeriesPage({
       <ol className="mt-3 space-y-2">
         {(lessons ?? []).map((lesson) => {
           const session = sessionByLesson.get(lesson.id);
-          const status = !session ? "まだ" : session.ended_at ? "議論を終えた" : "学習中";
+          const lessonClosed = lessonStatus(lesson, !!series.archived_at) === "closed";
+          const status = lessonClosed ? "終了" : !session ? "まだ" : session.ended_at ? "議論を終えた" : "学習中";
           const total = stepTotal.get(lesson.id) ?? 0;
           return (
             <li key={lesson.id}>

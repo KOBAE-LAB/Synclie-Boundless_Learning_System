@@ -45,7 +45,7 @@ export async function createSeriesAction(formData: FormData) {
   redirect(`/series/${data.id}`);
 }
 
-// 年度末の一括処理: 指定した年度の、自分が担当する(まだ閉じていない)教科・科目を、まとめてアーカイブする。
+// 年度末の一括処理: 指定した年度の、自分が担当する(まだ閉じていない)教科・科目を、まとめて終了する。
 export async function archiveYearAction(formData: FormData) {
   const session = await requireRole("teacher");
   const year = Number.parseInt(String(formData.get("fiscalYear") ?? ""), 10);
@@ -61,7 +61,7 @@ export async function archiveYearAction(formData: FormData) {
     .is("archived_at", null)
     .select("id");
   if (error) {
-    throw new Error(`一括アーカイブに失敗しました: ${error.message}`);
+    throw new Error(`一括終了に失敗しました: ${error.message}`);
   }
   // 探究の終了(要件定義書14章ステップ5): 最後の段階の物語と、振り返り版を作る(後処理)。
   await closeInquiryForSeries(admin, (archived ?? []).map((s) => s.id as string));

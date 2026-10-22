@@ -162,12 +162,12 @@ export async function summarizeSeriesRecords(admin: AdminClient, seriesId: strin
 /**
  * 強制削除(テストデータの消去、管理者のみ): 学習者の記録(対話・提出物・フィードバック・振り返り・
  * ポートフォリオの評価・進み・学習計画・探究プロジェクト・手書き画像・音声)ごと、教科・科目を完全に削除する。
- * 元に戻せない。誤操作を防ぐため、(1)先にアーカイブしてあること、(2)教科・科目名を一字一句入力して確かめること、を求める。
+ * 元に戻せない。誤操作を防ぐため、(1)先に終了してあること、(2)教科・科目名を一字一句入力して確かめること、を求める。
  */
 export async function forceDeleteSeries(admin: AdminClient, seriesId: string, confirmTitle: string) {
   const { data: series } = await admin.from("course_series").select("title, archived_at").eq("id", seriesId).maybeSingle();
   if (!series) throw new Error("教科・科目が見つかりません。");
-  if (!series.archived_at) throw new Error("強制削除するには、先に教科・科目をアーカイブしてください。");
+  if (!series.archived_at) throw new Error("強制削除するには、先に教科・科目を終了してください。");
   if (confirmTitle.trim() !== series.title.trim()) {
     throw new Error("入力した教科・科目名が一致しません。削除する場合は、教科・科目名を正確に入力してください。");
   }

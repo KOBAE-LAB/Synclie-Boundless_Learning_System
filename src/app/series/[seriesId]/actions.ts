@@ -35,7 +35,7 @@ export async function createLessonAction(seriesId: string, formData: FormData) {
 
   const { data: seriesRow } = await admin.from("course_series").select("archived_at").eq("id", seriesId).maybeSingle();
   if (seriesRow?.archived_at) {
-    throw new Error("アーカイブした教科・科目には、授業回を追加できません。");
+    throw new Error("終了した教科・科目には、授業回を追加できません。");
   }
   const { data: existing } = await admin.from("courses").select("lesson_no").eq("series_id", seriesId);
   if ((existing?.length ?? 0) >= MAX_LESSONS) {
@@ -216,7 +216,7 @@ export async function registerStudentAction(seriesId: string, formData: FormData
 export async function archiveSeriesAction(seriesId: string) {
   const { admin } = await guard(seriesId);
   const { error } = await admin.from("course_series").update({ archived_at: new Date().toISOString() }).eq("id", seriesId);
-  if (error) throw new Error(`アーカイブに失敗しました: ${error.message}`);
+  if (error) throw new Error(`終了に失敗しました: ${error.message}`);
   // 探究の終了(要件定義書14章ステップ5): 最後の段階の物語と、振り返り版を作る(後処理)。
   await closeInquiryForSeries(admin, [seriesId]);
   revalidatePath(`/series/${seriesId}`);
@@ -243,7 +243,7 @@ export async function deleteSeriesAction(seriesId: string) {
 // テストデータの消去(強制削除): 学習者の記録ごと完全に削除する(元に戻せない)。**管理者だけ**が使える。
 // 導入初期のテストデータを片付けるための機能で、本物の学習者の記録を消すために使わない
 // (一般の教師は、学習者の記録を消せない。要件定義書14章の設計原則)。
-// 先にアーカイブし、教科・科目名を入力して確かめる。
+// 先に終了し、教科・科目名を入力して確かめる。
 export async function forceDeleteSeriesAction(seriesId: string, formData: FormData) {
   const { user } = await requireAdmin();
   const admin = createAdminClient();
@@ -264,7 +264,7 @@ export async function carryOverSeriesAction(seriesId: string, formData: FormData
   redirect(`/series/${newSeriesId}`);
 }
 
-// 履修者の一括整理(1): 承認済みの履修者を、別の教科・科目(自分が担当する、アーカイブしていないもの)にも履修登録する。
+// 履修者の一括整理(1): 承認済みの履修者を、別の教科・科目(自分が担当する、終了していないもの)にも履修登録する。
 // 元の教科・科目の履修は残る(過去の記録を見返せるように)。
 export async function copyEnrollmentsAction(seriesId: string, formData: FormData) {
   const { user, admin } = await guard(seriesId);
@@ -272,7 +272,7 @@ export async function copyEnrollmentsAction(seriesId: string, formData: FormData
   if (!targetId || targetId === seriesId) throw new Error("登録先の教科・科目を選んでください。");
   await assertOwnsSeries(admin, targetId, user.id);
   const { data: target } = await admin.from("course_series").select("archived_at").eq("id", targetId).maybeSingle();
-  if (target?.archived_at) throw new Error("アーカイブした教科・科目には登録できません。");
+  if (target?.archived_at) throw new Error("終了した教科・科目には登録できません。");
 
   const { data: rows } = await admin
     .from("series_enrollments")

@@ -11,7 +11,7 @@ import { evaluateArgument } from "@/lib/ai/argument-evaluation";
 import { isEnrolled } from "@/lib/courses/enrollment";
 import { isPersonaMentioned } from "@/lib/persona-mention";
 import { buildCourseContext, reasoningEffortFor } from "@/lib/courses/settings";
-import { ARCHIVED_MESSAGE, isLessonArchived } from "@/lib/courses/series";
+import { assertLessonOpen } from "@/lib/courses/series";
 import { assertDiscussionAllowed, hasLaterOutput, stepContextFor, withStepContext } from "@/lib/flow/load";
 import { judgeDiscussionState } from "@/lib/ai/discussion-wrapup";
 import { THINKING_DEPTH_GUIDANCE, normalizeThinkingDepth } from "@/lib/persona-traits";
@@ -105,9 +105,7 @@ export async function getOrCreateSessionRow(
   }
 
   // 終了(アーカイブ)した教科・科目では、新しい発言・提出は受け付けない(記録の閲覧だけ)。
-  if (await isLessonArchived(admin, courseId)) {
-    throw new Error(ARCHIVED_MESSAGE);
-  }
+  await assertLessonOpen(admin, courseId);
 
   // 探究学習モード(0044): グループに入っていればグループの共有の議論、入っていなければ個人の探究(本人の議論)。
   const scope = await resolveSessionScope(admin, courseId, studentId);

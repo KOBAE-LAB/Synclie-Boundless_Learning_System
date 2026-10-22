@@ -811,7 +811,9 @@ export default async function LearnCourseSessionPage({
       {inputLocked ? (
         <p className="mt-6 rounded-md border border-line bg-surface px-4 py-3 text-sm text-ink-muted">
           {seriesArchived
-            ? "この教科・科目は終了しています。記録は見返せますが、新しい発言はできません。"
+            ? lessonCrumbs?.endedBy === "lesson"
+              ? "この授業回は終了しています。記録は見返せますが、新しい発言はできません。"
+              : "この教科・科目は終了しています。記録は見返せますが、新しい発言はできません。"
             : ended
               ? "この議論は終了しました。上の「議論のまとめ」を確認して、成果を提出しましょう。"
               : "制限時間を過ぎました。議論のまとめを作っています…"}
@@ -1014,7 +1016,9 @@ export default async function LearnCourseSessionPage({
 
       <div className="mt-12 border-t border-line-soft pt-8" id="submit-outcome">
         {seriesArchived ? (
-          <p className="text-sm text-ink-muted">この教科・科目は終了しているため、新しい成果は提出できません。</p>
+          <p className="text-sm text-ink-muted">
+            {lessonCrumbs?.endedBy === "lesson" ? "この授業回は終了しているため、新しい成果は提出できません。" : "この教科・科目は終了しているため、新しい成果は提出できません。"}
+          </p>
         ) : null}
         {!seriesArchived && (
           <>

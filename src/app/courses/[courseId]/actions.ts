@@ -276,6 +276,28 @@ export async function setLessonReleasedAction(courseId: string, released: boolea
   revalidatePath(`/courses/${courseId}`);
 }
 
+// 授業回: 終了する/再開する。終了すると、学習者は記録を見返せるが、新しい発言・提出・インプットの完了はできない
+// (サーバー側の入口で assertLessonOpen が止める)。データは消えず、いつでも再開できる。公開中の授業回だけ終了できる。
+export async function setLessonClosedAction(courseId: string, closed: boolean) {
+  const { user } = await requireRole("teacher");
+  const admin = createAdminClient();
+  await assertOwnsCourse(admin, courseId, user.id);
+
+  if (closed) {
+    const { data: course } = await admin.from("courses").select("released").eq("id", courseId).maybeSingle();
+    if (!course?.released) throw new Error("公開していない授業回は、終了できません。");
+  }
+  const { error } = await admin
+    .from("courses")
+    .update({ closed_at: closed ? new Date().toISOString() : null })
+    .eq("id", courseId);
+  if (error) {
+    throw new Error(`授業回の状態の変更に失敗しました: ${error.message}`);
+  }
+  revalidatePath(`/courses/${courseId}`);
+  revalidatePath(`/learn/${courseId}`);
+}
+
 // 授業回の名前の変更。
 export async function renameLessonAction(courseId: string, formData: FormData) {
   const { user } = await requireRole("teacher");

@@ -1,3 +1,4 @@
+import { LESSON_STATUS_CLASSES, LESSON_STATUS_LABELS, lessonStatus } from "@/lib/courses/lesson-status";
 import { studyModeLabel } from "@/lib/courses/study-mode";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -56,7 +57,7 @@ export default async function SeriesPage({
   const [{ data: lessons }, { data: enrollmentRows }] = await Promise.all([
     admin
       .from("courses")
-      .select("id, title, lesson_no, mode, released")
+      .select("id, title, lesson_no, mode, released, closed_at")
       .eq("series_id", seriesId)
       .order("lesson_no", { ascending: true }),
     admin
@@ -102,10 +103,10 @@ export default async function SeriesPage({
       </p>
       {series.archived_at && (
         <div className="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-lg border border-warn bg-warn-soft px-4 py-3 text-sm text-warn">
-          <span>この教科・科目はアーカイブ済みです。新しい履修登録・発言・提出は受け付けず、学習者は記録を見返せます。</span>
+          <span>この教科・科目は終了しています。新しい履修登録・発言・提出は受け付けず、学習者は記録を見返せます。</span>
           <form action={unarchiveSeriesAction.bind(null, seriesId)}>
             <SubmitButton pendingText="戻しています…" className="rounded-md border border-warn px-3 py-1.5 text-xs font-medium hover:bg-surface-raised disabled:opacity-50">
-              アーカイブを解除する
+              再開する
             </SubmitButton>
           </form>
         </div>
@@ -136,8 +137,8 @@ export default async function SeriesPage({
                   {lessonName(lesson.lesson_no, lesson.title)}
                   <span className="ml-2 text-xs font-normal text-ink-faint">[{MODE_LABELS[lesson.mode] ?? lesson.mode}]</span>
                 </span>
-                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${lesson.released ? "bg-success-soft text-success" : "bg-warn-soft text-warn"}`}>
-                  {lesson.released ? "公開中" : "準備中"}
+                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${LESSON_STATUS_CLASSES[lessonStatus(lesson, !!series.archived_at)]}`}>
+                  {LESSON_STATUS_LABELS[lessonStatus(lesson, !!series.archived_at)]}
                 </span>
               </Link>
             </li>
@@ -364,7 +365,7 @@ export default async function SeriesPage({
                 </SubmitButton>
               </form>
             ) : (
-              <p className="mt-3 text-xs text-ink-faint">登録先にできる(アーカイブしていない)他の教科・科目がありません。</p>
+              <p className="mt-3 text-xs text-ink-faint">登録先にできる(終了していない)他の教科・科目がありません。</p>
             )}
             <form action={clearEnrollmentsAction.bind(null, seriesId)} className="mt-3 border-t border-line-soft pt-3">
               <p className="text-xs text-ink-muted">この教科・科目の履修登録を、全員分(申請中も)外します。学習者は、この教科・科目の授業回を開けなくなります。</p>
@@ -376,13 +377,13 @@ export default async function SeriesPage({
 
           {!series.archived_at && (
             <details className="rounded-lg border border-line p-4">
-              <summary className="cursor-pointer text-sm font-medium text-ink">アーカイブする(年度末に教科・科目を閉じる)</summary>
+              <summary className="cursor-pointer text-sm font-medium text-ink">終了する(年度末に教科・科目を閉じる)</summary>
               <p className="mt-2 text-sm text-ink-muted">
                 新しい履修登録・発言・提出を受け付けなくなります。学習者は記録を見返せます。いつでも解除できます。
               </p>
               <form action={archiveSeriesAction.bind(null, seriesId)} className="mt-3">
                 <SubmitButton pendingText="処理中…" className="rounded-md border border-line px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface disabled:opacity-50">
-                  アーカイブする
+                  終了する
                 </SubmitButton>
               </form>
             </details>
@@ -395,7 +396,7 @@ export default async function SeriesPage({
                 <p>
                   授業回・資料・擬似メンバー・評価の観点・学習の流れを削除します。<b>元に戻せません。</b>
                   学習者{recordSummary?.learners ?? 0}人分の記録(対話・提出物・振り返り・手書き画像・音声)は消えず、
-                  授業名の控えとともに、学習者のポートフォリオに残ります。年度の途中なら、ふだんは「アーカイブ」を使ってください。
+                  授業名の控えとともに、学習者のポートフォリオに残ります。年度の途中なら、ふだんは「終了」を使ってください。
                 </p>
                 <form action={deleteSeriesAction.bind(null, seriesId)}>
                   <SubmitButton pendingText="削除中…" className="rounded-md bg-danger px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50">
@@ -422,7 +423,7 @@ export default async function SeriesPage({
                         </SubmitButton>
                       </form>
                     ) : (
-                      <p className="mt-2 text-xs text-warn">消去するには、先に上の「アーカイブする」で教科・科目を閉じてください。</p>
+                      <p className="mt-2 text-xs text-warn">消去するには、先に上の「終了する」で教科・科目を閉じてください。</p>
                     )}
                   </div>
                 ) : (

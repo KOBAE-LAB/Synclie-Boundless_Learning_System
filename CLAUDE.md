@@ -850,6 +850,7 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
     (参加コード、列デフォルト式で新規作成時に自動生成)と`course_enrollments`
     (course_id+student_idの組、unique制約)を追加。既存の`learning_sessions`から
     参加登録済み扱いのバックフィルも行う(詳細は8章の`learn/`の説明を参照)
+  - `0048_lesson_closed.sql` — 授業回の「終了」(`courses.closed_at`)。下の「授業回の状態(準備中・公開中・終了)」を参照
   - `0047_aggregate_personas.sql` — **集約型ペルソナ**(実装(2c))。`personas.tier`に`aggregate`、`personas.source_series_id`、材料のプロジェクトの対応(`persona_source_projects`、
     プロジェクトが消えると対応も消える)、検索の記録の種類に`aggregate`。下の「集約型ペルソナ」を参照
   - `0046_senior_lesson_axis.sql` — 先輩型の当時モードの時間の絞り込みを、教科・科目学習モードでは授業回の番号で行う(`match_inquiry_episodes`に`p_max_lesson_no`、戻り値に`lesson_no`)
@@ -923,6 +924,18 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
   確認できる)。授業コードは教科・科目のもの(`course_series.join_code`)。LTI経由の自動登録も教科・科目に作る。
 - 旧`course_enrollments`と`courses.join_code`は廃止した(上の「`learn/`」の説明にある受講登録の記述は、今は
   教科・科目単位として読み替えること)。
+
+#### 授業回の状態(準備中 → 公開中 → 終了、2026-10-23)
+
+「準備と公開はあるが、終了が無い」という指摘を受けて、授業回に**終了**を足した(`0048`、`courses.closed_at`)。状態は`src/lib/courses/lesson-status.ts`の`lessonStatus`で決める
+(準備中=`released=false` / 公開中=`released=true` / 終了=`closed_at`あり、または教科・科目が終了(`archived_at`)していて公開済み)。**画面の印は`LESSON_STATUS_LABELS`/`LESSON_STATUS_CLASSES`を使うこと。**
+- **先生**: 授業回の画面の状態の枠で、準備中→「学習者に公開する」、公開中→「授業回を終了する」(と「準備中に戻す」)、終了→「再開する」(教科・科目が終了している間は、再開できない。教科・科目側で再開する)。
+  公開していない授業回は終了できない。データは消えず、いつでも再開できる。教科・科目の画面の授業回の一覧にも、同じ印が出る。
+- **終了の効果**: 学習者は記録を見返せるが、**新しい発言(テキスト・手書き・音声・自動継続)・成果の提出・インプットの完了はできない**。サーバー側の入口は`assertLessonOpen`
+  (`src/lib/courses/series.ts`)で止める(教科・科目の終了は`ARCHIVED_MESSAGE`、授業回の終了は`LESSON_CLOSED_MESSAGE`)。**発言・提出・進みを書く新しい入口を足すときは、必ず`assertLessonOpen`を通すこと。**
+  学習者の画面は、入力欄・提出フォームを隠し、理由を出す(`LessonCrumbs.archived`/`endedBy`)。
+- **教科・科目の「終了」**: 教科・科目を閉じる機能(DBは`archived_at`のまま)の、**画面の名前を「アーカイブ」から「終了」に改めた**(「終了する」「再開する」「年度末の一括終了」「終了済み」)。
+  内部の名前(`archiveSeriesAction`など)・先輩の記録の「アーカイブ」(③の保管場所)は、そのまま。
 
 #### 前の回からの複製(擬似メンバー・評価の観点、2026-10)
 

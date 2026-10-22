@@ -120,7 +120,7 @@ export default async function CoursesPage({
         </div>
         <label className="flex items-center gap-2 pb-1.5 text-sm text-ink-muted">
           <input type="checkbox" name="archived" value="1" defaultChecked={showArchived} />
-          アーカイブ済みも表示
+          終了した教科・科目も表示
         </label>
         <button type="submit" className={small}>絞り込む</button>
       </form>
@@ -128,7 +128,7 @@ export default async function CoursesPage({
       <h2 className="mt-6 text-sm font-medium text-ink">
         担当している教科・科目({seriesList.length})
         {!showArchived && archivedHidden > 0 && (
-          <span className="ml-2 text-xs font-normal text-ink-faint">アーカイブ済み{archivedHidden}件は非表示</span>
+          <span className="ml-2 text-xs font-normal text-ink-faint">終了済み{archivedHidden}件は非表示</span>
         )}
       </h2>
       <ul className="mt-3 space-y-2">
@@ -146,7 +146,7 @@ export default async function CoursesPage({
                   <span className="ml-2"><StudyModeBadge kind={series.kind} /></span>
                   {series.subject && <span className="ml-2 text-ink-muted">({series.subject})</span>}
                   {series.archived_at && (
-                    <span className="ml-2 rounded-full bg-warn-soft px-2 py-0.5 text-xs font-medium text-warn">アーカイブ済み</span>
+                    <span className="ml-2 rounded-full bg-warn-soft px-2 py-0.5 text-xs font-medium text-warn">終了</span>
                   )}
                 </span>
                 <span className="text-xs text-ink-muted">
@@ -161,11 +161,11 @@ export default async function CoursesPage({
                 <div className="mt-2 flex flex-wrap items-center gap-2 pb-1">
                   {series.archived_at ? (
                     <form action={unarchiveSeriesAction.bind(null, series.id)}>
-                      <SubmitButton pendingText="戻しています…" className={small}>アーカイブを解除</SubmitButton>
+                      <SubmitButton pendingText="戻しています…" className={small}>再開する</SubmitButton>
                     </form>
                   ) : (
                     <form action={archiveSeriesAction.bind(null, series.id)}>
-                      <SubmitButton pendingText="処理中…" className={small}>アーカイブする</SubmitButton>
+                      <SubmitButton pendingText="処理中…" className={small}>終了する</SubmitButton>
                     </form>
                   )}
                   <form action={carryOverSeriesAction.bind(null, series.id)} className="flex items-center gap-1">
@@ -201,8 +201,8 @@ export default async function CoursesPage({
       </ul>
 
       <details className="mt-6 rounded-lg border border-line p-5">
-        <summary className="cursor-pointer text-sm font-medium text-ink">年度末の一括アーカイブ</summary>
-        <p className="mt-2 text-sm text-ink-muted">選んだ年度の教科・科目を、まとめてアーカイブします(いつでも解除できます)。</p>
+        <summary className="cursor-pointer text-sm font-medium text-ink">年度末の一括終了</summary>
+        <p className="mt-2 text-sm text-ink-muted">選んだ年度の教科・科目を、まとめて終了します(いつでも解除できます)。</p>
         <form action={archiveYearAction} className="mt-3 flex flex-wrap items-center gap-2">
           <label htmlFor="archive-year" className="sr-only">年度</label>
           <select id="archive-year" name="fiscalYear" defaultValue={String(selectedYear ?? currentYear)} className="rounded-md border border-line bg-surface-raised px-2 py-1.5 text-sm">
@@ -210,7 +210,7 @@ export default async function CoursesPage({
               <option key={y} value={y}>{y}年度({activeInYear(y)}件)</option>
             ))}
           </select>
-          <SubmitButton pendingText="処理中…" className={small}>この年度をまとめてアーカイブ</SubmitButton>
+          <SubmitButton pendingText="処理中…" className={small}>この年度をまとめて終了</SubmitButton>
         </form>
       </details>
 

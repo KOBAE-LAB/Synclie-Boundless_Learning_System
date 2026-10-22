@@ -28,8 +28,10 @@ export interface LessonCrumbs {
   seriesId: string;
   seriesTitle: string;
   lessonNo: number;
-  /** 教科・科目がアーカイブ済みか(学習者は記録の閲覧のみ) */
+  /** 新しい発言・提出ができないか(教科・科目の終了、または授業回の終了。学習者は記録の閲覧のみ) */
   archived: boolean;
+  /** 何が終了しているか: series=教科・科目 / lesson=この授業回 / null=終了していない */
+  endedBy: "series" | "lesson" | null;
   /** 教師の画面用: 教科・科目一覧 › 教科・科目 › 第N回 */
   teacherTrail: { label: string; href: string }[];
   /** 学習者の画面用: 授業一覧 › 教科・科目 */
@@ -43,7 +45,7 @@ export interface LessonCrumbs {
 export async function loadLessonCrumbs(admin: AdminClient, courseId: string): Promise<LessonCrumbs | null> {
   const { data: course } = await admin
     .from("courses")
-    .select("id, title, lesson_no, series_id")
+    .select("id, title, lesson_no, series_id, closed_at")
     .eq("id", courseId)
     .maybeSingle();
   if (!course) return null;
@@ -53,7 +55,8 @@ export async function loadLessonCrumbs(admin: AdminClient, courseId: string): Pr
     seriesId: series.id,
     seriesTitle: series.title,
     lessonNo: course.lesson_no,
-    archived: !!series.archived_at,
+    archived: !!series.archived_at || !!course.closed_at,
+    endedBy: series.archived_at ? "series" : course.closed_at ? "lesson" : null,
     teacherTrail: [
       { label: "教科・科目一覧", href: "/courses" },
       { label: series.title, href: `/series/${series.id}` },
@@ -124,4 +127,18 @@ export async function loadSiblingLessons(admin: AdminClient, courseId: string): 
   const earlier = siblings.filter((s) => s.lessonNo < current.lesson_no);
   const defaultFromId = (earlier[earlier.length - 1] ?? siblings[0])?.id ?? null;
   return { siblings, defaultFromId };
+}
+
+export const LESSON_CLOSED_MESSAGE = "この授業回は終了しています(記録の閲覧のみ)。新しい発言や提出はできません。";
+
+/**
+ * 新しい発言・提出・インプットの完了を受け付けてよいか。教科・科目が終了(アーカイブ)しているか、授業回が終了していれば、
+ * 理由に合った文でエラーにする(画面を迂回したAPI直叩きでも止めるため、サーバー側の入口で毎回呼ぶ)。
+ */
+export async function assertLessonOpen(admin: AdminClient, courseId: string): Promise<void> {
+  const { data: course } = await admin.from("courses").select("series_id, closed_at").eq("id", courseId).maybeSingle();
+  if (!course) return;
+  if (course.closed_at) throw new Error(LESSON_CLOSED_MESSAGE);
+  const { data: series } = await admin.from("course_series").select("archived_at").eq("id", course.series_id).maybeSingle();
+  if (series?.archived_at) throw new Error(ARCHIVED_MESSAGE);
 }

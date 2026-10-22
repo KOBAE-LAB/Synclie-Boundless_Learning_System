@@ -20,7 +20,7 @@ import { askScene } from "@/lib/ai/persona-scene";
 import { recordContextFor } from "@/lib/records/context";
 import { applyTurnCorrections } from "@/lib/records/corrections";
 import { isEnrolled } from "@/lib/courses/enrollment";
-import { ARCHIVED_MESSAGE, isLessonArchived } from "@/lib/courses/series";
+import { assertLessonOpen } from "@/lib/courses/series";
 import { addMarker, loadOwnTurnSession, removeMarker } from "@/lib/inquiry/markers";
 import { transitionStage } from "@/lib/inquiry/project-stage";
 import { enqueueJob, scheduleJobRun } from "@/lib/inquiry/queue";
@@ -774,7 +774,7 @@ export async function toggleKeepForJuniorsAction(courseId: string, turnId: strin
   // 本人の、この授業回の議論の発言だけ(他人の議論には印を付けられない)
   const session = await loadOwnTurnSession(admin, { turnId, studentId: user.id, courseId });
   if (!session) throw new Error("発言が見つかりません。");
-  if (await isLessonArchived(admin, courseId)) throw new Error(ARCHIVED_MESSAGE);
+  await assertLessonOpen(admin, courseId);
 
   const { data: existing } = await admin
     .from("inquiry_markers")
@@ -800,7 +800,7 @@ export async function declareStageAction(courseId: string, formData: FormData) {
   const { user } = await requireRole("student");
   const admin = createAdminClient();
   if (!(await isEnrolled(admin, courseId, user.id))) throw new Error("この授業に参加していません。");
-  if (await isLessonArchived(admin, courseId)) throw new Error(ARCHIVED_MESSAGE);
+  await assertLessonOpen(admin, courseId);
 
   const stage = formData.get("stage");
   if (!isStageKey(stage)) throw new Error("段階を選んでください。");

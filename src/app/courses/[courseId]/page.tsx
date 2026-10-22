@@ -1,3 +1,4 @@
+import { LESSON_STATUS_CLASSES, LESSON_STATUS_LABELS, lessonStatus } from "@/lib/courses/lesson-status";
 import Link from "next/link";
 import { CANONICAL_STAGES } from "@/lib/inquiry/stages";
 import { StepNumber } from "@/components/step-number";
@@ -16,6 +17,7 @@ import {
   updateAutoDiscussionSettingsAction,
   updateCourseSettingsAction,
   startStudentViewAction,
+  setLessonClosedAction,
   setLessonReleasedAction,
   renameLessonAction,
 } from "./actions";
@@ -95,7 +97,7 @@ export default async function CourseDetailPage({
   const { data: course } = await admin
     .from("courses")
     .select(
-      "id, title, subject, owner_teacher_id, series_id, lesson_no, released, auto_discussion_tempo_seconds, auto_discussion_affects_evaluation, objective, learner_level, discussion_style, ai_member_count, discussion_liveliness, reasoning_depth, time_limit_minutes, time_limit_policy, time_limit_affects_evaluation, ai_close_suggestion, expected_stage_key",
+      "id, title, subject, owner_teacher_id, series_id, lesson_no, released, closed_at, auto_discussion_tempo_seconds, auto_discussion_affects_evaluation, objective, learner_level, discussion_style, ai_member_count, discussion_liveliness, reasoning_depth, time_limit_minutes, time_limit_policy, time_limit_affects_evaluation, ai_close_suggestion, expected_stage_key",
     )
     .eq("id", courseId)
     .maybeSingle();
@@ -105,6 +107,7 @@ export default async function CourseDetailPage({
   }
 
   const crumbs = await loadLessonCrumbs(admin, courseId);
+  const lessonState = lessonStatus({ released: course.released, closed_at: course.closed_at ?? null }, crumbs?.endedBy === "series");
 
   const { data: materials } = await admin
     .from("course_materials")
@@ -142,21 +145,45 @@ export default async function CourseDetailPage({
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-lg border border-line p-4">
         <p className="text-sm">
-          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${course.released ? "bg-success-soft text-success" : "bg-warn-soft text-warn"}`}>
-            {course.released ? "公開中" : "準備中"}
-          </span>
+          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${LESSON_STATUS_CLASSES[lessonState]}`}>{LESSON_STATUS_LABELS[lessonState]}</span>
           <span className="ml-2 text-xs text-ink-muted">
-            {course.released ? "履修している学習者が開けます。" : "公開するまで、学習者には見えません。"}
+            {lessonState === "preparing"
+              ? "公開するまで、学習者には見えません。"
+              : lessonState === "open"
+                ? "履修している学習者が開けます。"
+                : crumbs?.endedBy === "series"
+                  ? "教科・科目が終了しています。記録の閲覧のみです。"
+                  : "記録の閲覧のみです。新しい発言・提出はできません。"}
           </span>
         </p>
-        <form action={setLessonReleasedAction.bind(null, courseId, !course.released)}>
-          <SubmitButton
-            pendingText="変更中…"
-            className={`rounded-md px-3 py-1.5 text-xs font-medium disabled:opacity-50 ${course.released ? "border border-line text-ink hover:bg-surface" : "bg-accent-fill text-white hover:bg-accent-fill-hover"}`}
-          >
-            {course.released ? "準備中に戻す" : "学習者に公開する"}
-          </SubmitButton>
-        </form>
+        <div className="flex flex-wrap items-center gap-3">
+          {lessonState === "preparing" && (
+            <form action={setLessonReleasedAction.bind(null, courseId, true)}>
+              <SubmitButton pendingText="変更中…" className="rounded-md bg-accent-fill px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-fill-hover disabled:opacity-50">
+                学習者に公開する
+              </SubmitButton>
+            </form>
+          )}
+          {lessonState === "open" && (
+            <>
+              <form action={setLessonReleasedAction.bind(null, courseId, false)}>
+                <button type="submit" className="text-xs text-ink-muted underline underline-offset-2 hover:text-ink">準備中に戻す</button>
+              </form>
+              <form action={setLessonClosedAction.bind(null, courseId, true)}>
+                <SubmitButton pendingText="変更中…" className="rounded-md border border-line px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface disabled:opacity-50">
+                  授業回を終了する
+                </SubmitButton>
+              </form>
+            </>
+          )}
+          {lessonState === "closed" && crumbs?.endedBy !== "series" && (
+            <form action={setLessonClosedAction.bind(null, courseId, false)}>
+              <SubmitButton pendingText="変更中…" className="rounded-md border border-line px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface disabled:opacity-50">
+                再開する
+              </SubmitButton>
+            </form>
+          )}
+        </div>
       </div>
       <details className="mt-2">
         <summary className="cursor-pointer text-xs text-ink-muted">授業回の名前を変える</summary>

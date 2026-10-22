@@ -64,9 +64,9 @@ describe("summarizeSeriesRecords", () => {
 describe("forceDeleteSeries(強制削除の安全装置)", () => {
   const series = (archived: string | null) => ({ ...withRecords, course_series: [{ title: "理科1年 光合成", archived_at: archived }] });
 
-  it("アーカイブしていない教科・科目は、強制削除できない", async () => {
+  it("終了していない教科・科目は、強制削除できない", async () => {
     const admin = fakeAdmin(series(null));
-    await expect(forceDeleteSeries(admin, "s1", "理科1年 光合成")).rejects.toThrow("アーカイブ");
+    await expect(forceDeleteSeries(admin, "s1", "理科1年 光合成")).rejects.toThrow("終了");
     expect(admin.log).not.toContain("delete:course_series");
   });
   it("教科・科目名が一致しなければ削除しない", async () => {
@@ -74,7 +74,7 @@ describe("forceDeleteSeries(強制削除の安全装置)", () => {
     await expect(forceDeleteSeries(admin, "s1", "違う名前")).rejects.toThrow("一致しません");
     expect(admin.log).not.toContain("delete:course_series");
   });
-  it("アーカイブ済みで名前が一致すれば、記録ごと削除し、3つのバケットのファイルも消す", async () => {
+  it("終了済みで名前が一致すれば、記録ごと削除し、3つのバケットのファイルも消す", async () => {
     const admin = fakeAdmin(series("2027-03-31T00:00:00Z"));
     await forceDeleteSeries(admin, "s1", " 理科1年 光合成 ");
     expect(admin.log).toContain("delete:course_series");

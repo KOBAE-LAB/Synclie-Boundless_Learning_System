@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { isEnrolled } from "@/lib/courses/enrollment";
-import { ARCHIVED_MESSAGE, isLessonArchived } from "@/lib/courses/series";
+import { assertLessonOpen } from "@/lib/courses/series";
 import { loadLearnerFlow } from "@/lib/flow/load";
 import { currentStep, readCheckQuestions } from "@/lib/flow/steps";
 import { loadLessonContext } from "@/lib/records/context";
@@ -19,7 +19,7 @@ export async function completeStepAction(courseId: string, stepId: string, formD
     throw new Error("この授業に参加していません。");
   }
 
-  if (await isLessonArchived(admin, courseId)) throw new Error(ARCHIVED_MESSAGE);
+  await assertLessonOpen(admin, courseId);
 
   const flow = await loadLearnerFlow(admin, courseId, user.id);
   const step = flow.steps.find((s) => s.id === stepId);
