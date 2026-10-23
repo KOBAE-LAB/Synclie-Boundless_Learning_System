@@ -39,6 +39,7 @@ const NAV_ITEMS: Record<string, NavItem[]> = {
     { label: "組織", href: "/organization" },
     { label: "共有ライブラリ", href: "/library" },
     { label: "先輩の記録", href: "/archive" },
+    { label: "使い方", href: "/guide" },
   ],
   student: [
     { label: "授業", href: "/learn" },
@@ -46,6 +47,7 @@ const NAV_ITEMS: Record<string, NavItem[]> = {
     { label: "ポートフォリオ", href: "/learn/portfolio" },
     { label: "自分のデータ", href: "/learn/data" },
     { label: "履修登録", href: "/learn/join" },
+    { label: "使い方", href: "/guide" },
   ],
 };
 

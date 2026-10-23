@@ -107,6 +107,9 @@ export default async function LoginPage({
         </p>
 
         <p className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-ink-faint">
+          <Link href="/guide" className="underline underline-offset-2">
+            使い方ガイド(動画)
+          </Link>
           <Link href="/privacy" className="underline underline-offset-2">
             プライバシーポリシー
           </Link>

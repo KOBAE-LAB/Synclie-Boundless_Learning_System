@@ -47,3 +47,8 @@ next-env.d.ts
 # python (stage0 prototype)
 __pycache__/
 *.pyc
+
+# 使い方ガイド動画の作業用ファイル
+scripts/guide-video/.work/
+scripts/guide-video/node_modules/
+scripts/guide-video/package*.json
