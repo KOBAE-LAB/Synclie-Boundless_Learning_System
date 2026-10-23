@@ -2,11 +2,11 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 
+// 機能PR動画(④)はトップ画面に直接置く。ほかの3本は /guide へのリンク
 const GUIDE_LINKS = [
   { slug: "teacher-guide", label: "① 教師用操作説明ガイド" },
   { slug: "standard-mode", label: "② 教科・科目学習モード説明ガイド" },
   { slug: "inquiry-mode", label: "③ 探究学習モード説明ガイド" },
-  { slug: "feature-pr", label: "④ システムの機能PR動画" },
 ];
 
 // ログイン後の遷移先をロールで振り分ける(教師→/courses、学習者→/learn)。
@@ -35,6 +35,26 @@ export default async function Home() {
         オンデマンド学習をインタラクティブに、独習を個別最適に。
         AI擬似メンバーとの協働・討論を通じて学ぶ、離島発・世界水準の学習体験を目指しています。
       </p>
+      <figure className="mt-2 w-full max-w-xl">
+        <video
+          className="w-full rounded-md border border-line bg-black"
+          controls
+          preload="none"
+          playsInline
+          poster="/guide/feature-pr.jpg"
+          aria-label="システムの機能PR動画(約2分)"
+        >
+          <source src="/guide/feature-pr.mp4" type="video/mp4" />
+          <track kind="captions" src="/guide/feature-pr.ja.vtt" srcLang="ja" label="日本語" default />
+          お使いのブラウザは動画に対応していません。
+        </video>
+        <figcaption className="mt-1 text-xs text-ink-muted">
+          システムの機能PR動画(約2分・字幕つき){" "}
+          <Link href="/guide#feature-pr" className="underline underline-offset-2">
+            文字起こしを読む
+          </Link>
+        </figcaption>
+      </figure>
       <div className="mt-2 flex flex-wrap items-center justify-center gap-3">
         <Link
           href="/login"
@@ -61,6 +81,11 @@ export default async function Home() {
               </Link>
             </li>
           ))}
+          <li>
+            <Link href="/guide" className="text-ink underline underline-offset-2">
+              すべての動画と文字起こし
+            </Link>
+          </li>
         </ul>
       </section>
       <p className="mt-6 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-ink-faint">
