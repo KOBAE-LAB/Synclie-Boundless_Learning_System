@@ -2,13 +2,6 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 
-// 機能PR動画(④)はトップ画面に直接置く。ほかの3本は /guide へのリンク
-const GUIDE_LINKS = [
-  { slug: "teacher-guide", label: "① 教師用操作説明ガイド" },
-  { slug: "standard-mode", label: "② 教科・科目学習モード説明ガイド" },
-  { slug: "inquiry-mode", label: "③ 探究学習モード説明ガイド" },
-];
-
 // ログイン後の遷移先をロールで振り分ける(教師→/courses、学習者→/learn)。
 // login/actions.ts の loginAction は redirectTo: "/" に固定しているため、
 // ロールごとの行き先はここでまとめて決める。
@@ -69,25 +62,6 @@ export default async function Home() {
           新規登録
         </Link>
       </div>
-      <section aria-labelledby="guide-heading" className="mt-4 w-full max-w-xl rounded-md border border-line px-5 py-4 text-left">
-        <h2 id="guide-heading" className="text-base font-semibold text-ink">
-          使い方ガイド(動画)
-        </h2>
-        <ul className="mt-2 space-y-1 text-sm">
-          {GUIDE_LINKS.map((g) => (
-            <li key={g.slug}>
-              <Link href={`/guide#${g.slug}`} className="text-ink underline underline-offset-2">
-                {g.label}
-              </Link>
-            </li>
-          ))}
-          <li>
-            <Link href="/guide" className="text-ink underline underline-offset-2">
-              すべての動画と文字起こし
-            </Link>
-          </li>
-        </ul>
-      </section>
       <p className="mt-6 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-ink-faint">
         <Link href="/privacy" className="underline underline-offset-2">
           プライバシーポリシー
