@@ -68,9 +68,9 @@ async function shots() {
         const d = page.locator("details", { hasText: t }).first();
         if (await d.count() && !(await d.evaluate((e) => e.open))) await d.locator("summary").first().click();
       }
-      if (sh.scroll) {
-        const el = page.getByText(sh.scroll).first();
-        await el.waitFor({ state: "attached", timeout: 5000 }).catch(() => console.warn("  ! scroll target missing", sh.scroll));
+      if (sh.scroll || sh.scrollSel) {
+        const el = sh.scrollSel ? page.locator(sh.scrollSel).first() : page.getByText(sh.scroll).first();
+        await el.waitFor({ state: "attached", timeout: 5000 }).catch(() => console.warn("  ! scroll target missing", sh.scroll || sh.scrollSel));
         const top = sh.scrollOffset ?? 100;
         await el.evaluate((e, top) => { e.scrollIntoView({ block: "start" }); window.scrollBy(0, -top); }, top).catch(() => {});
         await page.waitForTimeout(250);

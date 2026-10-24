@@ -1,3 +1,4 @@
+import { PrVideo } from "@/components/pr-video";
 import Image from "next/image";
 import Link from "next/link";
 import { LoginForm } from "./login-form";
@@ -105,6 +106,8 @@ export default async function LoginPage({
             新規登録
           </Link>
         </p>
+
+        <PrVideo />
 
         <p className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-ink-faint">
           <Link href="/guide" className="underline underline-offset-2">

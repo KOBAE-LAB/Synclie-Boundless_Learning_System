@@ -1,3 +1,4 @@
+import { withAiLabel } from "@/lib/ai-label";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
@@ -788,7 +789,7 @@ export default async function LearnCourseSessionPage({
               )}
               <div className="min-w-0 flex-1">
                 <p className="persona-name mb-1 text-xs font-semibold">
-                  {personaName}(AI)
+                  {withAiLabel(personaName)}
                   {turn.auto_generated && <span className="ml-1 text-ink-faint">・自動継続</span>}
                 </p>
                 <div className="persona-bubble inline-block rounded-lg px-4 py-2 text-left text-sm leading-7 text-ink">

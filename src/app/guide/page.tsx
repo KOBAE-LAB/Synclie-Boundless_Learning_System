@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   description: "Synclie の使い方と特長を紹介する動画です。",
 };
 
-const NUMBERS = ["①", "②", "③", "④"];
+const NUMBERS = ["①", "②", "③", "④", "⑤"];
 
 function minutes(seconds: number) {
   return `約${Math.max(1, Math.round(seconds / 60))}分`;

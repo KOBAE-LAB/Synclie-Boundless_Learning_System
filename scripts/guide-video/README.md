@@ -14,7 +14,7 @@ Playwright(Chrome)で撮り、日本語のナレーション(macOSの`say`のKyo
 2. 開発サーバー(`npm run dev`)を起動し、デモ用の教師・学習者アカウントを`scripts/dev/create-user.mjs`で作り、`.work/demo-accounts.txt`に書く
 3. 教科・科目(教科・科目学習モード「理科 光合成のしくみ」/探究学習モード「総合的な探究 島の未来を考える」)・授業回・資料・擬似メンバー・
    学習の流れ・評価の観点・グループを、画面から作る。IDは`spec.mjs`の先頭のものに合わせる(作り直したら書き換える)
-4. `seed-*.mjs`を`node --env-file=.env.local`で実行する
+4. `seed-standard.mjs` → `seed-inquiry.mjs` → `seed-senior.mjs`(先輩型・前年度の記録。デモの先輩アカウントが要る)を`node --env-file=.env.local`で実行する
 
 ## 注意
 - 動画に映る画面は**デモ用のデータ**。本物の学習者の記録・氏名を映さない

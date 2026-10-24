@@ -1,3 +1,4 @@
+import { withAiLabel } from "@/lib/ai-label";
 import { notFound } from "next/navigation";
 import { loadUsedRecords, type UsedRecord } from "@/lib/inquiry/senior-memory";
 import { stageLabel } from "@/lib/inquiry/stages";
@@ -134,8 +135,8 @@ export default async function PersonaAuditPage({
             >
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <span className="text-xs font-medium text-ink-muted">
-                  {(turn.persona_id ? personaNames.get(turn.persona_id) : undefined) ?? turn.persona_name ?? "擬似メンバー"}
-                  (AI) ・ {new Date(turn.created_at).toLocaleString("ja-JP")}
+                  {withAiLabel((turn.persona_id ? personaNames.get(turn.persona_id) : undefined) ?? turn.persona_name ?? "擬似メンバー")}
+                  ・ {new Date(turn.created_at).toLocaleString("ja-JP")}
                 </span>
                 {turn.flagged_by_teacher && (
                   <span className="shrink-0 rounded-full bg-warn-soft px-2 py-0.5 text-xs font-medium text-warn">

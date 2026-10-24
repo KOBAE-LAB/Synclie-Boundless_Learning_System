@@ -1,5 +1,6 @@
 "use client";
 
+import { withAiLabel } from "@/lib/ai-label";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { toneClass, personaInitial } from "@/lib/persona-tones";
@@ -250,7 +251,7 @@ export function ChatComposer({
                   </span>
                 )}
                 <div className="min-w-0 flex-1">
-                  <p className="persona-name mb-1 text-xs font-semibold">{bubble.name}(AI)</p>
+                  <p className="persona-name mb-1 text-xs font-semibold">{withAiLabel(bubble.name)}</p>
                   <div className="persona-bubble inline-block rounded-lg px-4 py-2 text-left text-sm leading-7 text-ink">
                     <p className="whitespace-pre-wrap">{bubble.text.slice(0, visibleChars)}</p>
                   </div>
