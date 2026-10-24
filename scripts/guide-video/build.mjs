@@ -15,8 +15,10 @@ const list = videos.filter((v) => !only || v.slug === only);
 const logo = "data:image/png;base64," + fs.readFileSync(REPO + "/public/logo.png").toString("base64");
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
 
+// 文の区切り(、。)のあとで折り返し、単語の途中では折り返さない。「\n」は明示の改行
+const phrase = (t) => esc(t).replace(/([、。])(?!$)/g, "$1<wbr>").replace(/\n/g, "<br>");
 function cardHtml(c) {
-  const items = (c.items || []).map((i) => `<li>${esc(i)}</li>`).join("");
+  const items = (c.items || []).map((i) => `<li>${phrase(i)}</li>`).join("");
   return `<!doctype html><meta charset=utf-8><style>
   *{box-sizing:border-box} body{margin:0;width:1280px;height:720px;background:#fff;font-family:"Hiragino Sans","Noto Sans JP",sans-serif;color:#1f1b19;position:relative;overflow:hidden}
   .bar{position:absolute;left:0;top:0;right:0;height:8px;background:#a91b1b}
@@ -24,13 +26,14 @@ function cardHtml(c) {
   .brand img{width:44px;height:44px;border-radius:50%}
   .wrap{position:absolute;left:96px;right:96px;top:150px;bottom:70px;display:flex;flex-direction:column;justify-content:center}
   .kicker{font-size:28px;font-weight:700;color:#a91b1b;margin-bottom:22px;letter-spacing:.04em}
+  h1,.sub,li{word-break:keep-all;overflow-wrap:anywhere;line-break:strict}
   h1{text-wrap:balance;margin:0;font-size:${c.big ? 66 : 58}px;line-height:1.3;font-weight:800}
   .sub{margin-top:26px;font-size:32px;line-height:1.6;color:#4a4340;font-weight:600}
   ul{margin:30px 0 0;padding:0;list-style:none} li{font-size:32px;line-height:1.5;font-weight:600;margin:10px 0;padding-left:30px;position:relative;color:#2c2623}
   li:before{content:"";position:absolute;left:0;top:.62em;width:12px;height:12px;border-radius:50%;background:#a91b1b}
   .foot{position:absolute;right:56px;bottom:30px;font-size:20px;color:#6a625e;font-weight:600}
   </style><div class=bar></div><div class=brand><img src="${logo}">Synclie</div>
-  <div class=wrap><div class=kicker>${esc(c.kicker || "")}</div><h1>${esc(c.title)}</h1>${c.sub ? `<div class=sub>${esc(c.sub)}</div>` : ""}${items ? `<ul>${items}</ul>` : ""}</div>
+  <div class=wrap><div class=kicker>${esc(c.kicker || "")}</div><h1>${phrase(c.title)}</h1>${c.sub ? `<div class=sub>${phrase(c.sub)}</div>` : ""}${items ? `<ul>${items}</ul>` : ""}</div>
   <div class=foot>Synclie - Boundless Learning System</div>`;
 }
 
@@ -56,7 +59,7 @@ async function overlay(page, hl, banner) {
 
 async function shots() {
   const roles = {};
-  const ONLY = process.env.IDS ? process.env.IDS.split(",") : null;
+  const ONLY = process.env.CARDS ? [] : process.env.IDS ? process.env.IDS.split(",") : null;
   for (const v of list) for (const s of v.scenes) if (s.shot && (!ONLY || ONLY.includes(s.id))) (roles[s.shot.role] ||= []).push(s);
   for (const [role, scenes] of Object.entries(roles)) {
     const { browser, page } = await open(role, { width: 985, height: 554 }, 1.3);
@@ -84,7 +87,7 @@ async function shots() {
   const { chromium } = await import("playwright-core");
   const browser = await chromium.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" });
   const page = await (await browser.newContext({ viewport: { width: 1280, height: 720 } })).newPage();
-  for (const v of list) for (const s of v.scenes) if (s.card && (!process.env.IDS || process.env.IDS.split(",").includes(s.id))) { await page.setContent(cardHtml(s.card)); await page.screenshot({ path: SHOTS + s.id + ".png" }); }
+  for (const v of list) for (const s of v.scenes) if (s.card && (!process.env.IDS || process.env.IDS.split(",").includes(s.id))) { await page.setContent(cardHtml(s.card)); await page.evaluate(() => { const h = document.querySelector("h1"); h.style.overflowWrap = "normal"; let size = parseFloat(getComputedStyle(h).fontSize); while (h.scrollWidth > h.clientWidth + 1 && size > 36) { size -= 2; h.style.fontSize = size + "px"; } h.style.overflowWrap = ""; }); await page.screenshot({ path: SHOTS + s.id + ".png" }); }
   await browser.close();
 }
 
