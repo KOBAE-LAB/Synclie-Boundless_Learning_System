@@ -7,7 +7,7 @@ const a = ok(await sb.from("profiles").select("id").eq("email","demo-student@exa
 const b = ok(await sb.from("profiles").select("id").eq("email","demo-student2@example.test").single(),"b");
 const sh = ok(await sb.from("personas").select("id").eq("course_id", COURSE).eq("name","シオリ").single(),"sh");
 const proj = ok(await sb.from("inquiry_projects").select("id").eq("series_id", SERIES).eq("kind","group").single(),"proj");
-for (const s of [a,b]) await sb.from("consent_records").upsert({ student_id: s.id, scope: "data_use", withdrawn_at: null }, { onConflict: "student_id" });
+for (const s of [a,b]) await sb.from("consent_records").upsert({ student_id: s.id, scope: "data_use", withdrawn_at: null }, { onConflict: "student_id,scope" });
 const t0 = Date.now() - 26 * 3600000; // 昨日のうちに始まった議論(時間差)
 const at = (m) => new Date(t0 + m * 60000).toISOString();
 const sess = ok(await sb.from("learning_sessions").insert({ course_id: COURSE, student_id: null, mode: "group", started_at: at(0), project_id: proj.id, course_label: LABEL }).select("id").single(),"sess");

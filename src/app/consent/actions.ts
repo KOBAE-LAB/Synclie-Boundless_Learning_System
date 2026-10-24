@@ -16,7 +16,7 @@ export async function grantConsentAction() {
       granted_at: new Date().toISOString(),
       withdrawn_at: null,
     },
-    { onConflict: "student_id" },
+    { onConflict: "student_id,scope" },
   );
   if (error) {
     throw new Error(`同意の記録に失敗しました: ${error.message}`);

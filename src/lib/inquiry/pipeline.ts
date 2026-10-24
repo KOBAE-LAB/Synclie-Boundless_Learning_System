@@ -8,7 +8,8 @@ import { openai, MODEL_EMBEDDING, MODEL_JUDGE } from "@/lib/ai/openai";
 import { withAiContext } from "@/lib/ai/usage";
 import { extractEpisodes, EPISODE_TYPES } from "@/lib/ai/episode-extraction";
 import { buildLiveStageStory, buildRetrospective } from "@/lib/ai/stage-story";
-import { hasConsent } from "@/lib/consent";
+import { isEligibleLearner } from "./eligibility";
+import { runAnonymizeEpisodes } from "./anonymize-job";
 import { applyTurnCorrections } from "@/lib/records/corrections";
 import { memberAlias } from "@/lib/learn/session-scope";
 import { maskNames } from "./anonymize";
@@ -19,7 +20,7 @@ type AdminClient = ReturnType<typeof createAdminClient>;
 
 export interface JobRow {
   id: string;
-  kind: "extract_session" | "build_stage_story" | "build_retrospective";
+  kind: "extract_session" | "build_stage_story" | "build_retrospective" | "anonymize_episodes";
   project_id: string;
   session_id: string | null;
   stage_key: string | null;
@@ -38,15 +39,12 @@ export async function runJob(admin: AdminClient, job: JobRow): Promise<JobOutcom
       return buildStageStory(admin, job);
     case "build_retrospective":
       return buildRetrospectiveForProject(admin, job);
+    case "anonymize_episodes":
+      return runAnonymizeEpisodes(admin, job);
   }
 }
 
-/** 抽出の対象にしてよい学習者か: 同意していて、管理者のテスト学習者ではない(いまの学習進化型ペルソナと同じ基準)。 */
-export async function isEligibleLearner(admin: AdminClient, studentId: string): Promise<boolean> {
-  const { data: profile } = await admin.from("profiles").select("test_owner_id").eq("id", studentId).maybeSingle();
-  if (!profile || profile.test_owner_id) return false;
-  return hasConsent(admin, studentId);
-}
+export { isEligibleLearner };
 
 interface ProjectRow {
   id: string;

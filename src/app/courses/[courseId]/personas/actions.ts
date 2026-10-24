@@ -323,6 +323,7 @@ async function buildCourseActivityLog(
   const { data: consented } = await admin
     .from("consent_records")
     .select("student_id")
+    .eq("scope", "data_use")
     .is("withdrawn_at", null);
   const consentedIds = new Set((consented ?? []).map((c) => c.student_id));
   // 管理者の動作確認用のテスト学習者(「学習者として表示」)のデータは、実際の学習者由来の

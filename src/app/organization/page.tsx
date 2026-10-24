@@ -1,6 +1,9 @@
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
-import { joinOrCreateOrganizationAction, setApproverAction, decideShareRequestAction } from "./actions";
+import { joinOrCreateOrganizationAction, setApproverAction, decideShareRequestAction, decideScopeRequestAction } from "./actions";
+import { listPendingScopeRequests } from "@/lib/inquiry/share-scope";
+import { SHARE_SCOPE_LABELS } from "@/lib/organizations/scope";
+import { ORG_KIND_LABELS, isOrgKind } from "@/lib/organizations/admin";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 
 // F21: 組織(学校・地域単位)への参加と、組織をまたぐ共有リクエストの承認者設定。
@@ -13,7 +16,8 @@ const ITEM_KIND_LABELS: Record<string, string> = {
   material: "教材(単元の対応表)",
 };
 
-export default async function OrganizationPage() {
+export default async function OrganizationPage({ searchParams }: { searchParams: Promise<{ error?: string; notice?: string }> }) {
+  const { error, notice } = await searchParams;
   const { user } = await requireRole("teacher");
   const admin = createAdminClient();
 
@@ -65,7 +69,7 @@ export default async function OrganizationPage() {
 
   const { data: org } = await admin
     .from("organizations")
-    .select("id, name, approver_teacher_id")
+    .select("id, name, approver_teacher_id, kind, parent_organization_id, verified")
     .eq("id", profile.organization_id)
     .maybeSingle();
 
@@ -82,6 +86,13 @@ export default async function OrganizationPage() {
     "(不明)";
 
   const isApprover = org?.approver_teacher_id === user.id;
+  const { data: parentOrg } = org?.parent_organization_id
+    ? await admin.from("organizations").select("name").eq("id", org.parent_organization_id).maybeSingle()
+    : { data: null };
+  const { data: myNetworkLinks } = await admin.from("organization_network_members").select("network_id").eq("organization_id", profile.organization_id);
+  const myNetworkIds = (myNetworkLinks ?? []).map((n) => n.network_id as string);
+  const { data: myNetworks } = myNetworkIds.length > 0 ? await admin.from("organization_networks").select("name").in("id", myNetworkIds) : { data: [] as { name: string }[] };
+  const pendingScopeRequests = isApprover ? await listPendingScopeRequests(admin, user.id) : [];
 
   let pendingRequests: {
     id: string;
@@ -130,6 +141,28 @@ export default async function OrganizationPage() {
       <p className="mt-1 text-sm text-ink-muted">
         所属組織: <span className="font-medium text-ink">{org?.name}</span>
       </p>
+      <dl className="mt-2 space-y-1 text-sm text-ink-muted">
+        <div>
+          <dt className="inline">種類: </dt>
+          <dd className="inline text-ink">{isOrgKind(org?.kind) ? ORG_KIND_LABELS[org.kind] : "学校"}</dd>
+        </div>
+        <div>
+          <dt className="inline">属する自治体: </dt>
+          <dd className="inline text-ink">{parentOrg?.name ?? "(なし)"}</dd>
+        </div>
+        <div>
+          <dt className="inline">連携グループ: </dt>
+          <dd className="inline text-ink">{(myNetworks ?? []).map((n) => n.name as string).join("、") || "(なし)"}</dd>
+        </div>
+        <div>
+          <dt className="inline">所属の確認: </dt>
+          <dd className={org?.verified ? "inline text-success" : "inline text-warn"}>
+            {org?.verified ? "確認済み" : "未確認(先輩のAIを、同じ学校の外へ出すには、管理者の確認が要ります)"}
+          </dd>
+        </div>
+      </dl>
+      {error && <p className="mt-3 rounded-md border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
+      {notice && <p role="status" className="mt-3 rounded-md border border-success px-3 py-2 text-sm text-success">{notice}</p>}
 
       <div className="mt-6 rounded-lg border border-line p-5">
         <h2 className="text-sm font-medium text-ink">
@@ -175,6 +208,41 @@ export default async function OrganizationPage() {
           ))}
         </ul>
       </div>
+
+      {isApprover && (
+        <div className="mt-8">
+          <h2 className="text-sm font-medium text-ink">先輩のAIを広げる申請(承認待ち {pendingScopeRequests.length}件)</h2>
+          <p className="mt-1 text-xs text-ink-muted">
+            同じ学校の外(同じ自治体・連携グループ)の先生にも使えるようにする申請です。承認の前に、内容に学校名や地名が入っていないか、確かめてください。
+          </p>
+          <ul className="mt-3 space-y-3">
+            {pendingScopeRequests.map((r) => (
+              <li key={r.personaId} className="rounded-md border border-line px-4 py-3 text-sm">
+                <p>
+                  <span className="font-medium text-ink">{r.requesterName ?? "(不明)"}</span> さんの「{r.name}」を、
+                  <span className="font-medium text-ink">
+                    {SHARE_SCOPE_LABELS[r.requested]}{r.networkName ? `(${r.networkName})` : ""}
+                  </span>
+                  に広げる申請です。
+                </p>
+                <div className="mt-2 flex gap-2">
+                  <form action={decideScopeRequestAction.bind(null, r.personaId, "approved")}>
+                    <button type="submit" className="rounded-md bg-accent-fill px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-fill-hover">
+                      承認する
+                    </button>
+                  </form>
+                  <form action={decideScopeRequestAction.bind(null, r.personaId, "declined")}>
+                    <button type="submit" className="rounded-md border border-line px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface">
+                      見送る
+                    </button>
+                  </form>
+                </div>
+              </li>
+            ))}
+            {pendingScopeRequests.length === 0 && <li className="text-sm text-ink-muted">承認待ちの申請はありません。</li>}
+          </ul>
+        </div>
+      )}
 
       {isApprover && (
         <div className="mt-8">

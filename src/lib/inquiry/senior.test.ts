@@ -199,6 +199,71 @@ describe("先輩の記憶(当時モードと振り返りモード)", () => {
   });
 });
 
+describe("他の学校の先輩のAI(公開範囲・他校向けの版)", () => {
+  const rows = [{ id: "t1", body: "軌跡に学校名が入っているかもしれない", version: 1, kind: "live", up_to_stage_key: "analysis" }];
+  it("広い範囲の先輩は、他校向けの版の場面だけを読む。軌跡・段階の物語は使わない", async () => {
+    const admin = fakeAdmin({
+      tables: { inquiry_trajectories: rows, inquiry_stage_stories: [{ id: "s1", body: "段階の物語", kind: "live", version: 1 }] },
+      rpc: { match_inquiry_episodes: [{ episode_id: "e", version_id: "v", stage_key: "analysis", context_header: "h", body: "ぼかした場面", similarity: 0.9 }] },
+    });
+    const memory = await buildSeniorMemory(asAdmin(admin), { projectId: "pr1", mode: "retrospective", juniorStageKey: null, queryEmbedding: [0.1], wide: true });
+    expect(admin.rpcCalls[0].args).toMatchObject({ p_kind: "narrated_cross_org" });
+    expect(memory.retrievals.map((r) => r.kind)).toEqual(["episode"]);
+    expect(memory.text).toContain("ぼかした場面");
+    expect(memory.text).not.toContain("軌跡に学校名");
+    expect(memory.text).not.toContain("段階の物語");
+  });
+  it("同じ学校の先輩は、今までどおり同じ学校向けの版を読む", async () => {
+    const admin = fakeAdmin({ tables: { inquiry_trajectories: rows, inquiry_stage_stories: [] }, rpc: { match_inquiry_episodes: [] } });
+    await buildSeniorMemory(asAdmin(admin), { projectId: "pr1", mode: "retrospective", juniorStageKey: null, queryEmbedding: [0.1] });
+    expect(admin.rpcCalls[0].args).toMatchObject({ p_kind: "narrated" });
+  });
+
+  const crossLoan = { id: "l1", persona_id: "s1", mode: "then", scope: "cross_org", created_by: "lender" };
+  const wideSenior = (over: Record<string, unknown> = {}) => ({
+    id: "s1", name: "先輩A", status: "approved", source_project_id: "pr1", tier: "senior", share_scope: "municipality", organization_id: "owner", created_by: "creator", ...over,
+  });
+  const orgs = [
+    { id: "owner", name: "A校", kind: "school", parent_organization_id: "city", verified: true },
+    { id: "lenderOrg", name: "B校", kind: "school", parent_organization_id: "city", verified: true },
+  ];
+  const base = (loan: Record<string, unknown>, persona: Record<string, unknown>, extra: Record<string, Record<string, unknown>[]> = {}) =>
+    fakeAdmin({
+      sequences: { personas: [[], [persona]] },
+      tables: {
+        persona_loans: [loan],
+        inquiry_projects: [{ id: "pr1", solo_student_id: "u1" }],
+        profiles: [{ test_owner_id: null, organization_id: "lenderOrg" }],
+        organizations: orgs,
+        organization_network_members: [],
+        inquiry_project_members: [],
+        consent_records: [{ granted_at: "2026-10-25T00:00:00Z", withdrawn_at: null }],
+        ...extra,
+      },
+    });
+  it("同じ自治体の他校への貸し出しは、範囲・所属・同意がそろっていれば話し、他校向けの版だけを読む印(wide)が付く", async () => {
+    const members = await loadActiveMembers(asAdmin(base(crossLoan, wideSenior())), "c1");
+    expect(members.map((m) => m.id)).toEqual(["s1"]);
+    expect(members[0].wide).toBe(true);
+  });
+  it("公開範囲が同じ学校に戻されたら、他校への貸し出しは話さなくなる", async () => {
+    expect(await loadActiveMembers(asAdmin(base(crossLoan, wideSenior({ share_scope: "school" }))), "c1")).toEqual([]);
+  });
+  it("学習者が他校で使う同意を撤回したら、話さなくなる", async () => {
+    expect(await loadActiveMembers(asAdmin(base(crossLoan, wideSenior(), { consent_records: [{ granted_at: "2026-10-25T00:00:00Z", withdrawn_at: "2026-10-26T00:00:00Z" }] })), "c1")).toEqual([]);
+  });
+  it("貸し出した先生の学校の所属が確かでなくなったら、話さなくなる", async () => {
+    const unverified = [orgs[0], { ...orgs[1], verified: false }];
+    expect(await loadActiveMembers(asAdmin(base(crossLoan, wideSenior(), { organizations: unverified })), "c1")).toEqual([]);
+  });
+  it("「自分だけ」に戻された先輩は、作った先生以外の貸し出しでは話さない(同じ学校でも)", async () => {
+    const sameSchoolLoan = { id: "l1", persona_id: "s1", mode: "then", scope: "same_school", created_by: "someone-else" };
+    expect(await loadActiveMembers(asAdmin(base(sameSchoolLoan, wideSenior({ share_scope: "private" }))), "c1")).toEqual([]);
+    const creatorLoan = { ...sameSchoolLoan, created_by: "creator" };
+    expect((await loadActiveMembers(asAdmin(base(creatorLoan, wideSenior({ share_scope: "private" }))), "c1")).map((m) => m.id)).toEqual(["s1"]);
+  });
+});
+
 describe("loadActiveMembers(授業回で話す擬似メンバー)", () => {
   it("授業回のペルソナのあとに、承認済みの先輩のAIを並べる。下書きに戻された先輩は話さない", async () => {
     const admin = fakeAdmin({

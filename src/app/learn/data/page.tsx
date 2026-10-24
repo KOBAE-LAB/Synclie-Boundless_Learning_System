@@ -2,7 +2,7 @@ import Link from "next/link";
 import { isConsentCurrent, needsReconsent } from "@/lib/consent";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
-import { withdrawConsentAction, deleteMyDataAction } from "./actions";
+import { withdrawConsentAction, deleteMyDataAction, grantWideConsentAction, withdrawWideConsentAction } from "./actions";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 
 // F16: 同意・データ管理。学習者が自分のデータの状況を確認し、
@@ -16,7 +16,16 @@ export default async function MyDataPage() {
     .from("consent_records")
     .select("granted_at, withdrawn_at")
     .eq("student_id", user.id)
+    .eq("scope", "data_use")
     .maybeSingle();
+
+  const { data: wide } = await admin
+    .from("consent_records")
+    .select("granted_at, withdrawn_at")
+    .eq("student_id", user.id)
+    .eq("scope", "share_wide")
+    .maybeSingle();
+  const wideActive = Boolean(wide && wide.granted_at && !wide.withdrawn_at);
 
   const { count: sessionCount } = await admin
     .from("learning_sessions")
@@ -82,6 +91,44 @@ export default async function MyDataPage() {
           </Link>
         )}
       </div>
+
+      {isActive && (
+        <div className="mt-6 rounded-lg border border-line p-5 text-sm">
+          <h2 className="text-sm font-medium text-ink">他の学校でも使うことへの同意(任意)</h2>
+          <p className="mt-2 text-ink-muted">
+            あなたの探究の記録をもとに、先生が「先輩のAI」をつくります。同意すると、他の学校(同じ自治体など)の後輩も、そのAIと対話できます。
+          </p>
+          <details className="mt-2 text-ink-muted">
+            <summary className="cursor-pointer underline underline-offset-2">くわしく読む</summary>
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              <li>他の学校には、学校名・地名・人の名前などをぼかした、短い語りだけが使われます。</li>
+              <li>先輩のAIは、あなた本人ではなく、記録をもとにしたAIです。</li>
+              <li>同意しなくても、授業や、同じ学校での利用には影響しません。</li>
+              <li>いつでも取り消せます。取り消すと、他の学校では使われなくなります。</li>
+            </ul>
+          </details>
+          <p className="mt-2 text-ink-muted">
+            {wideActive
+              ? `${new Date(wide!.granted_at).toLocaleString("ja-JP")} に同意済みです。`
+              : wide?.withdrawn_at
+                ? `${new Date(wide.withdrawn_at).toLocaleString("ja-JP")} に取り消しました。`
+                : "いまは、同意していません。"}
+          </p>
+          {wideActive ? (
+            <form action={withdrawWideConsentAction} className="mt-3">
+              <button type="submit" className="rounded-md border border-line px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface">
+                他の学校で使うことへの同意を取り消す
+              </button>
+            </form>
+          ) : (
+            <form action={grantWideConsentAction} className="mt-3">
+              <button type="submit" className="rounded-md border border-line px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface">
+                他の学校でも使うことに同意する
+              </button>
+            </form>
+          )}
+        </div>
+      )}
 
       <div className="mt-6 rounded-lg border border-line p-5 text-sm">
         <h2 className="text-sm font-medium text-ink">

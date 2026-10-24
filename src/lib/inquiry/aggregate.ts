@@ -8,7 +8,7 @@ import type { createAdminClient } from "@/lib/supabase/server";
 import { withAiContext } from "@/lib/ai/usage";
 import { draftAggregatePersona } from "@/lib/ai/aggregate-persona";
 import { isEligibleLearner } from "./pipeline";
-import { assertCreator, isAggregateTier, MAX_NICKNAME, normalizeNickname, SeniorRuleError } from "./senior";
+import { assertCreator, isAggregateTier, MAX_NICKNAME, normalizeNickname, pauseCrossOrgLoans, SCOPE_RESET, SeniorRuleError } from "./senior";
 import { aggregateDisplayName, linesToItems, MIN_AGGREGATE_LEARNERS, parseAggregateItems } from "./aggregate-items";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
@@ -209,9 +209,12 @@ export async function updateAggregatePersona(
       profile: { role: input.role.trim().slice(0, 80), tone: input.tone.trim().slice(0, 80) },
       stance: { position: input.position.trim().slice(0, 300), goal: input.goal.trim().slice(0, 300), items: linesToItems(input.itemsText) },
       updated_at: new Date().toISOString(),
+      // 内容を直したら、広い範囲の公開は取り消して、承認をやり直す
+      ...SCOPE_RESET,
     })
     .eq("id", input.personaId);
   if (error) throw new Error(`保存できませんでした: ${error.message}`);
+  await pauseCrossOrgLoans(admin, input.personaId);
 }
 
 /**
@@ -249,7 +252,7 @@ export async function invalidateAggregatesForStudent(admin: AdminClient, student
   if (personaIds.length === 0) return 0;
   const { data: changed, error } = await admin
     .from("personas")
-    .update({ status: "draft", origin_note: "材料にした学習者の記録が削除されたため、下書きに戻しました。内容を確かめて、必要なら作り直してから承認してください。" })
+    .update({ status: "draft", ...SCOPE_RESET, origin_note: "材料にした学習者の記録が削除されたため、下書きに戻しました。内容を確かめて、必要なら作り直してから承認してください。" })
     .in("id", personaIds)
     .eq("tier", "aggregate")
     .eq("status", "approved")

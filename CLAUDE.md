@@ -850,11 +850,13 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
     (参加コード、列デフォルト式で新規作成時に自動生成)と`course_enrollments`
     (course_id+student_idの組、unique制約)を追加。既存の`learning_sessions`から
     参加登録済み扱いのバックフィルも行う(詳細は8章の`learn/`の説明を参照)
+  - `0049_org_scopes.sql` — **先輩のAIの公開範囲**(「他校型」の代わりの設計)。組織の種類・親(自治体)・所属の確認(`organizations.kind/parent_organization_id/verified`)、連携グループ(`organization_networks`/`organization_network_members`)、
+    先輩のAIの公開範囲と広げる申請(`personas.share_scope/share_network_id/scope_request*`)、同意を種類ごとに(`consent_records`を(学習者, 種類)で一意に付け替え)、他校向けの版づくりの処理待ち(`inquiry_jobs.kind`に`anonymize_episodes`)。下の「先輩のAIの公開範囲と組織の階層」を参照
   - `0048_lesson_closed.sql` — 授業回の「終了」(`courses.closed_at`)。下の「授業回の状態(準備中・公開中・終了)」を参照
   - `0047_aggregate_personas.sql` — **集約型ペルソナ**(実装(2c))。`personas.tier`に`aggregate`、`personas.source_series_id`、材料のプロジェクトの対応(`persona_source_projects`、
     プロジェクトが消えると対応も消える)、検索の記録の種類に`aggregate`。下の「集約型ペルソナ」を参照
   - `0046_senior_lesson_axis.sql` — 先輩型の当時モードの時間の絞り込みを、教科・科目学習モードでは授業回の番号で行う(`match_inquiry_episodes`に`p_max_lesson_no`、戻り値に`lesson_no`)
-  - `0045_senior_personas.sql` — **先輩型ペルソナ**(③投射層、実装(2b-1))。`personas.tier`に`senior`/`other_school`、先輩型の出どころ
+  - `0045_senior_personas.sql` — **先輩型ペルソナ**(③投射層、実装(2b-1))。`personas.tier`に`senior`/`other_school`(`other_school`は使わない。他校への貸し出しは、公開範囲と、貸し出しの区分`persona_loans.scope=cross_org`で表す)、先輩型の出どころ
     (`source_project_id`、プロジェクトが消えたらペルソナも消える)・`created_by`・`organization_id`・`nickname`・`source_fiscal_year`、
     ペルソナの版(`persona_versions`、トリガーで内容が変わるたびに積む。`personas.current_version`、`dialogue_turns.persona_version_id`もトリガーで書く)、
     貸し出し(`persona_loans`)、検索の記録(`dialogue_turn_retrievals`)、エピソードの検索関数`match_inquiry_episodes`(service_roleだけ)。
@@ -1089,7 +1091,7 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
 
 ### 先輩型ペルソナ(0045、要件定義書14章の実装(2b-1)、2026-10-22)
 
-要件定義書14章ステップ6の設計のうち、**同じ学校(組織)の先輩型**まで。他校型(組織をまたぐ貸し出しの承認・他校向けの匿名化の版)は(2b-2)。
+要件定義書14章ステップ6の設計のうち、**同じ学校(組織)の先輩型**まで。組織をまたぐ貸し出し(他校)は、「他校型」という別の種類は作らず、**公開範囲**で表す(0049。次の「先輩のAIの公開範囲と組織の階層」を参照)。
 
 - **作る**(`/archive`「先輩の記録」、`src/lib/inquiry/senior.ts`): 教師が、自分の教科・科目の探究プロジェクト(軌跡ができているもの)を選び、
   呼び名を付けると、AIが役割・口調・当時の問い・後輩との関わり方の下書きを作る(`src/lib/ai/senior-persona-draft.ts`、1回の呼び出し)。
@@ -1112,6 +1114,30 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
   (`persona_name`の控えで読める)。グループのメンバーが全データを削除したときは、そのグループから作った承認済みの先輩型を下書きに戻す(`forget.ts`)。
 - **ペルソナの版**: 名前・プロフィール・立場・行動ルールが変わるたびに、DBのトリガーが`persona_versions`に積む(どこから作っても・直しても漏れない)。
   発言には、そのときの版(`persona_version_id`)がトリガーで付く。
+
+### 先輩のAIの公開範囲と組織の階層(0049、2026-10-25)
+
+「他校型」を別の種類として作る代わりに、**組織に種類と階層を持たせ、先輩のAI(先輩型・集約型)ごとに「どこまで見せるか」を選ぶ**設計にした(先生の提案)。
+決まりは`src/lib/organizations/scope.ts`(純粋関数、テストあり)に集める。
+- **組織**(`organizations`): `kind`(学校/自治体/その他の団体)、`parent_organization_id`(学校→自治体の1段だけ)、`verified`(所属が確かな組織。Googleなどのログインのテナントから
+  作られた組織、または管理者が確かめた組織)。**連携グループ**(`organization_networks`)は、学校や自治体をまたぐ任意の集まり(研究会・離島ネットワークなど)。探究の「学習者のグループ」とは別物。
+  管理は管理者だけ(`/admin/organizations`)。自治体・連携グループの作成と、学校の所属・所属の確認は、先生の自己申告ではできない(組織名を入力するだけで入れてしまうため)。
+- **公開範囲**(`personas.share_scope`): `private`(作った先生だけ)/`school`(同じ学校。**既定。今までどおり**)/`municipality`(同じ自治体の学校)/`network`(連携グループの学校)。
+  狭める変更はすぐ有効。**広げる(municipality/network)は申請(`scope_request`)で、持ち主の組織の承認者が`/organization`で承認して、はじめて有効**(`src/lib/inquiry/share-scope.ts`の
+  `requestScopeChange`/`decideScopeRequest`)。広い範囲は、両方の組織が`verified`であること、自治体なら学校が自治体に属していること、連携グループなら両方がそのグループに入っていることが要る。
+  **内容(役割・当時の問い・関わり方・まとめた項目)を直すと、広い範囲の公開は取り消され、承認からやり直し**(学校名・地名が入っていないか確かめ直すため)。
+- **学習者の別の同意**(`consent_records.scope='share_wide'`、`/learn/data`。任意): 「他の学校でも使う先輩のAIの材料にする」ことへの同意。データ利用への同意(`data_use`)をしている学習者だけができ、
+  どちらを取り消しても、その学習者の記録から作った先輩のAIは広い範囲から外れ(同じ学校の範囲に戻る)、他校への貸し出しは止まる(`invalidateWideScopeForStudent`)。
+  **広い範囲で使うには、材料の学習者が全員この同意をしていること**(先輩型=材料のプロジェクトの全員、集約型=同意した学習者が3人以上で、その全員。`wide-consent.ts`の`wideConsentOk`)。
+  **`consent_records`は(学習者, 種類)で1行**になったので、データ利用への同意を読む・書くときは、必ず`scope='data_use'`で絞る(`.eq("scope","data_use")`、upsertは`onConflict:"student_id,scope"`)。
+- **他校向けに特定されにくくした版**: 広い範囲の承認後、先輩型の材料のエピソードに、`narrated_cross_org`の版を作る(`anonymize_episodes`、`src/lib/inquiry/anonymize-job.ts`・`src/lib/ai/episode-anonymize.ts`。
+  学校名・地名・人名・年度・特定できる出来事や数字を一般的な言い方に置き換え、名簿の名前は機械的にも伏せる。AIは1回に最大8場面)。新しいエピソードができたときも、広い範囲の先輩なら自動で作る(`queue.ts`)。
+  **他校では、この版の場面だけを読む**(`buildSeniorMemory`の`wide`)。軌跡と段階の物語は、他校向けの版が無いので使わない。
+- **貸し出し**(`addLoan`の`assertCanLend`): 作った先生はいつでも。同じ学校の先生は、公開範囲が`private`でなければ。他校の先生は、範囲が広く、その範囲に入っていて、同意がそろっているとき。
+  貸し出しの区分は`persona_loans.scope`(同じ学校=`same_school`、他校=`cross_org`)。**授業回で話すときも、毎回、範囲・所属・同意を確かめる**(`members.ts`の`loanGate`。範囲を狭めたり、同意を撤回したら、すぐ話さなくなる)。
+- **集約型**の他校への公開は、まとめた項目だけを使う(他校向けの版づくりは要らない)。ただし、承認の前に、項目に学校名・地名が入っていないかを、先生と承認者が確かめる。
+- **未対応**: 他校の先輩のAIを使うことの、プライバシーポリシー・同意画面の本格的な見直し(任意の別の同意として`/learn/data`に説明を置いただけ。運営者の確認が要る)。組織への自己申告参加
+  (`joinOrCreateOrganizationAction`)が、名前だけで既存の組織に入れる点は、そのまま(同じ学校の範囲の先輩のAIは、今も名前だけで見られる。広い範囲は`verified`の組織だけ)。
 
 ### 集約型ペルソナ(0047、要件定義書14章の実装(2c)、2026-10-23)
 
@@ -1142,7 +1168,7 @@ F24は`argument-evaluation.ts`の`judgeDiscussion()`(`evaluateArgument()`と同�
 一覧は`src/app/guide/videos.json`(`scripts/guide-video/build.mjs`が生成。題名・説明・文字起こしの元)。VPSに負荷をかけない・外部サービスに
 依存しない(学校のネットワークでYouTubeが使えないことがある)ため、動画は自サーバーの静的ファイルにした(合計約11MB、Range配信に対応)。
 **Synclieの読みは「シンクリエ」**(`spec.mjs`の`reading`)。**思考継承機能=「先行学習者の考えを反映したAIペルソナと、後から学ぶ人が時間をこえて協働学習する」こと(シナリオB)。先輩型・集約型のAIで実現し、考え方の道すじも受け渡す。動画では、記録の引き継ぎではなく『先行学習者との協働学習』を軸に説明する(ユーザーの指摘、2026-10-25)。これは
-Synclieの一番の特長**として、④のPR動画と⑤の説明動画で扱う(他校型は未実装なので、動画では「同じ学校の中で使える」と説明している)。
+Synclieの一番の特長**として、④のPR動画と⑤の説明動画で扱う(他校への共有は、公開範囲を広げ、承認者の承認と学習者の別の同意がそろったときだけ。動画でもそう説明している)。
 **動画は、開発DBのデモ用データの画面を撮り、macOS標準の音声(Kyoko)で読み上げた合成音声**。画面の仕様が変わったら、
 `scripts/guide-video/README.md`の手順で台本(`spec.mjs`)を直して撮り直す(先輩型のデモ用データは`seed-senior.mjs`)。
 **読み上げの読み間違いは`spec.mjs`の`reading`で直す**。

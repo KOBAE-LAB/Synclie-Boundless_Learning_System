@@ -17,6 +17,7 @@ export default async function ConsentPage() {
     .from("consent_records")
     .select("granted_at, withdrawn_at")
     .eq("student_id", user.id)
+    .eq("scope", "data_use")
     .maybeSingle();
 
   const isActive = isConsentCurrent(consent);

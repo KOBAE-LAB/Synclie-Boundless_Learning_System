@@ -37,6 +37,7 @@ export async function generateTeacherGuidanceAction(courseId: string) {
       .from("consent_records")
       .select("student_id")
       .in("student_id", stats.map((s) => s.studentId))
+      .eq("scope", "data_use")
       .is("withdrawn_at", null);
     const consented = new Set((consents ?? []).map((c) => c.student_id));
     // 管理者の「学習者として表示」用のテスト学習者は、実在の学習者ではないので含めない。

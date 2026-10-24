@@ -2,7 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/session";
+import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/server";
+import { decideScopeRequest } from "@/lib/inquiry/share-scope";
+import { scheduleJobRun } from "@/lib/inquiry/queue";
+import { SeniorRuleError } from "@/lib/inquiry/senior";
 
 // F21: 組織への参加・作成。SSO(F22)導入前の段階1〜2では、教師が組織名を入力して
 // 自己申告で参加・作成する(既存に同名の組織があれば参加、無ければ新規作成して
@@ -132,4 +136,19 @@ export async function decideShareRequestAction(
   }
 
   revalidatePath("/organization");
+}
+
+// 先輩のAIを、同じ学校の外(同じ自治体・連携グループ)へ広げる申請を、組織の承認者が判断する。
+export async function decideScopeRequestAction(personaId: string, decision: "approved" | "declined") {
+  const { user } = await requireRole("teacher");
+  try {
+    await decideScopeRequest(createAdminClient(), { approverId: user.id, personaId, decision });
+  } catch (e) {
+    if (e instanceof SeniorRuleError) redirect(`/organization?error=${encodeURIComponent(e.message)}`);
+    throw e;
+  }
+  // 承認したら、他の学校向けに特定されにくくした場面を作る(レスポンスのあとに、処理待ちを実行する)
+  if (decision === "approved") scheduleJobRun();
+  revalidatePath("/organization");
+  redirect(`/organization?notice=${encodeURIComponent(decision === "approved" ? "承認しました。他の学校の先生が使えるようになります。" : "見送りました。")}`);
 }

@@ -107,6 +107,15 @@ export default async function CoursesPage({
           </span>
         </Link>
       )}
+      {showAdminLink && (
+        <Link
+          href="/admin/organizations"
+          className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-md border border-line bg-surface px-4 py-3 text-sm hover:bg-surface-raised"
+        >
+          <span className="font-medium text-ink">組織の管理(管理者)</span>
+          <span className="text-ink-muted">学校・自治体・連携グループ →</span>
+        </Link>
+      )}
 
       <form method="get" className="mt-8 flex flex-wrap items-end gap-3">
         <div>

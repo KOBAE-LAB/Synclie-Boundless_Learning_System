@@ -44,6 +44,7 @@ export async function hasConsent(
     .from("consent_records")
     .select("granted_at, withdrawn_at")
     .eq("student_id", studentId)
+    .eq("scope", "data_use")
     .maybeSingle();
 
   return isConsentCurrent(data);

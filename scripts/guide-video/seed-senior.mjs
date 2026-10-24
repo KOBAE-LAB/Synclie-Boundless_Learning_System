@@ -4,7 +4,7 @@ const ok = (r, w) => { if (r.error) { console.error("ERR", w, r.error.message); 
 const LI = "f41b29ab-4280-4ff8-834c-1dfe37bfe7c0";
 const teacher = ok(await sb.from("profiles").select("id,organization_id").eq("email", "demo-teacher@example.test").single(), "teacher");
 const sen = ok(await sb.from("profiles").select("id").eq("email", "demo-senior@example.test").single(), "sen");
-await sb.from("consent_records").upsert({ student_id: sen.id, scope: "data_use", withdrawn_at: null }, { onConflict: "student_id" });
+await sb.from("consent_records").upsert({ student_id: sen.id, scope: "data_use", withdrawn_at: null }, { onConflict: "student_id,scope" });
 const ser = ok(await sb.from("course_series").insert({ owner_teacher_id: teacher.id, title: "総合的な探究 島の未来を考える", subject: "高校1年", kind: "inquiry", fiscal_year: 2025, planned_lessons: 6, archived_at: new Date("2026-03-20").toISOString() }).select("id").single(), "series");
 const proj = ok(await sb.from("inquiry_projects").insert({ series_id: ser.id, owner_teacher_id: teacher.id, kind: "solo", solo_student_id: sen.id, title: "総合的な探究 島の未来を考える", theme: "避難所を、高齢の人にも過ごしやすくするには?", fiscal_year: 2025, series_label: "総合的な探究 島の未来を考える" }).select("id").single(), "proj");
 await sb.from("inquiry_project_members").upsert({ project_id: proj.id, student_id: sen.id });

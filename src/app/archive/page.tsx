@@ -16,7 +16,9 @@ import {
   updateSeniorAction,
   createAggregateDraftAction,
   updateAggregateAction,
+  requestScopeAction,
 } from "./actions";
+import { SHARE_SCOPES, SHARE_SCOPE_LABELS } from "@/lib/organizations/scope";
 
 // 先輩の記録(アーカイブ): 先輩の探究の記録から「先輩のAI」を作り、承認して、同じ学校の授業回で使えるようにする。
 // 使うときは、授業回のペルソナ設定の「先輩の記録から加える」で選ぶ(当時モード/振り返りモード)。
@@ -24,8 +26,8 @@ import {
 const input = "w-full rounded-md border border-line bg-surface-raised px-3 py-1.5 text-sm";
 const small = "rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface disabled:opacity-50";
 
-export default async function ArchivePage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
-  const { error } = await searchParams;
+export default async function ArchivePage({ searchParams }: { searchParams: Promise<{ error?: string; notice?: string }> }) {
+  const { error, notice } = await searchParams;
   const { user } = await requireRole("teacher");
   const admin = createAdminClient();
   const [entries, projects, aggregateSources, { data: avatarRows }] = await Promise.all([
@@ -34,6 +36,14 @@ export default async function ArchivePage({ searchParams }: { searchParams: Prom
     listAggregateSources(admin, user.id),
     admin.from("avatar_options").select("id, label").order("label", { ascending: true }),
   ]);
+  // 自分の学校が入っている連携グループ(広げる先の選択肢)
+  const { data: myProfile } = await admin.from("profiles").select("organization_id").eq("id", user.id).maybeSingle();
+  const myOrgId = (myProfile?.organization_id as string | null) ?? null;
+  const { data: myNetworkLinks } = myOrgId
+    ? await admin.from("organization_network_members").select("network_id").eq("organization_id", myOrgId)
+    : { data: [] as { network_id: string }[] };
+  const networkIds = (myNetworkLinks ?? []).map((n) => n.network_id as string);
+  const { data: networkRows } = networkIds.length > 0 ? await admin.from("organization_networks").select("id, name").in("id", networkIds) : { data: [] as { id: string; name: string }[] };
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
@@ -43,6 +53,7 @@ export default async function ArchivePage({ searchParams }: { searchParams: Prom
         先輩の探究の記録から「先輩のAI」を作り、承認すると、授業回で使えます。
       </p>
       {error && <p className="mt-3 rounded-md border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
+      {notice && <p role="status" className="mt-3 rounded-md border border-success px-3 py-2 text-sm text-success">{notice}</p>}
 
       <section className="mt-8">
         <h2 className="border-b border-line-soft pb-2 text-base font-semibold text-ink">先輩のAI({entries.length})</h2>
@@ -63,6 +74,11 @@ export default async function ArchivePage({ searchParams }: { searchParams: Prom
                   <span className="rounded-full bg-surface px-2 py-0.5 text-xs font-normal text-ink-muted ring-1 ring-line">
                     {e.tier === "aggregate" ? "集約型" : "先輩型"}
                   </span>
+                  {e.crossOrg && (
+                    <span className="rounded-full bg-surface px-2 py-0.5 text-xs font-normal text-ink-muted ring-1 ring-line">
+                      他の学校{e.ownerOrgName ? `(${e.ownerOrgName})` : ""}の先輩
+                    </span>
+                  )}
                 </span>
                 <span className="flex flex-wrap items-center gap-2 text-xs">
                   <span className={e.status === "draft" ? "font-semibold text-warn" : "text-ink-faint"}>
@@ -117,6 +133,48 @@ export default async function ArchivePage({ searchParams }: { searchParams: Prom
                       <SubmitButton pendingText="保存中…" className={small}>変更する</SubmitButton>
                     </form>
                   </details>
+                  <div className="mt-3 rounded-md border border-line-soft p-3">
+                    <p className="text-xs font-medium text-ink">
+                      公開範囲: {SHARE_SCOPE_LABELS[e.shareScope]}
+                      {e.scopeRequest && (
+                        <span className="ml-2 font-normal text-warn">
+                          承認待ち: {SHARE_SCOPE_LABELS[e.scopeRequest]}へ広げる申請(組織の承認者の承認が要ります)
+                        </span>
+                      )}
+                    </p>
+                    <form action={requestScopeAction.bind(null, e.id)} className="mt-2 flex flex-wrap items-end gap-2">
+                      <label className="text-xs text-ink-muted">
+                        <span className="block">変える先</span>
+                        <select name="scope" defaultValue={e.shareScope} className={`${input} mt-1 w-auto`}>
+                          {SHARE_SCOPES.map((sc) => (
+                            <option key={sc} value={sc}>{SHARE_SCOPE_LABELS[sc]}</option>
+                          ))}
+                        </select>
+                      </label>
+                      {(networkRows ?? []).length > 0 && (
+                        <label className="text-xs text-ink-muted">
+                          <span className="block">連携グループ(「連携グループの学校」のとき)</span>
+                          <select name="networkId" defaultValue={e.shareNetworkId ?? ""} className={`${input} mt-1 w-auto`}>
+                            <option value="">(選ばない)</option>
+                            {(networkRows ?? []).map((n) => (
+                              <option key={n.id as string} value={n.id as string}>{n.name as string}</option>
+                            ))}
+                          </select>
+                        </label>
+                      )}
+                      <SubmitButton pendingText="送信中…" className={small}>変更する・申請する</SubmitButton>
+                    </form>
+                    <details className="mt-2">
+                      <summary className="cursor-pointer text-xs text-ink-muted">広い範囲に出すときの決まり</summary>
+                      <ul className="mt-1 list-disc space-y-1 pl-5 text-xs text-ink-muted">
+                        <li>自分の学校が、所属を確かめた組織で、自治体や連携グループに入っていること。</li>
+                        <li>組織の承認者が承認すること。</li>
+                        <li>材料の学習者の全員が、「他の学校でも使う」ことに同意していること。</li>
+                        <li>役割・当時の問い・関わり方に、学校名や地名が入っていないか確認すること。直すと、承認からやり直しになります。</li>
+                        <li>他の学校には、学校名・地名などをぼかした場面だけが使われます。</li>
+                      </ul>
+                    </details>
+                  </div>
                   <details className="mt-3">
                     <summary className="cursor-pointer text-xs text-ink-muted">内容を確認・修正する</summary>
                     <form action={(e.tier === "aggregate" ? updateAggregateAction : updateSeniorAction).bind(null, e.id)} className="mt-2 space-y-2">

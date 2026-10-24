@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { forgetStudentInGroups } from "@/lib/inquiry/forget";
 import { invalidateAggregatesForStudent } from "@/lib/inquiry/aggregate";
+import { invalidateWideScopeForStudent, WIDE_CONSENT_SCOPE } from "@/lib/inquiry/wide-consent";
+import { hasConsent } from "@/lib/consent";
 import { scheduleJobRun } from "@/lib/inquiry/queue";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -20,7 +22,39 @@ export async function withdrawConsentAction() {
   if (error) {
     throw new Error(`同意の撤回に失敗しました: ${error.message}`);
   }
+  // データの利用を止めたら、他の学校で使う先輩のAIの材料からも外す
+  await invalidateWideScopeForStudent(admin, user.id);
 
+  revalidatePath("/learn/data");
+}
+
+// 他の学校で使う先輩のAIの材料にすることへの、別の同意(任意)。データ利用への同意をしている学習者だけが、できる。
+export async function grantWideConsentAction() {
+  const { user } = await requireRole("student");
+  const admin = createAdminClient();
+  if (!(await hasConsent(admin, user.id))) {
+    throw new Error("先に、データの利用に同意してください。");
+  }
+  const { error } = await admin.from("consent_records").upsert(
+    { student_id: user.id, scope: WIDE_CONSENT_SCOPE, granted_at: new Date().toISOString(), withdrawn_at: null },
+    { onConflict: "student_id,scope" },
+  );
+  if (error) throw new Error(`同意の記録に失敗しました: ${error.message}`);
+  revalidatePath("/learn/data");
+}
+
+// 他の学校で使うことへの同意を取り消す。同意は取り消しても、同じ学校での利用(データの利用への同意)は変わらない。
+// この学習者の記録から作った先輩のAIは、広い範囲から外れ、他の学校への貸し出しは止まる。
+export async function withdrawWideConsentAction() {
+  const { user } = await requireRole("student");
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from("consent_records")
+    .update({ withdrawn_at: new Date().toISOString() })
+    .eq("student_id", user.id)
+    .eq("scope", WIDE_CONSENT_SCOPE);
+  if (error) throw new Error(`同意の撤回に失敗しました: ${error.message}`);
+  await invalidateWideScopeForStudent(admin, user.id);
   revalidatePath("/learn/data");
 }
 

@@ -51,7 +51,10 @@ export async function SeniorLoansSection({
         {loans.map((l) => (
           <li key={l.loanId} className="rounded-md border border-line p-3 text-sm">
             <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-              <span className="font-medium text-ink">{l.name}</span>
+              <span className="font-medium text-ink">
+                {l.name}
+                {l.scope === "cross_org" && <span className="ml-2 rounded-full bg-surface px-2 py-0.5 text-xs font-normal text-ink-muted ring-1 ring-line">他の学校の先輩</span>}
+              </span>
               <span className={`text-xs ${l.status === "active" && l.personaStatus === "approved" ? "text-success" : "text-warn"}`}>
                 {l.personaStatus !== "approved" ? "下書きに戻されたため、話しません" : l.status === "active" ? "使用中" : "休止中"}
               </span>
@@ -88,7 +91,7 @@ export async function SeniorLoansSection({
               {candidates.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.tier === "aggregate" ? "【集約型】" : "【先輩型】"}
-                  {c.name}({c.role})
+                  {c.name}({c.role}){c.crossOrg ? `・他の学校${c.ownerOrgName ? `: ${c.ownerOrgName}` : ""}` : ""}
                 </option>
               ))}
             </select>

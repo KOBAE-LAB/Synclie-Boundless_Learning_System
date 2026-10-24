@@ -14,14 +14,16 @@ const redirectMock = vi.mocked(redirect);
 
 type FakeAdmin = Parameters<typeof requireConsent>[0];
 
-// admin.from("consent_records").select(...).eq("student_id", ...).maybeSingle() だけを叩く、
+// admin.from("consent_records").select(...).eq("student_id", ...).eq("scope", "data_use").maybeSingle() だけを叩く、
 // このチェック用の最小限の偽クライアント。
 function fakeAdmin(result: { data: unknown; error: unknown }): FakeAdmin {
   return {
     from: () => ({
       select: () => ({
         eq: () => ({
-          maybeSingle: async () => result,
+          eq: () => ({
+            maybeSingle: async () => result,
+          }),
         }),
       }),
     }),

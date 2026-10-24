@@ -7,7 +7,7 @@ const stu = ok(await sb.from("profiles").select("id,owner:id").eq("email", "demo
 const teacher = ok(await sb.from("profiles").select("id").eq("email", "demo-teacher@example.test").single(), "teacher");
 const personas = ok(await sb.from("personas").select("id,name").eq("course_id", COURSE), "personas");
 const P = Object.fromEntries(personas.map(p => [p.name, p.id]));
-ok(await sb.from("consent_records").upsert({ student_id: stu.id, scope: "data_use", withdrawn_at: null }, { onConflict: "student_id" }), "consent");
+ok(await sb.from("consent_records").upsert({ student_id: stu.id, scope: "data_use", withdrawn_at: null }, { onConflict: "student_id,scope" }), "consent");
 let proj = (await sb.from("inquiry_projects").select("id").eq("series_id", SERIES).eq("solo_student_id", stu.id).maybeSingle()).data;
 if (!proj) proj = ok(await sb.from("inquiry_projects").insert({ series_id: SERIES, owner_teacher_id: teacher.id, kind: "solo", solo_student_id: stu.id, title: "理科 光合成のしくみ", fiscal_year: 2026, series_label: "理科 光合成のしくみ" }).select("id").single(), "proj");
 await sb.from("inquiry_project_members").upsert({ project_id: proj.id, student_id: stu.id });

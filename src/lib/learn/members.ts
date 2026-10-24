@@ -8,6 +8,9 @@ import { buildAggregateMemoryText, itemsForLesson, parseAggregateItems } from "@
 import type { SeniorMode } from "@/lib/inquiry/senior";
 import { buildSeniorMemory, type SeniorMemory } from "@/lib/inquiry/senior-memory";
 import { embedQuery, searchMaterialChunks, searchMaterialChunksByEmbedding } from "@/lib/rag/search";
+import { loadOrgInfos, loadViewer } from "@/lib/organizations/context";
+import { canSeeScoped, isShareScope, isWideScope, type ShareScope } from "@/lib/organizations/scope";
+import { wideConsentOk } from "@/lib/inquiry/wide-consent";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -27,9 +30,11 @@ export interface LessonMember {
   /** 先輩型の材料のプロジェクトと、この授業回での使い方(貸し出し) */
   sourceProjectId?: string | null;
   loan?: { id: string; mode: SeniorMode } | null;
+  /** 他の学校の先輩のAI(広い範囲の公開・他校への貸し出し): 他校向けに特定されにくくした版の記録だけを読む */
+  wide?: boolean;
 }
 
-const COLUMNS = "id, name, profile, stance, behavior_rules, tier, source_project_id, status";
+const COLUMNS = "id, name, profile, stance, behavior_rules, tier, source_project_id, status, share_scope, share_network_id, organization_id, created_by";
 
 /**
  * いま話す擬似メンバー。授業回のペルソナ(作成順)のあとに、先輩型(貸し出した順)。
@@ -39,7 +44,7 @@ const COLUMNS = "id, name, profile, stance, behavior_rules, tier, source_project
 export async function loadActiveMembers(admin: AdminClient, courseId: string): Promise<LessonMember[]> {
   const [{ data: own }, { data: loans }] = await Promise.all([
     admin.from("personas").select(COLUMNS).eq("course_id", courseId).eq("status", "active").order("created_at", { ascending: true }),
-    admin.from("persona_loans").select("id, persona_id, mode, created_at").eq("course_id", courseId).eq("status", "active").order("created_at", { ascending: true }),
+    admin.from("persona_loans").select("id, persona_id, mode, scope, created_by, created_at").eq("course_id", courseId).eq("status", "active").order("created_at", { ascending: true }),
   ]);
   const members: LessonMember[] = (own ?? []).map((p) => ({ ...(p as LessonMember), sourceProjectId: null, loan: null }));
   const loanIds = (loans ?? []).map((l) => l.persona_id as string);
@@ -56,10 +61,13 @@ export async function loadActiveMembers(admin: AdminClient, courseId: string): P
 
   for (const loan of loans ?? []) {
     const p = byId.get(loan.persona_id as string);
+    // 公開範囲(0049): 「自分だけ」に戻された先輩のAIは作った先生以外の授業回では話さない。他校への貸し出しは、範囲・所属・同意が今も満たされている間だけ。
+    const gate = p ? await loanGate(admin, p, loan) : { ok: false, wide: false };
+    if (!gate.ok) continue;
     // 集約型(0047): 材料は複数のプロジェクト。同意している学習者が MIN 人以上いるときだけ話す。
     if (p && p.tier === "aggregate") {
       if (p.status === "approved" && (await aggregateStillSpeaks(admin, p.id as string))) {
-        members.push({ ...(p as LessonMember), sourceProjectId: null, loan: { id: loan.id as string, mode: loan.mode as SeniorMode } });
+        members.push({ ...(p as LessonMember), sourceProjectId: null, loan: { id: loan.id as string, mode: loan.mode as SeniorMode }, wide: gate.wide });
       }
       continue;
     }
@@ -70,9 +78,38 @@ export async function loadActiveMembers(admin: AdminClient, courseId: string): P
       ...(p as LessonMember),
       sourceProjectId: p.source_project_id as string,
       loan: { id: loan.id as string, mode: loan.mode as SeniorMode },
+      wide: gate.wide,
     });
   }
   return members;
+}
+
+/**
+ * 貸し出しが、いま話してよいか(公開範囲の決まり)。同じ学校の貸し出しは、公開範囲が「自分だけ」に戻されていなければ。
+ * 他の学校への貸し出し(scope=cross_org)は、公開範囲が広く、貸し出した先生がその範囲に入っていて、材料の学習者全員が
+ * 他の学校で使うことに同意している間だけ。wide=true は、他校向けの版だけを読む印。
+ */
+async function loanGate(
+  admin: AdminClient,
+  p: Record<string, unknown>,
+  loan: Record<string, unknown>,
+): Promise<{ ok: boolean; wide: boolean }> {
+  const scope: ShareScope = isShareScope(p.share_scope) ? p.share_scope : "school";
+  const lender = (loan.created_by as string | null | undefined) ?? null;
+  if (loan.scope !== "cross_org") {
+    if (scope === "private" && lender && p.created_by && lender !== p.created_by) return { ok: false, wide: false };
+    return { ok: true, wide: false };
+  }
+  if (!isWideScope(scope) || !lender) return { ok: false, wide: false };
+  const [viewer, infos] = await Promise.all([loadViewer(admin, lender), loadOrgInfos(admin, [p.organization_id as string | null])]);
+  const owner = p.organization_id ? (infos.get(p.organization_id as string) ?? null) : null;
+  const inRange = canSeeScoped(
+    { createdBy: (p.created_by as string | null) ?? null, ownerOrg: owner, shareScope: scope, shareNetworkId: (p.share_network_id as string | null) ?? null },
+    viewer,
+  );
+  if (!inRange) return { ok: false, wide: false };
+  const consent = await wideConsentOk(admin, { id: p.id as string, tier: p.tier as string, source_project_id: p.source_project_id as string | null });
+  return { ok: consent, wide: true };
 }
 
 /** 先輩型がいるときの教材の検索件数(先輩の記録が入る分、教材を5件から3件に減らす。要件定義書14章ステップ6の費用)。 */
@@ -126,6 +163,7 @@ export async function retrieveForTurn(
         timeAxis,
         juniorLessonNo,
         queryEmbedding: embedding,
+        wide: s.wide === true,
       });
       memories.set(s.id, { memory, mode: s.loan!.mode });
     }),

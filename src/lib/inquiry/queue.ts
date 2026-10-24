@@ -1,6 +1,7 @@
 // ②抽出層の処理待ち(inquiry_jobs、要件定義書14章ステップ5)。
 // きっかけ(議論の終了・段階の切り替え・教科・科目のアーカイブ)で仕事を積み、そのリクエストの after() で実行する。
 // 常駐のバッチやcronは作らない。失敗したもの・上限で後回しにしたものは、教師ダッシュボードの「やり直す」で再実行する。
+import { projectHasWideScope } from "./anonymize-job";
 import { after } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { runJob, type JobRow } from "./pipeline";
@@ -12,6 +13,7 @@ export const PROMPT_VERSIONS = {
   extract_session: "episodes-v1",
   build_stage_story: "stage-story-v1",
   build_retrospective: "retrospective-v1",
+  anonymize_episodes: "cross-org-v1",
 } as const;
 
 export type JobKind = keyof typeof PROMPT_VERSIONS;
@@ -72,6 +74,7 @@ export async function runPendingJobs(admin: AdminClient, filter: { projectId?: s
   if (filter.projectId) query = query.eq("project_id", filter.projectId);
   const { data: jobs } = await query.order("created_at", { ascending: true }).limit(filter.limit ?? 50);
 
+  let followUps = 0;
   for (const job of (jobs ?? []) as JobRow[]) {
     // 上限を超えたら、残りは後回しにする(学習者の対話そのものは止めない)。
     if (await isOverMonthlyBudget(admin)) {
@@ -91,6 +94,11 @@ export async function runPendingJobs(admin: AdminClient, filter: { projectId?: s
     try {
       const status = await runJob(admin, job);
       await admin.from("inquiry_jobs").update({ status, error: null, updated_at: new Date().toISOString() }).eq("id", job.id);
+      // 広い範囲に公開している先輩のAIの材料に、新しいエピソードができたら、他校向けの版も作る
+      if (job.kind === "extract_session" && status === "done" && (await projectHasWideScope(admin, job.project_id))) {
+        await enqueueJob(admin, { kind: "anonymize_episodes", projectId: job.project_id, round: job.id });
+        followUps += 1;
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       await admin
@@ -99,6 +107,7 @@ export async function runPendingJobs(admin: AdminClient, filter: { projectId?: s
         .eq("id", job.id);
     }
   }
+  if (followUps > 0) await runPendingJobs(admin, { ...filter, limit: followUps + 5 });
 }
 
 /** 失敗・後回しにした仕事を、もう一度処理待ちに戻す(教師ダッシュボードの「やり直す」)。 */

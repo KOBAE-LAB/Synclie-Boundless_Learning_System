@@ -9,6 +9,9 @@ import { withAiContext } from "@/lib/ai/usage";
 import { draftSeniorPersona } from "@/lib/ai/senior-persona-draft";
 import { recommendPersonaAvatar, type AvatarOption } from "@/lib/ai/persona-avatar";
 import { isEligibleLearner } from "./pipeline";
+import { loadOrgInfos } from "@/lib/organizations/context";
+import { canSeeScoped, isWideScope, isShareScope, loanScopeFor, type ShareScope } from "@/lib/organizations/scope";
+import { wideConsentOk } from "./wide-consent";
 import { itemsToLines, parseAggregateItems } from "./aggregate-items";
 import { stageLabel } from "./stages";
 
@@ -60,6 +63,10 @@ interface ArchivedPersona {
   course_id: string | null;
   created_by: string | null;
   organization_id: string | null;
+  /** 公開範囲(0049)。無ければ「同じ学校」(今までどおり) */
+  share_scope?: string | null;
+  share_network_id?: string | null;
+  source_project_id?: string | null;
 }
 
 /** この先生が、このアーカイブのペルソナを見て使えるか: 作った本人か、同じ組織(学校)の先生。 */
@@ -68,10 +75,23 @@ export function canUseArchived(persona: Pick<ArchivedPersona, "created_by" | "or
   return Boolean(persona.organization_id && teacherOrgId && persona.organization_id === teacherOrgId);
 }
 
+/** 広い範囲の公開を取り消して、同じ学校の範囲に戻す(申請中のものも取り下げる)。 */
+export const SCOPE_RESET = { share_scope: "school", share_network_id: null, scope_request: null, scope_request_network_id: null, scope_requested_at: null } as const;
+
+async function hasScopeRequest(admin: AdminClient, personaId: string): Promise<boolean> {
+  const { data } = await admin.from("personas").select("scope_request").eq("id", personaId).maybeSingle();
+  return Boolean(data?.scope_request);
+}
+
+/** 他の学校への貸し出しを止める(行は残す)。 */
+export async function pauseCrossOrgLoans(admin: AdminClient, personaId: string) {
+  await admin.from("persona_loans").update({ status: "paused" }).eq("persona_id", personaId).eq("scope", "cross_org");
+}
+
 async function loadArchived(admin: AdminClient, personaId: string): Promise<ArchivedPersona> {
   const { data } = await admin
     .from("personas")
-    .select("id, tier, status, course_id, created_by, organization_id")
+    .select("id, tier, status, course_id, created_by, organization_id, share_scope, share_network_id, source_project_id")
     .eq("id", personaId)
     .maybeSingle();
   if (!data || !isArchiveTier(data.tier as string) || data.course_id) throw new SeniorRuleError("先輩のペルソナが見つかりません。");
@@ -215,20 +235,48 @@ export interface ArchiveEntry {
   /** 集約型だけ: まとめた項目(編集用の文字。1行に1項目)と、材料の教科・科目名 */
   itemsText: string;
   sourceSeriesTitle: string | null;
+  /** 公開範囲と、広げる申請(承認待ち)。他の学校の先輩のAIは crossOrg=true で、持ち主の組織名を出す */
+  shareScope: ShareScope;
+  shareNetworkId: string | null;
+  scopeRequest: ShareScope | null;
+  scopeRequestNetworkId: string | null;
+  crossOrg: boolean;
+  ownerOrgName: string | null;
 }
 
-/** この先生が見られる先輩型(自分で作ったもの+同じ学校の先生が作って承認したもの)。 */
+/** この先生が見られる先輩型(自分で作ったもの+公開範囲に入っている、承認済みのもの)。 */
 export async function listArchive(admin: AdminClient, teacherId: string): Promise<ArchiveEntry[]> {
   const orgId = await teacherOrg(admin, teacherId);
   const { data } = await admin
     .from("personas")
-    .select("id, name, nickname, status, profile, stance, created_by, organization_id, source_project_id, source_series_id, origin_note, tier, course_id, created_at, avatar_id")
+    .select("id, name, nickname, status, profile, stance, created_by, organization_id, source_project_id, source_series_id, origin_note, tier, course_id, created_at, avatar_id, share_scope, share_network_id, scope_request, scope_request_network_id")
     .is("course_id", null)
     .in("tier", ["senior", "other_school", "aggregate"])
     .order("created_at", { ascending: false });
-  const visible = (data ?? []).filter(
-    (p) => canUseArchived(p as ArchivedPersona, teacherId, orgId) && (p.created_by === teacherId || p.status === "approved"),
-  );
+  const orgInfos = await loadOrgInfos(admin, [orgId, ...(data ?? []).map((p) => p.organization_id as string | null)]);
+  const mineOrg = orgId ? (orgInfos.get(orgId) ?? null) : null;
+  const scopeOf = (p: { share_scope?: unknown }): ShareScope => (isShareScope(p.share_scope) ? p.share_scope : "school");
+  const visible: NonNullable<typeof data> = [];
+  for (const p of data ?? []) {
+    if (p.created_by !== teacherId && p.status !== "approved") continue;
+    const sameOrg = Boolean(p.organization_id && orgId && p.organization_id === orgId);
+    // 組織情報が読めない(組織の行が無い)ときは、これまでどおり「同じ組織のID」だけで判断する
+    const allowed = sameOrg
+      ? p.created_by === teacherId || scopeOf(p) !== "private"
+      : canSeeScoped(
+          {
+            createdBy: p.created_by as string | null,
+            ownerOrg: p.organization_id ? (orgInfos.get(p.organization_id as string) ?? null) : null,
+            shareScope: scopeOf(p),
+            shareNetworkId: (p.share_network_id as string | null) ?? null,
+          },
+          { teacherId, org: mineOrg },
+        );
+    if (!allowed) continue;
+    // 他の学校の先輩のAIは、材料の学習者の同意が足りている間だけ出す
+    if (!sameOrg && p.created_by !== teacherId && !(await wideConsentOk(admin, { id: p.id as string, tier: p.tier as string, source_project_id: p.source_project_id as string | null }))) continue;
+    visible.push(p);
+  }
   const projectIds = [...new Set(visible.map((p) => p.source_project_id as string).filter(Boolean))];
   const { data: projects } =
     projectIds.length > 0 ? await admin.from("inquiry_projects").select("id, title").in("id", projectIds) : { data: [] };
@@ -257,6 +305,12 @@ export async function listArchive(admin: AdminClient, teacherId: string): Promis
     avatarPath: p.avatar_id ? (pathOf.get(p.avatar_id as string) ?? null) : null,
     itemsText: p.tier === "aggregate" ? itemsToLines(parseAggregateItems(p.stance)) : "",
     sourceSeriesTitle: p.created_by === teacherId && p.source_series_id ? (seriesTitleOf.get(p.source_series_id as string) ?? null) : null,
+    shareScope: scopeOf(p),
+    shareNetworkId: (p.share_network_id as string | null) ?? null,
+    scopeRequest: isShareScope(p.scope_request) ? p.scope_request : null,
+    scopeRequestNetworkId: (p.scope_request_network_id as string | null) ?? null,
+    crossOrg: Boolean(p.organization_id && orgId && p.organization_id !== orgId) || Boolean(p.organization_id && !orgId),
+    ownerOrgName: p.organization_id ? (orgInfos.get(p.organization_id as string)?.name ?? null) : null,
   }));
 }
 
@@ -278,9 +332,12 @@ export async function updateSeniorPersona(
       profile: { role: input.role.trim().slice(0, 80), tone: input.tone.trim().slice(0, 80) },
       stance: { position: input.position.trim().slice(0, 300), goal: input.goal.trim().slice(0, 300) },
       updated_at: new Date().toISOString(),
+      // 内容を直したら、広い範囲の公開は取り消す(学校名・地名などが入っていないか、もう一度確かめて、承認をやり直すため)
+      ...(isWideScope(archived.share_scope) || (await hasScopeRequest(admin, input.personaId)) ? SCOPE_RESET : {}),
     })
     .eq("id", input.personaId);
   if (error) throw new Error(`保存できませんでした: ${error.message}`);
+  if (isWideScope(archived.share_scope)) await pauseCrossOrgLoans(admin, input.personaId);
 }
 
 /** 先輩型のアバターを選ぶ(作った先生だけ)。候補は全授業共通のアバター候補(avatar_options)。 */
@@ -342,15 +399,38 @@ export async function deleteSeniorPersona(admin: AdminClient, input: { teacherId
 // 貸し出し(授業回で使う)
 // ---------------------------------------------------------------------------
 
+/**
+ * この先生が、この先輩のAIを授業回に貸し出してよいか。作った先生はいつでも。同じ学校の先生は、公開範囲が「自分だけ」でなければ。
+ * ほかの学校の先生は、公開範囲が広く(同じ自治体・連携グループ)、その範囲に入っていて、材料の学習者全員が別の同意をしているときだけ。
+ */
+export async function assertCanLend(admin: AdminClient, persona: ArchivedPersona, teacherId: string, lenderOrgId: string | null) {
+  if (persona.created_by === teacherId) return;
+  const scope: ShareScope = isShareScope(persona.share_scope) ? persona.share_scope : "school";
+  if (scope === "private") throw new SeniorRuleError("この先輩のペルソナは、作った先生だけが使えます。");
+  const sameOrg = Boolean(persona.organization_id && lenderOrgId && persona.organization_id === lenderOrgId);
+  if (sameOrg) return;
+  if (!isWideScope(scope)) throw new SeniorRuleError("この先輩のペルソナは、同じ学校の先生だけが使えます。");
+  const infos = await loadOrgInfos(admin, [persona.organization_id, lenderOrgId]);
+  const owner = persona.organization_id ? (infos.get(persona.organization_id) ?? null) : null;
+  const mine = lenderOrgId ? (infos.get(lenderOrgId) ?? null) : null;
+  const allowed = canSeeScoped(
+    { createdBy: persona.created_by, ownerOrg: owner, shareScope: scope, shareNetworkId: persona.share_network_id ?? null },
+    { teacherId, org: mine },
+  );
+  if (!allowed) throw new SeniorRuleError("この先輩のペルソナは、公開されている範囲の学校の先生だけが使えます。");
+  if (!(await wideConsentOk(admin, persona as { id: string; tier: string; source_project_id?: string | null }))) {
+    throw new SeniorRuleError("この先輩のペルソナは、材料の学習者の同意が足りないため、他の学校では使えません。");
+  }
+}
+
 export async function addLoan(
   admin: AdminClient,
   input: { teacherId: string; courseId: string; personaId: string; mode: SeniorMode },
 ) {
   await assertOwnsCourse(admin, input.courseId, input.teacherId);
   const persona = await loadArchived(admin, input.personaId);
-  if (!canUseArchived(persona, input.teacherId, await teacherOrg(admin, input.teacherId))) {
-    throw new SeniorRuleError("この先輩のペルソナは、同じ学校の先生だけが使えます。");
-  }
+  const lenderOrgId = await teacherOrg(admin, input.teacherId);
+  await assertCanLend(admin, persona, input.teacherId, lenderOrgId);
   if (persona.status !== "approved") throw new SeniorRuleError("承認済みの先輩のペルソナだけを使えます。");
   const { count } = await admin.from("persona_loans").select("id", { count: "exact", head: true }).eq("course_id", input.courseId);
   if ((count ?? 0) >= MAX_LOANS_PER_LESSON) {
@@ -360,7 +440,7 @@ export async function addLoan(
     persona_id: input.personaId,
     course_id: input.courseId,
     mode: input.mode,
-    scope: "same_school",
+    scope: loanScopeFor(persona.organization_id, lenderOrgId),
     status: "active",
     created_by: input.teacherId,
     approved_by: input.teacherId,
@@ -403,12 +483,14 @@ export interface LessonLoan {
   status: string;
   personaStatus: string;
   tier: string;
+  /** same_school / cross_org(他の学校の先輩) */
+  scope: string;
 }
 
 export async function listLessonLoans(admin: AdminClient, courseId: string): Promise<LessonLoan[]> {
   const { data: loans } = await admin
     .from("persona_loans")
-    .select("id, persona_id, mode, status, created_at")
+    .select("id, persona_id, mode, status, scope, created_at")
     .eq("course_id", courseId)
     .order("created_at", { ascending: true });
   const ids = (loans ?? []).map((l) => l.persona_id as string);
@@ -425,5 +507,6 @@ export async function listLessonLoans(admin: AdminClient, courseId: string): Pro
       status: l.status as string,
       personaStatus: byId.get(l.persona_id as string)!.status as string,
       tier: byId.get(l.persona_id as string)!.tier as string,
+      scope: (l.scope as string | null) ?? "same_school",
     }));
 }
