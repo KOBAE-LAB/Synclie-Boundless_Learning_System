@@ -17,7 +17,7 @@ export function PrVideo({ className = "" }: { className?: string }) {
         aria-label={`システムの機能PR動画(約${minutes}分)`}
       >
         <source src="/guide/feature-pr.mp4" type="video/mp4" />
-        <track kind="captions" src="/guide/feature-pr.ja.vtt" srcLang="ja" label="日本語" default />
+        <track kind="captions" src="/guide/feature-pr.ja.vtt" srcLang="ja" label="日本語" />
         お使いのブラウザは動画に対応していません。
       </video>
       <figcaption className="mt-1 text-xs text-ink-muted">
@@ -25,6 +25,13 @@ export function PrVideo({ className = "" }: { className?: string }) {
         <Link href="/guide#feature-pr" className="underline underline-offset-2">
           文字起こしを読む
         </Link>
+        <span className="ml-2">
+          音声: Open JTalk「Mei」(
+          <Link href="/guide#credit" className="underline underline-offset-2">
+            CC BY 3.0
+          </Link>
+          )
+        </span>
       </figcaption>
     </figure>
   );

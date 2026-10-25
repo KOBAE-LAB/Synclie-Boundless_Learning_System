@@ -19,7 +19,7 @@ export default function GuidePage() {
     <div className="mx-auto max-w-3xl px-6 py-12">
       <h1 className="text-2xl font-semibold text-ink">使い方ガイド(動画)</h1>
       <p className="mt-2 text-sm text-ink-muted">
-        字幕と文字起こしつきです。画面はデモ用のデータ、音声は読み上げです。
+        字幕(映像に表示)と文字起こしつきです。画面はデモ用のデータ、音声は読み上げです。
       </p>
       <ul className="mt-4 flex flex-wrap gap-x-5 gap-y-1 text-sm">
         {videos.map((v, i) => (
@@ -47,7 +47,7 @@ export default function GuidePage() {
               poster={`/guide/${v.slug}.jpg`}
             >
               <source src={`/guide/${v.slug}.mp4`} type="video/mp4" />
-              <track kind="captions" src={`/guide/${v.slug}.ja.vtt`} srcLang="ja" label="日本語" default />
+              <track kind="captions" src={`/guide/${v.slug}.ja.vtt`} srcLang="ja" label="日本語" />
               お使いのブラウザは動画に対応していません。
             </video>
             <details className="mt-3 rounded-md border border-line px-4 py-3">
@@ -64,6 +64,10 @@ export default function GuidePage() {
           </section>
         ))}
       </div>
+
+      <p id="credit" className="mt-10 text-xs text-ink-muted">
+        音声: Open JTalk(名古屋工業大学)、音声モデル「Mei」(MMDAgent、CC BY 3.0)
+      </p>
 
       <nav className="mt-12 flex flex-wrap gap-x-4 gap-y-2 border-t border-line-soft pt-6 text-sm text-ink-muted">
         <Link href="/" className="underline underline-offset-2">

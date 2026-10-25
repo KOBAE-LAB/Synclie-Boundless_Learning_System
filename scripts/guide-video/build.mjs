@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import path from "node:path";
 import { execFileSync } from "node:child_process";
 import crypto from "node:crypto";
 import { open, hideDevBadge, BASE } from "./lib.mjs";
@@ -91,41 +92,118 @@ async function shots() {
   await browser.close();
 }
 
-const ttsText = (t) => { let o = t; for (const [k, v] of Object.entries(reading).sort((a, b) => b[0].length - a[0].length)) o = o.split(k).join(v); return o; };
+// 読み上げ: Open JTalk(名古屋工業大学)の音声モデル「Mei」(MMDAgent、CC BY 3.0)。Concept Design Note の動画と同じ声・同じ設定。
+//   Homebrew の open-jtalk(brew install open-jtalk)に、辞書と Mei が入っている。置き場所は環境変数で変えられる。
+const JT_PREFIX = process.env.GUIDE_JTALK_PREFIX || "/opt/homebrew/opt/open-jtalk";
+const DIC = process.env.GUIDE_DIC || JT_PREFIX + "/dic";
+const VOICE = process.env.GUIDE_VOICE || JT_PREFIX + "/voice/mei/mei_normal.htsvoice";
+const ttsText = (t) => { let o = t; for (const [k, v] of Object.entries(reading).sort((a, b) => b[0].length - a[0].length)) o = o.split(k).join(v); return o.replace(/[「」]/g, ""); };
 const dur = (f) => parseFloat(execFileSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", f]).toString());
+function speak(text, wav) {
+  // 文ごとに読み上げてつなぐ(長い文を一度に渡すと抑揚が崩れるため)
+  const parts = text.split(/(?<=。)/).map((x) => x.trim()).filter(Boolean);
+  const files = parts.map((p, i) => {
+    const f = wav + `.${i}.wav`;
+    execFileSync("open_jtalk", ["-x", DIC, "-m", VOICE, "-r", "1.05", "-fm", "1.0", "-ow", f], { input: p });
+    return f;
+  });
+  const listFile = wav + ".txt";
+  fs.writeFileSync(listFile, files.map((f) => `file '${f}'`).join("\n"));
+  execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", listFile, "-af", "apad=pad_dur=0.25,loudnorm=I=-16:TP=-1.5", "-ar", "44100", "-ac", "1", wav]);
+  for (const f of [...files, listFile]) fs.unlinkSync(f);
+}
 function audio() {
   for (const v of list) for (const s of v.scenes) {
-    const text = ttsText(s.say); const h = crypto.createHash("md5").update(text).digest("hex").slice(0, 8);
+    const text = ttsText(s.say); const h = crypto.createHash("md5").update(text + VOICE).digest("hex").slice(0, 8);
     const wav = AUDIO + `${s.id}-${h}.wav`; s.wav = wav;
     if (fs.existsSync(wav)) continue;
-    const tmp = AUDIO + s.id + ".aiff";
-    execFileSync("say", ["-v", "Kyoko", "-r", "170", "-o", tmp, text]);
-    execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", tmp, "-ar", "44100", "-ac", "1", wav]);
-    fs.unlinkSync(tmp);
+    speak(text, wav);
   }
 }
 const ts = (t) => { const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = (t % 60).toFixed(3).padStart(6, "0"); return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${s}`; };
-function video() {
+// ---- 字幕の焼き付け(常に見える字幕)。映像の下に黒い帯を足して、画面の内容を隠さない。
+const W = 1280, H = 720, STRIP = 120, FULL = H + STRIP;
+const FRAMES = ROOT + "frames/"; fs.mkdirSync(FRAMES, { recursive: true });
+/** 字幕の1回の表示の長さ: 2行に収まる長さで、文の区切り(、)で分ける(純粋関数)。 */
+export function splitCaption(sentence, max = 56) {
+  const text = sentence.trim();
+  if (text.length <= max) return [text];
+  const parts = text.split(/(?<=、)/);
+  const out = []; let cur = "";
+  for (const p of parts) {
+    if (cur && (cur + p).length > max) { out.push(cur); cur = p; } else cur += p;
+  }
+  if (cur) out.push(cur);
+  // 区切りが無く長いときは、ほぼ均等に切る
+  return out.flatMap((c) => (c.length > max * 1.3 ? [c.slice(0, Math.ceil(c.length / 2)), c.slice(Math.ceil(c.length / 2))] : [c]));
+}
+function captionHtml(text) {
+  return `<!doctype html><meta charset=utf-8><style>*{box-sizing:border-box}body{margin:0;width:${W}px;height:${STRIP}px;background:#111;display:flex;align-items:center;justify-content:center;font-family:"Hiragino Sans","Noto Sans JP",sans-serif;font-weight:700;color:#fff;text-align:center;word-break:keep-all;overflow-wrap:anywhere;line-break:strict}
+  div{padding:0 44px;font-size:34px;line-height:1.45}</style><div>${text ? phrase(text) : ""}</div>`;
+}
+async function renderCaptions(texts) {
+  const { chromium } = await import("playwright-core");
+  const browser = await chromium.launch({ executablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" });
+  const page = await (await browser.newContext({ viewport: { width: W, height: STRIP } })).newPage();
+  const map = new Map();
+  for (const text of new Set(texts)) {
+    const file = FRAMES + "cap-" + crypto.createHash("md5").update(text).digest("hex").slice(0, 10) + ".png";
+    if (!fs.existsSync(file)) {
+      await page.setContent(captionHtml(text));
+      await page.evaluate((h) => { const d = document.querySelector("div"); let size = 34; while (d.scrollHeight > h - 8 && size > 24) { size -= 2; d.style.fontSize = size + "px"; } }, STRIP);
+      await page.screenshot({ path: file });
+    }
+    map.set(text, file);
+  }
+  await browser.close();
+  return map;
+}
+/** 場面の画像の下に字幕の帯をつけた、1コマの画像。 */
+function composeFrame(sceneId, capFile) {
+  const out = FRAMES + sceneId + "-" + path.basename(capFile);
+  if (!fs.existsSync(out)) {
+    execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", SHOTS + sceneId + ".png", "-i", capFile, "-filter_complex",
+      `[0:v]scale=${W}:${H},pad=${W}:${FULL}:0:0:color=0x111111[b];[b][1:v]overlay=0:${H}`, "-frames:v", "1", out]);
+  }
+  return out;
+}
+
+async function video() {
   audio();
   const outDir = REPO + "/public/guide/"; fs.mkdirSync(outDir, { recursive: true });
   const manifest = JSON.parse(fs.existsSync(REPO + "/src/app/guide/videos.json") ? fs.readFileSync(REPO + "/src/app/guide/videos.json", "utf8") : "[]");
+  // 字幕の画像を、先にまとめて作る
+  const allChunks = list.flatMap((v) => v.scenes.flatMap((s) => s.say.split(/(?<=。)/).filter(Boolean).flatMap((x) => splitCaption(x))));
+  const capOf = await renderCaptions(["", ...allChunks]);
   for (const v of list) {
     const PRE = 0.5, POST = 0.6; let t = 0; const segs = [], cues = [], transcript = [];
     v.scenes.forEach((s, i) => {
       const a = dur(s.wav), total = PRE + a + POST; const seg = SEG + `${v.slug}-${String(i).padStart(2, "0")}.mp4`;
-      execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-loop", "1", "-framerate", "10", "-i", SHOTS + s.id + ".png", "-i", s.wav,
-        "-filter_complex", `[0:v]scale=1280:720,format=yuv420p,fade=t=in:st=0:d=0.3,fade=t=out:st=${(total - 0.3).toFixed(2)}:d=0.3[v];[1:a]adelay=${PRE * 1000},apad,aresample=44100[a]`,
+      // 文ごとに、読み上げの長さに比例して時間を割り振り、さらに字幕の区切りごとに割る
+      const sents = s.say.split(/(?<=。)/).filter(Boolean); const len = sents.reduce((n, x) => n + x.length, 0);
+      const steps = [{ file: composeFrame(s.id, capOf.get("")), d: PRE }]; let c = t + PRE;
+      for (const x of sents) {
+        const sd = a * (x.length / len); const chunks = splitCaption(x); const clen = chunks.reduce((n, y) => n + y.length, 0);
+        for (const y of chunks) {
+          const d = sd * (y.length / clen);
+          cues.push(`${ts(c)} --> ${ts(c + d)}\n${y.trim()}\n`);
+          steps.push({ file: composeFrame(s.id, capOf.get(y)), d }); c += d;
+        }
+      }
+      steps.push({ file: composeFrame(s.id, capOf.get("")), d: POST });
+      const listFile = SEG + `${v.slug}-${String(i).padStart(2, "0")}.txt`;
+      fs.writeFileSync(listFile, steps.map((p) => `file '${p.file}'\nduration ${p.d.toFixed(3)}`).join("\n") + `\nfile '${steps[steps.length - 1].file}'\n`);
+      execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", listFile, "-i", s.wav,
+        "-filter_complex", `[0:v]fps=10,format=yuv420p,fade=t=in:st=0:d=0.3,fade=t=out:st=${(total - 0.3).toFixed(2)}:d=0.3[v];[1:a]adelay=${PRE * 1000},apad,aresample=44100[a]`,
         "-map", "[v]", "-map", "[a]", "-t", total.toFixed(3), "-r", "10", "-c:v", "libx264", "-preset", "veryfast", "-crf", "27", "-tune", "stillimage", "-c:a", "aac", "-b:a", "64k", "-ar", "44100", "-ac", "1", seg]);
       segs.push(seg);
-      const sents = s.say.split(/(?<=。)/).filter(Boolean); const len = sents.reduce((n, x) => n + x.length, 0); let c = t + PRE;
-      for (const x of sents) { const d = a * (x.length / len); cues.push(`${ts(c)} --> ${ts(c + d)}\n${x.trim()}\n`); c += d; }
       transcript.push({ heading: s.shot ? s.shot.banner : s.card.title, text: s.say });
       t += total;
     });
     fs.writeFileSync(ROOT + `${v.slug}.list`, segs.map((f) => `file '${f}'`).join("\n"));
     execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", ROOT + `${v.slug}.list`, "-c", "copy", "-movflags", "+faststart", outDir + v.slug + ".mp4"]);
     fs.writeFileSync(outDir + v.slug + ".ja.vtt", "WEBVTT\n\n" + cues.join("\n"));
-    execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", SHOTS + v.scenes[0].id + ".png", "-q:v", "4", outDir + v.slug + ".jpg"]);
+    execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", composeFrame(v.scenes[0].id, capOf.get("")), "-q:v", "4", outDir + v.slug + ".jpg"]);
     const entry = { slug: v.slug, title: v.title, description: v.description, seconds: Math.round(t), transcript };
     const k = manifest.findIndex((m) => m.slug === v.slug); if (k >= 0) manifest[k] = entry; else manifest.push(entry);
     console.log(v.slug, Math.round(t) + "s", (fs.statSync(outDir + v.slug + ".mp4").size / 1e6).toFixed(1) + "MB");
@@ -135,4 +213,4 @@ function video() {
   fs.writeFileSync(REPO + "/src/app/guide/videos.json", JSON.stringify(manifest, null, 2) + "\n");
 }
 if (stage === "shots" || stage === "all") await shots();
-if (stage === "video" || stage === "all") video();
+if (stage === "video" || stage === "all") await video();

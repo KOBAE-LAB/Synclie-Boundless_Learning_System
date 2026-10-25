@@ -3,7 +3,7 @@
     "slug": "teacher-guide",
     "title": "教師用操作説明ガイド",
     "description": "教科・科目をつくり、授業回を公開して、学習の様子を見守るまでの流れを紹介します。",
-    "seconds": 258,
+    "seconds": 257,
     "transcript": [
       {
         "heading": "教師用 操作説明ガイド",
@@ -75,7 +75,7 @@
     "slug": "standard-mode",
     "title": "教科・科目学習モード説明ガイド",
     "description": "資料と擬似メンバーとの議論で教科の内容を理解する、学習者の学び方を紹介します。",
-    "seconds": 207,
+    "seconds": 205,
     "transcript": [
       {
         "heading": "教科・科目学習モード",
@@ -143,7 +143,7 @@
     "slug": "inquiry-mode",
     "title": "探究学習モード説明ガイド",
     "description": "グループまたは一人で、テーマと段階を進めながら探究する学び方を紹介します。",
-    "seconds": 146,
+    "seconds": 147,
     "transcript": [
       {
         "heading": "探究学習モード",
@@ -195,7 +195,7 @@
     "slug": "feature-pr",
     "title": "システムの機能PR動画",
     "description": "Synclie の特長を、約2分で紹介します。",
-    "seconds": 247,
+    "seconds": 249,
     "transcript": [
       {
         "heading": "オンデマンドを、\nインタラクティブに。",
@@ -295,7 +295,7 @@
     "slug": "thought-inheritance",
     "title": "思考継承機能の説明ガイド",
     "description": "先行学習者の考えを反映したAIペルソナと、時間をこえて協働して学ぶ、Synclieの特長を説明します。",
-    "seconds": 260,
+    "seconds": 258,
     "transcript": [
       {
         "heading": "思考継承機能",
