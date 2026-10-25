@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { getT } from "@/lib/i18n/server";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { isEnrolled } from "@/lib/courses/enrollment";
@@ -14,21 +15,22 @@ import { loadLessonContext } from "@/lib/records/context";
 // 自分の言葉で答える(答えの目安と見比べる自己確認で、AIは採点しない)。
 export async function completeStepAction(courseId: string, stepId: string, formData: FormData) {
   const { user } = await requireRole("student");
+  const { t } = await getT();
   const admin = createAdminClient();
   if (!(await isEnrolled(admin, courseId, user.id))) {
-    throw new Error("この授業に参加していません。");
+    throw new Error(t("flowView.errNotEnrolled"));
   }
 
   await assertLessonOpen(admin, courseId);
 
   const flow = await loadLearnerFlow(admin, courseId, user.id);
   const step = flow.steps.find((s) => s.id === stepId);
-  if (!step) throw new Error("ステップが見つかりません。");
+  if (!step) throw new Error(t("flowView.errNoStep"));
   if (flow.doneIds.has(stepId)) redirect(`/learn/${courseId}`);
 
   // 順番を強制する授業では、いまのステップしか終えられない(先のステップを飛ばして終えられない)。
   if (flow.inOrder && currentStep(flow.steps, flow.doneIds)?.id !== stepId) {
-    throw new Error("このステップは、まだ終えられません。");
+    throw new Error(t("flowView.errNotYet"));
   }
 
   let answers: { question: string; answer: string; selfCheck: string | null }[] | null = null;
@@ -37,7 +39,7 @@ export async function completeStepAction(courseId: string, stepId: string, formD
     if (questions.length > 0) {
       answers = questions.map((q, i) => {
         const answer = String(formData.get(`answer-${i}`) ?? "").trim().slice(0, 2000);
-        if (!answer) throw new Error("理解チェックのすべての問いに、自分の言葉で答えてから進みましょう。");
+        if (!answer) throw new Error(t("flowView.errAnswerAll"));
         const selfCheck = String(formData.get(`self-${i}`) ?? "");
         return { question: q.question, answer, selfCheck: selfCheck === "ok" || selfCheck === "more" ? selfCheck : null };
       });
@@ -58,7 +60,7 @@ export async function completeStepAction(courseId: string, stepId: string, formD
     },
     { onConflict: "student_id,step_id", ignoreDuplicates: true },
   );
-  if (error) throw new Error(`保存に失敗しました: ${error.message}`);
+  if (error) throw new Error(t("flowView.errSave", { message: error.message }));
 
   revalidatePath(`/learn/${courseId}`);
   redirect(`/learn/${courseId}`);

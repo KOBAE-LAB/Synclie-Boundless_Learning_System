@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatClock, statusFromElapsed } from "@/lib/learn/session-end";
+import { useT } from "@/lib/i18n/client";
 
 /**
  * 学習(議論)の終わりに関する、学習者の画面の部品。
@@ -37,6 +38,7 @@ export function SessionControls({
   dismissAction: () => Promise<void>;
 }) {
   const router = useRouter();
+  const t = useT();
   const [extraMs, setExtraMs] = useState(0); // 画面を開いてから経った時間
   const [closing, setClosing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,11 +64,11 @@ export function SessionControls({
       const response = await fetch(`/api/learn/${courseId}/close`, { method: "POST" });
       if (!response.ok) {
         const data = (await response.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(data?.error ?? `まとめの作成に失敗しました(${response.status})。`);
+        throw new Error(data?.error ?? t("session.closeFailedStatus", { status: response.status }));
       }
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "まとめの作成に失敗しました。");
+      setError(err instanceof Error ? err.message : t("session.closeFailed"));
       setClosing(false);
       autoClosedRef.current = false;
     }
@@ -85,7 +87,7 @@ export function SessionControls({
 
   const showCloseButtons = !ended && !closing && (suggestionReason !== null || (status?.isOver ?? false));
   const reason =
-    suggestionReason ?? (status?.isOver ? "制限時間になりました。ここで議論をまとめましょう。" : null);
+    suggestionReason ?? (status?.isOver ? t("session.timeUp") : null);
 
   return (
     <div className="mt-4 space-y-3">
@@ -98,25 +100,25 @@ export function SessionControls({
           aria-live="off"
         >
           <span>
-            制限時間 {limitMinutes}分
-            {policy === "hard" ? "(超過すると発言できなくなります)" : "(超過しても続けられます)"}
-            {affectsEvaluation && "・超過は評価の参考にされます"}
+            {t("session.limit", { n: limitMinutes })}
+            {policy === "hard" ? t("session.hard") : t("session.soft")}
+            {affectsEvaluation && t("session.affects")}
           </span>
           <span className="font-mono text-base tabular-nums">
             {ended
-              ? "議論は終了しました"
+              ? t("session.ended")
               : !startedAt
-                ? "最初の発言から始まります"
+                ? t("session.notStarted")
                 : status?.isOver
-                  ? `超過 +${formatClock(status.overtimeMs)}`
-                  : `残り ${formatClock(status?.remainingMs ?? 0)}`}
+                  ? t("session.over", { time: formatClock(status.overtimeMs) })
+                  : t("session.remaining", { time: formatClock(status?.remainingMs ?? 0) })}
           </span>
         </div>
       ) : null}
 
       {closing && !ended && (
         <p className="flex items-center gap-1.5 text-sm text-ink-muted" role="status">
-          議論のまとめを作っています(10秒ほどかかることがあります)
+          {t("session.summarizing")}
           <span className="flex items-center gap-0.5" aria-hidden="true">
             <span className="thinking-dot h-1 w-1 rounded-full bg-current" />
             <span className="thinking-dot h-1 w-1 rounded-full bg-current" />
@@ -127,7 +129,7 @@ export function SessionControls({
 
       {showCloseButtons && reason && (
         <div className="rounded-md border border-accent bg-accent-soft px-4 py-3 text-sm text-accent" role="status">
-          <p className="font-medium">AIからの提案: そろそろまとめませんか?</p>
+          <p className="font-medium">{t("session.aiSuggests")}</p>
           <p className="mt-1">{reason}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             <button
@@ -135,7 +137,7 @@ export function SessionControls({
               onClick={() => void closeNow()}
               className="rounded-md bg-accent-fill px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-fill-hover"
             >
-              まとめに進む
+              {t("session.goSummary")}
             </button>
             {status?.blocksInput ? null : (
               <button
@@ -146,12 +148,12 @@ export function SessionControls({
                 }}
                 className="rounded-md border border-accent px-3 py-1.5 text-xs font-medium hover:bg-surface"
               >
-                もう少し続ける
+                {t("session.keepGoing")}
               </button>
             )}
           </div>
           <p className="mt-2 text-xs text-ink-muted">
-            「まとめに進む」を押すと、この議論は終わり、AIが議論をまとめます。そのあと、成果を提出できます。
+            {t("session.summaryNote")}
           </p>
         </div>
       )}

@@ -1,3 +1,4 @@
+import { formatDateTime, getT } from "@/lib/i18n/server";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -32,18 +33,9 @@ interface PersonalizationRow {
   status: SuggestionStatus;
 }
 
-const STATUS_LABELS: Record<ProfileStatus, string> = {
-  pending: "未生成",
-  processing: "生成中",
-  done: "生成済み",
-  failed: "失敗",
-};
+const STATUS_KEYS = { pending: "teacherStudents.s_pending", processing: "teacherStudents.s_processing", done: "teacherStudents.s_done", failed: "teacherStudents.s_failed" } as const satisfies Record<ProfileStatus, string>;
 
-const SUGGESTION_STATUS_LABELS: Record<SuggestionStatus, string> = {
-  suggested: "未決定",
-  accepted: "採用",
-  declined: "見送り",
-};
+const SUGGESTION_STATUS_KEYS = { suggested: "teacherStudents.g_suggested", accepted: "teacherStudents.g_accepted", declined: "teacherStudents.g_declined" } as const satisfies Record<SuggestionStatus, string>;
 
 export default async function StudentsPage({
   params,
@@ -52,6 +44,7 @@ export default async function StudentsPage({
 }) {
   const { courseId } = await params;
   const { user } = await requireRole("teacher");
+  const { t, lang } = await getT();
 
   const admin = createAdminClient();
   const { data: course } = await admin
@@ -80,7 +73,7 @@ export default async function StudentsPage({
       .select("id, display_name, email")
       .in("id", studentIds);
     for (const profile of profileRows ?? []) {
-      studentNames.set(profile.id, profile.display_name || profile.email || "(名称未設定)");
+      studentNames.set(profile.id, profile.display_name || profile.email || t("teacherStudents.unnamed"));
     }
 
     const { data: studentProfileRows } = await admin
@@ -109,13 +102,12 @@ export default async function StudentsPage({
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <Breadcrumbs trail={[...((await loadLessonCrumbs(admin, courseId))?.teacherTrail ?? [])]} current="学習者プロファイル" />
+      <Breadcrumbs trail={[...((await loadLessonCrumbs(admin, courseId, lang))?.teacherTrail ?? [])]} current={t("teacherStudents.title")} />
       <h1 className="mt-2 text-2xl font-semibold text-ink">
-        学習者プロファイルと個別最適化
+        {t("teacherStudents.heading")}
       </h1>
       <p className="mt-1 text-sm text-ink-muted">
-        学習者ごとの得意な点・課題・要約を作り、それをもとに個別最適化の提案を作ります。
-        提案は、採用するまで対話には反映されません。
+        {t("teacherStudents.lead")}
       </p>
 
       <ul className="mt-8 space-y-4">
@@ -150,16 +142,16 @@ export default async function StudentsPage({
             >
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <span className="font-medium text-ink">
-                  {studentNames.get(studentId) ?? "(不明な学習者)"}
+                  {studentNames.get(studentId) ?? t("teacherStudents.unknownLearner")}
                 </span>
                 <div className="flex shrink-0 items-center gap-2">
-                  <span className="text-xs text-ink-faint">{STATUS_LABELS[status]}</span>
+                  <span className="text-xs text-ink-faint">{t(STATUS_KEYS[status])}</span>
                   <form action={boundGenerateAction}>
                     <SubmitButton
-                      pendingText="生成中…"
+                      pendingText={t("teacherStudents.generating")}
                       className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface disabled:opacity-50"
                     >
-                      {status === "done" ? "再生成する" : "プロファイルを生成する"}
+                      {status === "done" ? t("teacherStudents.regen") : t("teacherStudents.genProfile")}
                     </SubmitButton>
                   </form>
                 </div>
@@ -172,20 +164,20 @@ export default async function StudentsPage({
               {status === "done" && (
                 <div className="mt-3 space-y-2 border-t border-line-soft pt-3">
                   <p>
-                    <span className="text-xs font-medium text-ink-muted">得意な点: </span>
+                    <span className="text-xs font-medium text-ink-muted">{t("teacherStudents.strengths")}</span>
                     {profile?.strengths}
                   </p>
                   <p>
-                    <span className="text-xs font-medium text-ink-muted">課題: </span>
+                    <span className="text-xs font-medium text-ink-muted">{t("teacherStudents.challenges")}</span>
                     {profile?.challenges}
                   </p>
                   <p>
-                    <span className="text-xs font-medium text-ink-muted">学習履歴の要約: </span>
+                    <span className="text-xs font-medium text-ink-muted">{t("teacherStudents.summary")}</span>
                     {profile?.summary}
                   </p>
                   {profile?.generated_at && (
                     <p className="text-xs text-ink-faint">
-                      生成日時: {new Date(profile.generated_at).toLocaleString("ja-JP")}
+                      {t("teacherStudents.generatedAt", { d: formatDateTime(profile.generated_at, lang) })}
                     </p>
                   )}
                 </div>
@@ -195,20 +187,20 @@ export default async function StudentsPage({
                 <div className="mt-3 border-t border-line-soft pt-3">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <span className="text-xs font-medium text-ink">
-                      個別最適化の提案
+                      {t("teacherStudents.personalization")}
                     </span>
                     <div className="flex shrink-0 items-center gap-2">
                       {suggestion && (
                         <span className="text-xs text-ink-faint">
-                          {SUGGESTION_STATUS_LABELS[suggestion.status]}
+                          {t(SUGGESTION_STATUS_KEYS[suggestion.status])}
                         </span>
                       )}
                       <form action={boundGeneratePersonalizationAction}>
                         <SubmitButton
-                          pendingText="生成中…"
+                          pendingText={t("teacherStudents.generating")}
                           className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface disabled:opacity-50"
                         >
-                          {suggestion ? "再生成する" : "提案を生成する"}
+                          {suggestion ? t("teacherStudents.regen") : t("teacherStudents.genSuggest")}
                         </SubmitButton>
                       </form>
                     </div>
@@ -217,19 +209,19 @@ export default async function StudentsPage({
                   {suggestion && (
                     <div className="mt-2 space-y-2">
                       <p>
-                        <span className="text-xs text-ink-muted">同じ誤解を避ける問い: </span>
+                        <span className="text-xs text-ink-muted">{t("teacherStudents.avoid")}</span>
                         {suggestion.avoid_misconception_question}
                       </p>
                       <p>
-                        <span className="text-xs text-ink-muted">探究テーマの提案: </span>
+                        <span className="text-xs text-ink-muted">{t("teacherStudents.theme")}</span>
                         {suggestion.inquiry_theme_suggestion}
                       </p>
                       <p>
-                        <span className="text-xs text-ink-muted">促し方の調整: </span>
+                        <span className="text-xs text-ink-muted">{t("teacherStudents.prompting")}</span>
                         {suggestion.prompting_adjustment}
                       </p>
                       <p>
-                        <span className="text-xs text-ink-muted">難度・足場かけの調整: </span>
+                        <span className="text-xs text-ink-muted">{t("teacherStudents.difficulty")}</span>
                         {suggestion.difficulty_adjustment}
                       </p>
 
@@ -240,7 +232,7 @@ export default async function StudentsPage({
                               type="submit"
                               className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface"
                             >
-                              採用する
+                              {t("teacherStudents.adopt")}
                             </button>
                           </form>
                           <form action={boundDeclineAction}>
@@ -248,7 +240,7 @@ export default async function StudentsPage({
                               type="submit"
                               className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface"
                             >
-                              見送る
+                              {t("teacherStudents.decline")}
                             </button>
                           </form>
                         </div>
@@ -261,7 +253,7 @@ export default async function StudentsPage({
           );
         })}
         {studentIds.length === 0 && (
-          <li className="text-sm text-ink-muted">まだ活動記録のある学習者がいません。</li>
+          <li className="text-sm text-ink-muted">{t("teacherStudents.none")}</li>
         )}
       </ul>
 

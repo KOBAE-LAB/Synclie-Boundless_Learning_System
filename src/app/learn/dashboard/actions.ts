@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getT } from "@/lib/i18n/server";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { generateStudentProfileSummary } from "@/lib/ai/student-profile";
@@ -106,6 +107,7 @@ async function buildCrossCourseActivityLog(admin: AdminClient, studentId: string
 // F26: 学習者本人が明示的に押したときだけ生成する(F09/F23と同じくAI呼び出しを自動化しない)。
 export async function generateLearnerProfileAction() {
   const { user } = await requireRole("student");
+  const { t, lang } = await getT();
   const admin = createAdminClient();
 
   await admin
@@ -115,10 +117,10 @@ export async function generateLearnerProfileAction() {
   try {
     const activityLog = await buildCrossCourseActivityLog(admin, user.id);
     if (!activityLog) {
-      throw new Error("まだ活動記録(提出物)がありません。");
+      throw new Error(t("dashboard.errNoActivity"));
     }
 
-    const { strengths, challenges, summary } = await generateStudentProfileSummary(activityLog);
+    const { strengths, challenges, summary } = await generateStudentProfileSummary(activityLog, lang);
 
     const { error } = await admin.from("learner_profiles").upsert(
       {
@@ -133,10 +135,10 @@ export async function generateLearnerProfileAction() {
       { onConflict: "student_id" },
     );
     if (error) {
-      throw new Error(`横断プロファイルの保存に失敗しました: ${error.message}`);
+      throw new Error(t("dashboard.errSaveProfile", { message: error.message }));
     }
   } catch (err) {
-    const message = err instanceof Error ? err.message : "不明なエラーが発生しました。";
+    const message = err instanceof Error ? err.message : t("dashboard.errUnknown");
     await admin
       .from("learner_profiles")
       .upsert({ student_id: user.id, status: "failed", error: message }, { onConflict: "student_id" });
@@ -149,6 +151,7 @@ export async function generateLearnerProfileAction() {
 // (F11と異なり教師の採用は挟まない。自分ごとの提案としてダッシュボードに出すだけ)。
 export async function generateLearnerSuggestionsAction() {
   const { user } = await requireRole("student");
+  const { t, lang } = await getT();
   const admin = createAdminClient();
 
   const { data: profile } = await admin
@@ -158,13 +161,14 @@ export async function generateLearnerSuggestionsAction() {
     .maybeSingle();
 
   if (!profile || profile.status !== "done" || !profile.strengths || !profile.challenges || !profile.summary) {
-    throw new Error("先に横断的な学びの記録(F26)を生成してください。");
+    throw new Error(t("dashboard.errNeedProfile"));
   }
 
   const suggestion = await generateLearnerSuggestions({
     strengths: profile.strengths,
     challenges: profile.challenges,
     summary: profile.summary,
+    lang,
   });
 
   const { error } = await admin.from("learner_suggestions").upsert(
@@ -179,25 +183,26 @@ export async function generateLearnerSuggestionsAction() {
     { onConflict: "student_id" },
   );
   if (error) {
-    throw new Error(`提案の保存に失敗しました: ${error.message}`);
+    throw new Error(t("dashboard.errSaveSuggestions", { message: error.message }));
   }
 
   revalidatePath("/learn/dashboard");
 }
 
 const SUGGESTION_PLAN_PREFIX = {
-  avoid_misconception_question: "確かめてみる問い",
-  inquiry_theme_suggestion: "探究してみるテーマ",
-  self_regulation_tip: "意識する工夫",
-  challenge_level_tip: "挑戦してみること",
+  avoid_misconception_question: "dashboard.planPrefixQuestion",
+  inquiry_theme_suggestion: "dashboard.planPrefixTheme",
+  self_regulation_tip: "dashboard.planPrefixTip",
+  challenge_level_tip: "dashboard.planPrefixLevel",
 } as const;
 
 // AIの提案を、自分の学習計画(F23)に取り入れる。提案の文面はクライアントから受け取らず、
 // 本人の保存済みの提案から読む(取り入れるか決めるのは本人。AIが勝手に計画に入れることはしない)。
 export async function addSuggestionToPlanAction(kind: keyof typeof SUGGESTION_PLAN_PREFIX) {
   const { user } = await requireRole("student");
+  const { t, lang } = await getT();
   if (!(kind in SUGGESTION_PLAN_PREFIX)) {
-    throw new Error("提案の種類が不正です。");
+    throw new Error(t("dashboard.errBadKind"));
   }
   const admin = createAdminClient();
   const { data: row } = await admin
@@ -207,9 +212,9 @@ export async function addSuggestionToPlanAction(kind: keyof typeof SUGGESTION_PL
     .maybeSingle();
   const text = row?.[kind];
   if (!text) {
-    throw new Error("提案が見つかりません。");
+    throw new Error(t("dashboard.errNoSuggestion"));
   }
-  const content = `【${SUGGESTION_PLAN_PREFIX[kind]}】${text}`;
+  const content = t("dashboard.planItem", { label: t(SUGGESTION_PLAN_PREFIX[kind]), text });
 
   // 同じ提案を二重に入れない(未完了のものが既にあれば何もしない)。
   const { data: existing } = await admin
@@ -222,7 +227,7 @@ export async function addSuggestionToPlanAction(kind: keyof typeof SUGGESTION_PL
   if (!existing) {
     const { error } = await admin.from("study_plan_items").insert({ student_id: user.id, content });
     if (error) {
-      throw new Error(`学習計画への追加に失敗しました: ${error.message}`);
+      throw new Error(t("dashboard.errAddPlan", { message: error.message }));
     }
   }
   revalidatePath("/learn/dashboard");
@@ -232,9 +237,10 @@ export async function addSuggestionToPlanAction(kind: keyof typeof SUGGESTION_PL
 // (要件定義書4章)のうち、学習者自身が計画項目を追加・完了・削除できる部分。
 export async function addStudyPlanItemAction(formData: FormData) {
   const { user } = await requireRole("student");
+  const { t, lang } = await getT();
   const content = String(formData.get("content") ?? "").trim();
   if (!content) {
-    throw new Error("内容を入力してください。");
+    throw new Error(t("dashboard.errNeedContent"));
   }
   const courseId = String(formData.get("courseId") ?? "").trim() || null;
 
@@ -255,7 +261,7 @@ export async function addStudyPlanItemAction(formData: FormData) {
       content,
     });
     if (error) {
-      throw new Error(`学習計画の追加に失敗しました: ${error.message}`);
+      throw new Error(t("dashboard.errAddPlan", { message: error.message }));
     }
   }
 
@@ -263,25 +269,27 @@ export async function addStudyPlanItemAction(formData: FormData) {
 }
 
 async function getOwnedItem(admin: ReturnType<typeof createAdminClient>, studentId: string, itemId: string) {
+  const { t, lang } = await getT();
   const { data: item } = await admin
     .from("study_plan_items")
     .select("id, student_id, done")
     .eq("id", itemId)
     .maybeSingle();
   if (!item || item.student_id !== studentId) {
-    throw new Error("学習計画の項目が見つかりません。");
+    throw new Error(t("dashboard.errNoItem"));
   }
   return item;
 }
 
 export async function toggleStudyPlanItemAction(itemId: string) {
   const { user } = await requireRole("student");
+  const { t, lang } = await getT();
   const admin = createAdminClient();
   const item = await getOwnedItem(admin, user.id, itemId);
 
   const { error } = await admin.from("study_plan_items").update({ done: !item.done }).eq("id", itemId);
   if (error) {
-    throw new Error(`更新に失敗しました: ${error.message}`);
+    throw new Error(t("dashboard.errUpdate", { message: error.message }));
   }
 
   revalidatePath("/learn/dashboard");
@@ -289,12 +297,13 @@ export async function toggleStudyPlanItemAction(itemId: string) {
 
 export async function deleteStudyPlanItemAction(itemId: string) {
   const { user } = await requireRole("student");
+  const { t, lang } = await getT();
   const admin = createAdminClient();
   await getOwnedItem(admin, user.id, itemId);
 
   const { error } = await admin.from("study_plan_items").delete().eq("id", itemId);
   if (error) {
-    throw new Error(`削除に失敗しました: ${error.message}`);
+    throw new Error(t("dashboard.errDelete", { message: error.message }));
   }
 
   revalidatePath("/learn/dashboard");

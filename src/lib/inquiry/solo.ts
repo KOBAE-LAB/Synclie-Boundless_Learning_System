@@ -1,3 +1,5 @@
+import { getT } from "@/lib/i18n/server";
+import type { DictKey, Vars } from "@/lib/i18n/translate";
 // 探究学習モードの「個人の探究」(2026-10-22、先生の決定: 離島の小規模校などで、グループが作れないことがある)。
 // グループに入っていない学習者は、一人で探究する。議論は本人の議論、記録は本人の個人プロジェクト(kind='solo'、0042)に属し、
 // テーマ(と変更の履歴)・段階は、グループと同じ仕組みで持つ。グループに入っているときは、グループのテーマを決める(setGroupTheme)。
@@ -5,6 +7,9 @@ import type { createAdminClient } from "@/lib/supabase/server";
 import { ensureSoloProject } from "@/lib/records/context";
 import { findActiveGroup } from "@/lib/learn/session-scope";
 import { GroupRuleError, MAX_THEME } from "./groups";
+
+// 画面の言語でのメッセージ(エラーなど)。
+const rt = async (key: DictKey, vars?: Vars): Promise<string> => (await getT()).t(key, vars);
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -42,19 +47,19 @@ export async function setSoloTheme(
   input: { seriesId: string; studentId: string; theme: string },
 ): Promise<{ changed: boolean }> {
   const theme = input.theme.trim().replace(/\s+/g, " ").slice(0, MAX_THEME);
-  if (!theme) throw new GroupRuleError("テーマを入力してください。");
+  if (!theme) throw new GroupRuleError(await rt("libErrors.s9"));
 
   const { data: series } = await admin
     .from("course_series")
     .select("id, title, kind, archived_at, fiscal_year, owner_teacher_id")
     .eq("id", input.seriesId)
     .maybeSingle();
-  if (!series) throw new GroupRuleError("教科・科目が見つかりません。");
-  if (series.kind !== "inquiry") throw new GroupRuleError("テーマを決められるのは、探究学習モードの教科・科目だけです。");
-  if (series.archived_at) throw new GroupRuleError("この教科・科目は終了しています。テーマの変更はできません。");
+  if (!series) throw new GroupRuleError(await rt("libErrors.s0"));
+  if (series.kind !== "inquiry") throw new GroupRuleError(await rt("libErrors.s13"));
+  if (series.archived_at) throw new GroupRuleError(await rt("libErrors.s14"));
   // グループに入っているときは、個人のテーマではなく、グループのテーマを決める。
   if (await findActiveGroup(admin, input.seriesId, input.studentId)) {
-    throw new GroupRuleError("グループに入っているときは、グループのテーマを決めます。");
+    throw new GroupRuleError(await rt("libErrors.s15"));
   }
 
   const projectId = await ensureSoloProject(
@@ -72,11 +77,11 @@ export async function setSoloTheme(
   const { data: project } = await admin.from("inquiry_projects").select("theme").eq("id", projectId).maybeSingle();
   if (((project?.theme as string | null) ?? "") === theme) return { changed: false };
   const { error } = await admin.from("inquiry_projects").update({ theme }).eq("id", projectId);
-  if (error) throw new Error(`テーマを保存できませんでした: ${error.message}`);
+  if (error) throw new Error(await rt("libErrors.p5", { message: error.message }));
   const { error: historyError } = await admin
     .from("inquiry_theme_changes")
     .insert({ project_id: projectId, theme, changed_by: input.studentId });
-  if (historyError) throw new Error(`テーマの履歴を保存できませんでした: ${historyError.message}`);
+  if (historyError) throw new Error(await rt("libErrors.p6", { message: historyError.message }));
   return { changed: true };
 }
 

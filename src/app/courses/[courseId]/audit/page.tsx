@@ -1,7 +1,8 @@
 import { withAiLabel } from "@/lib/ai-label";
 import { notFound } from "next/navigation";
 import { loadUsedRecords, type UsedRecord } from "@/lib/inquiry/senior-memory";
-import { stageLabel } from "@/lib/inquiry/stages";
+import { stageLabelT } from "@/lib/inquiry/stages";
+import { getT } from "@/lib/i18n/server";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { updateTurnAction } from "./actions";
@@ -40,6 +41,7 @@ export default async function PersonaAuditPage({
 }) {
   const { courseId } = await params;
   const { user } = await requireRole("teacher");
+  const { t, lang } = await getT();
 
   const admin = createAdminClient();
   const { data: course } = await admin
@@ -113,12 +115,12 @@ export default async function PersonaAuditPage({
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <Breadcrumbs trail={[...((await loadLessonCrumbs(admin, courseId))?.teacherTrail ?? [])]} current="発言の監査と修正" />
+      <Breadcrumbs trail={[...((await loadLessonCrumbs(admin, courseId, lang))?.teacherTrail ?? [])]} current={t("audit.title")} />
       <h1 className="mt-2 text-2xl font-semibold text-ink">
-        擬似メンバーの挙動の監査と修正
+        {t("audit.heading")}
       </h1>
       <p className="mt-1 text-sm text-ink-muted">
-        発言を確認し、不適切・不正確な内容を修正できます。修正後の内容は以後の対話に使われ、元の発言も記録として残ります。
+        {t("audit.lead")}
       </p>
 
       <ul className="mt-8 space-y-4">
@@ -135,37 +137,37 @@ export default async function PersonaAuditPage({
             >
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <span className="text-xs font-medium text-ink-muted">
-                  {withAiLabel((turn.persona_id ? personaNames.get(turn.persona_id) : undefined) ?? turn.persona_name ?? "擬似メンバー")}
+                  {withAiLabel((turn.persona_id ? personaNames.get(turn.persona_id) : undefined) ?? turn.persona_name ?? t("composer.member"))}
                   ・ {new Date(turn.created_at).toLocaleString("ja-JP")}
                 </span>
                 {turn.flagged_by_teacher && (
                   <span className="shrink-0 rounded-full bg-warn-soft px-2 py-0.5 text-xs font-medium text-warn">
-                    フラグ済み
+                    {t("audit.flagged")}
                   </span>
                 )}
               </div>
 
               {turn.precedingStudentContent && (
                 <p className="mt-2 whitespace-pre-wrap rounded-md bg-surface px-3 py-2 text-xs text-ink-muted">
-                  学習者: {turn.precedingStudentContent}
+                  {t("audit.learner", { c: turn.precedingStudentContent })}
                 </p>
               )}
 
               {usedRecords.has(turn.id) && (
                 <details className="mt-2 text-xs text-ink-muted">
                   <summary className="cursor-pointer">
-                    先輩の記録をもとにした発言({usedRecords.get(turn.id)!.mode === "retrospective" ? "振り返りモード" : "当時モード"})・読んだ記録を見る
+                    {t("audit.seniorTitle", { mode: usedRecords.get(turn.id)!.mode === "retrospective" ? t("audit.modeRetro") : t("audit.modeThen") })}
                   </summary>
                   <div className="mt-1 space-y-1 rounded-md bg-surface px-3 py-2">
-                    <p>{usedRecords.get(turn.id)!.trajectory ? "探究の流れ(軌跡)を読んでいます。" : "探究の流れ(軌跡)は、まだありませんでした。"}</p>
+                    <p>{usedRecords.get(turn.id)!.trajectory ? t("audit.trajRead") : t("audit.trajNone")}</p>
                     {usedRecords.get(turn.id)!.episode ? (
                       <p className="whitespace-pre-wrap">
-                        近い場面({stageLabel(usedRecords.get(turn.id)!.episode!.stageKey)}):{" "}
+                        {t("audit.closeScene", { stage: stageLabelT(t, usedRecords.get(turn.id)!.episode!.stageKey) })}{" "}
                         {usedRecords.get(turn.id)!.episode!.header ? `${usedRecords.get(turn.id)!.episode!.header}\n` : ""}
                         {usedRecords.get(turn.id)!.episode!.body}
                       </p>
                     ) : (
-                      <p>近い場面は、渡していません(記録が無いか、作り直されました)。</p>
+                      <p>{t("audit.noScene")}</p>
                     )}
                   </div>
                 </details>
@@ -173,14 +175,14 @@ export default async function PersonaAuditPage({
 
               {turn.originalContent !== null && (
                 <details className="mt-2 text-xs text-ink-muted">
-                  <summary className="cursor-pointer">修正済み(元の発言を見る)</summary>
+                  <summary className="cursor-pointer">{t("audit.corrected")}</summary>
                   <p className="mt-1 whitespace-pre-wrap rounded-md bg-surface px-3 py-2">{turn.originalContent}</p>
                 </details>
               )}
 
               <form action={boundUpdateAction} className="mt-2 space-y-2">
                 <label className="block">
-                  <span className="sr-only">発言の内容</span>
+                  <span className="sr-only">{t("audit.contentLabel")}</span>
                   <textarea
                     name="content"
                     required
@@ -190,35 +192,35 @@ export default async function PersonaAuditPage({
                   />
                 </label>
                 <label className="block">
-                  <span className="sr-only">確認メモ</span>
+                  <span className="sr-only">{t("audit.noteLabel")}</span>
                   <textarea
                     name="teacherNote"
                     rows={2}
-                    placeholder="確認メモ(任意): 何が問題だったか、何を直したか"
+                    placeholder={t("audit.notePlaceholder")}
                     defaultValue={turn.teacher_note ?? ""}
                     className="w-full rounded-md border border-line px-3 py-2 text-sm bg-surface-raised"
                   />
                 </label>
                 <label className="flex items-center gap-2 text-xs text-ink-muted">
                   <input type="checkbox" name="flagged" defaultChecked={turn.flagged_by_teacher} />
-                  不適切・不正確な発言としてフラグを立てる
+                  {t("audit.flagLabel")}
                 </label>
                 <label className="flex items-center gap-2 text-xs text-ink-muted">
                   <input type="checkbox" name="teacherMark" defaultChecked={teacherMarked.has(turn.id)} />
-                  探究の大事な場面として残す(後輩の参考になる記録づくりで優先されます)
+                  {t("audit.keepLabel")}
                 </label>
                 <button
                   type="submit"
                   className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface"
                 >
-                  保存する
+                  {t("audit.save")}
                 </button>
               </form>
             </li>
           );
         })}
         {personaTurns.length === 0 && (
-          <li className="text-sm text-ink-muted">まだ擬似メンバーの発言がありません。</li>
+          <li className="text-sm text-ink-muted">{t("audit.none")}</li>
         )}
       </ul>
 

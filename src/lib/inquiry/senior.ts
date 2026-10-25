@@ -1,3 +1,5 @@
+import { getT } from "@/lib/i18n/server";
+import type { DictKey, Vars } from "@/lib/i18n/translate";
 // 先輩型ペルソナ(要件定義書14章ステップ6、実装(2b-1)、0045)。
 //  - 教師が、自分の教科・科目の探究プロジェクト(軌跡ができているもの)から、AIに下書きを作らせる(1回の呼び出し)。
 //  - 下書きを確認・修正して承認すると、同じ学校(組織)の先生が、自分の授業回に「貸し出し」て使える(参照だけ)。
@@ -14,6 +16,9 @@ import { canSeeScoped, isWideScope, isShareScope, loanScopeFor, type ShareScope 
 import { wideConsentOk } from "./wide-consent";
 import { itemsToLines, parseAggregateItems } from "./aggregate-items";
 import { stageLabel } from "./stages";
+
+// 画面の言語でのメッセージ(エラーなど)。
+const rt = async (key: DictKey, vars?: Vars): Promise<string> => (await getT()).t(key, vars);
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -94,14 +99,14 @@ async function loadArchived(admin: AdminClient, personaId: string): Promise<Arch
     .select("id, tier, status, course_id, created_by, organization_id, share_scope, share_network_id, source_project_id")
     .eq("id", personaId)
     .maybeSingle();
-  if (!data || !isArchiveTier(data.tier as string) || data.course_id) throw new SeniorRuleError("先輩のペルソナが見つかりません。");
+  if (!data || !isArchiveTier(data.tier as string) || data.course_id) throw new SeniorRuleError(await rt("libErrors.s22"));
   return data as ArchivedPersona;
 }
 
 /** 作った本人だけが直せる・消せる(同じ学校の先生は、使うだけ)。 */
 export async function assertCreator(admin: AdminClient, personaId: string, teacherId: string): Promise<ArchivedPersona> {
   const persona = await loadArchived(admin, personaId);
-  if (persona.created_by !== teacherId) throw new SeniorRuleError("先輩のペルソナを直せるのは、作った先生だけです。");
+  if (persona.created_by !== teacherId) throw new SeniorRuleError(await rt("libErrors.s23"));
   return persona;
 }
 
@@ -168,19 +173,19 @@ export async function createSeniorDraft(
   input: { teacherId: string; projectId: string; nickname: string },
 ): Promise<{ personaId: string }> {
   const nickname = normalizeNickname(input.nickname);
-  if (!nickname) throw new SeniorRuleError("呼び名を入力してください(例: ミナト)。");
+  if (!nickname) throw new SeniorRuleError(await rt("libErrors.s24"));
   const { data: project } = await admin
     .from("inquiry_projects")
     .select("id, title, theme, kind, solo_student_id, owner_teacher_id, fiscal_year")
     .eq("id", input.projectId)
     .maybeSingle();
-  if (!project || project.owner_teacher_id !== input.teacherId) throw new SeniorRuleError("探究プロジェクトが見つかりません。");
+  if (!project || project.owner_teacher_id !== input.teacherId) throw new SeniorRuleError(await rt("libErrors.s25"));
   // 個人のプロジェクトは、本人がデータの利用に同意していること(グループは、抽出のときにメンバーごとに確かめている)。
   if (project.solo_student_id && !(await isEligibleLearner(admin, project.solo_student_id as string))) {
-    throw new SeniorRuleError("この学習者はデータの利用に同意していないため、先輩のペルソナにできません。");
+    throw new SeniorRuleError(await rt("libErrors.s26"));
   }
   const trajectory = (await latestTrajectory(admin, project.id as string, "retrospective")) ?? (await latestTrajectory(admin, project.id as string, "live"));
-  if (!trajectory) throw new SeniorRuleError("まだ探究の記録(軌跡)ができていません。段階が進むか、教科・科目を終えると作られます。");
+  if (!trajectory) throw new SeniorRuleError(await rt("libErrors.s27"));
   const { data: stories } = await admin.from("inquiry_stage_stories").select("stage_key").eq("project_id", project.id).eq("kind", "live");
   const stageNames = [...new Set((stories ?? []).map((s) => s.stage_key as string))].map(stageLabel);
 
@@ -211,7 +216,7 @@ export async function createSeniorDraft(
     })
     .select("id")
     .single();
-  if (error || !data) throw new Error(`先輩のペルソナを保存できませんでした: ${error?.message}`);
+  if (error || !data) throw new Error(await rt("libErrors.p19", { message: error?.message }));
   return { personaId: data.id as string };
 }
 
@@ -320,9 +325,9 @@ export async function updateSeniorPersona(
 ) {
   const archived = await assertCreator(admin, input.personaId, input.teacherId);
   // 集約型は、まとめた項目(stance.items)を持つので、別の関数(updateAggregatePersona)で直す。ここで直すと項目が消える。
-  if (isAggregateTier(archived.tier)) throw new SeniorRuleError("集約型のAIは、集約型の編集から直してください。");
+  if (isAggregateTier(archived.tier)) throw new SeniorRuleError(await rt("libErrors.s28"));
   const nickname = normalizeNickname(input.nickname);
-  if (!nickname) throw new SeniorRuleError("呼び名を入力してください。");
+  if (!nickname) throw new SeniorRuleError(await rt("libErrors.s29"));
   const { data: current } = await admin.from("personas").select("source_fiscal_year").eq("id", input.personaId).maybeSingle();
   const { error } = await admin
     .from("personas")
@@ -336,7 +341,7 @@ export async function updateSeniorPersona(
       ...(isWideScope(archived.share_scope) || (await hasScopeRequest(admin, input.personaId)) ? SCOPE_RESET : {}),
     })
     .eq("id", input.personaId);
-  if (error) throw new Error(`保存できませんでした: ${error.message}`);
+  if (error) throw new Error(await rt("libErrors.p20", { message: error.message }));
   if (isWideScope(archived.share_scope)) await pauseCrossOrgLoans(admin, input.personaId);
 }
 
@@ -344,19 +349,19 @@ export async function updateSeniorPersona(
 export async function setSeniorAvatar(admin: AdminClient, input: { teacherId: string; personaId: string; avatarId: string }) {
   await assertCreator(admin, input.personaId, input.teacherId);
   const { data: option } = await admin.from("avatar_options").select("id").eq("id", input.avatarId).maybeSingle();
-  if (!option) throw new SeniorRuleError("アバターを選んでください。");
+  if (!option) throw new SeniorRuleError(await rt("libErrors.s30"));
   const { error } = await admin
     .from("personas")
     .update({ avatar_id: input.avatarId, avatar_status: "done", avatar_error: null })
     .eq("id", input.personaId);
-  if (error) throw new Error(`アバターを設定できませんでした: ${error.message}`);
+  if (error) throw new Error(await rt("libErrors.p21", { message: error.message }));
 }
 
 /** 先輩型のアバターを、AIが候補の中から推薦する(AIは1回)。いつでも手動で変えられる。 */
 export async function recommendSeniorAvatar(admin: AdminClient, input: { teacherId: string; personaId: string }): Promise<{ avatarId: string }> {
   await assertCreator(admin, input.personaId, input.teacherId);
   const { data: persona } = await admin.from("personas").select("name, nickname, profile, stance, tier").eq("id", input.personaId).maybeSingle();
-  if (!persona) throw new SeniorRuleError("先輩のペルソナが見つかりません。");
+  if (!persona) throw new SeniorRuleError(await rt("libErrors.s22"));
   const { data: rows } = await admin.from("avatar_options").select("id, label, tags");
   const profile = (persona.profile ?? {}) as { role?: string; tone?: string };
   const stance = (persona.stance ?? {}) as { position?: string; goal?: string };
@@ -381,7 +386,7 @@ export async function recommendSeniorAvatar(admin: AdminClient, input: { teacher
 export async function setSeniorStatus(admin: AdminClient, input: { teacherId: string; personaId: string; status: "draft" | "approved" }) {
   await assertCreator(admin, input.personaId, input.teacherId);
   const { error } = await admin.from("personas").update({ status: input.status }).eq("id", input.personaId);
-  if (error) throw new Error(`状態を変えられませんでした: ${error.message}`);
+  if (error) throw new Error(await rt("libErrors.p22", { message: error.message }));
 }
 
 /** 先輩型を消す(貸し出しも消える。これまでの発言の記録は、名前の控えを持ったまま残る)。 */
@@ -392,7 +397,7 @@ export async function deleteSeniorPersona(admin: AdminClient, input: { teacherId
     await admin.from("dialogue_turns").update({ persona_name: persona.name }).eq("persona_id", input.personaId).is("persona_name", null);
   }
   const { error } = await admin.from("personas").delete().eq("id", input.personaId);
-  if (error) throw new Error(`削除できませんでした: ${error.message}`);
+  if (error) throw new Error(await rt("libErrors.p23", { message: error.message }));
 }
 
 // ---------------------------------------------------------------------------
@@ -406,10 +411,10 @@ export async function deleteSeniorPersona(admin: AdminClient, input: { teacherId
 export async function assertCanLend(admin: AdminClient, persona: ArchivedPersona, teacherId: string, lenderOrgId: string | null) {
   if (persona.created_by === teacherId) return;
   const scope: ShareScope = isShareScope(persona.share_scope) ? persona.share_scope : "school";
-  if (scope === "private") throw new SeniorRuleError("この先輩のペルソナは、作った先生だけが使えます。");
+  if (scope === "private") throw new SeniorRuleError(await rt("libErrors.s31"));
   const sameOrg = Boolean(persona.organization_id && lenderOrgId && persona.organization_id === lenderOrgId);
   if (sameOrg) return;
-  if (!isWideScope(scope)) throw new SeniorRuleError("この先輩のペルソナは、同じ学校の先生だけが使えます。");
+  if (!isWideScope(scope)) throw new SeniorRuleError(await rt("libErrors.s32"));
   const infos = await loadOrgInfos(admin, [persona.organization_id, lenderOrgId]);
   const owner = persona.organization_id ? (infos.get(persona.organization_id) ?? null) : null;
   const mine = lenderOrgId ? (infos.get(lenderOrgId) ?? null) : null;
@@ -417,9 +422,9 @@ export async function assertCanLend(admin: AdminClient, persona: ArchivedPersona
     { createdBy: persona.created_by, ownerOrg: owner, shareScope: scope, shareNetworkId: persona.share_network_id ?? null },
     { teacherId, org: mine },
   );
-  if (!allowed) throw new SeniorRuleError("この先輩のペルソナは、公開されている範囲の学校の先生だけが使えます。");
+  if (!allowed) throw new SeniorRuleError(await rt("libErrors.s33"));
   if (!(await wideConsentOk(admin, persona as { id: string; tier: string; source_project_id?: string | null }))) {
-    throw new SeniorRuleError("この先輩のペルソナは、材料の学習者の同意が足りないため、他の学校では使えません。");
+    throw new SeniorRuleError(await rt("libErrors.s34"));
   }
 }
 
@@ -431,10 +436,10 @@ export async function addLoan(
   const persona = await loadArchived(admin, input.personaId);
   const lenderOrgId = await teacherOrg(admin, input.teacherId);
   await assertCanLend(admin, persona, input.teacherId, lenderOrgId);
-  if (persona.status !== "approved") throw new SeniorRuleError("承認済みの先輩のペルソナだけを使えます。");
+  if (persona.status !== "approved") throw new SeniorRuleError(await rt("libErrors.s35"));
   const { count } = await admin.from("persona_loans").select("id", { count: "exact", head: true }).eq("course_id", input.courseId);
   if ((count ?? 0) >= MAX_LOANS_PER_LESSON) {
-    throw new SeniorRuleError(`先輩のペルソナは、1つの授業回に${MAX_LOANS_PER_LESSON}人までです。`);
+    throw new SeniorRuleError(await rt("libErrors.maxLoans", { n: MAX_LOANS_PER_LESSON }));
   }
   const { error } = await admin.from("persona_loans").insert({
     persona_id: input.personaId,
@@ -446,14 +451,14 @@ export async function addLoan(
     approved_by: input.teacherId,
     approved_at: new Date().toISOString(),
   });
-  if (error?.code === "23505") throw new SeniorRuleError("この先輩のペルソナは、もうこの授業回にいます。");
-  if (error) throw new Error(`加えられませんでした: ${error.message}`);
+  if (error?.code === "23505") throw new SeniorRuleError(await rt("libErrors.s36"));
+  if (error) throw new Error(await rt("libErrors.p24", { message: error.message }));
 }
 
 async function loadOwnLoan(admin: AdminClient, loanId: string, courseId: string, teacherId: string) {
   await assertOwnsCourse(admin, courseId, teacherId);
   const { data } = await admin.from("persona_loans").select("id, course_id").eq("id", loanId).maybeSingle();
-  if (!data || data.course_id !== courseId) throw new SeniorRuleError("貸し出しが見つかりません。");
+  if (!data || data.course_id !== courseId) throw new SeniorRuleError(await rt("libErrors.s37"));
 }
 
 export async function updateLoan(
@@ -466,13 +471,13 @@ export async function updateLoan(
   if (input.status) patch.status = input.status;
   if (Object.keys(patch).length === 0) return;
   const { error } = await admin.from("persona_loans").update(patch).eq("id", input.loanId);
-  if (error) throw new Error(`変えられませんでした: ${error.message}`);
+  if (error) throw new Error(await rt("libErrors.p25", { message: error.message }));
 }
 
 export async function removeLoan(admin: AdminClient, input: { teacherId: string; courseId: string; loanId: string }) {
   await loadOwnLoan(admin, input.loanId, input.courseId, input.teacherId);
   const { error } = await admin.from("persona_loans").delete().eq("id", input.loanId);
-  if (error) throw new Error(`外せませんでした: ${error.message}`);
+  if (error) throw new Error(await rt("libErrors.p26", { message: error.message }));
 }
 
 export interface LessonLoan {

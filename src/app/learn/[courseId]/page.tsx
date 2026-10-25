@@ -1,4 +1,6 @@
 import { withAiLabel } from "@/lib/ai-label";
+import { formatDateTime, getT } from "@/lib/i18n/server";
+import type { DictKey } from "@/lib/i18n/translate";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
@@ -35,7 +37,7 @@ import {
   toggleKeepForJuniorsAction,
   declareStageAction,
 } from "./actions";
-import { CANONICAL_STAGES, stageLabel } from "@/lib/inquiry/stages";
+import { CANONICAL_STAGES, stageLabelT } from "@/lib/inquiry/stages";
 import { AUTO_CONTINUE_CAP, TEMPO_OPTIONS } from "@/lib/discussion-tempo";
 import { Breadcrumbs, BackLink } from "@/components/breadcrumbs";
 import { StepNumber } from "@/components/step-number";
@@ -134,19 +136,19 @@ interface JudgmentRow {
   summary_comment: string;
 }
 
-const FEEDBACK_STATUS_LABELS: Record<FeedbackStatus, string> = {
-  pending: "未生成",
-  processing: "生成中",
-  done: "生成済み",
-  failed: "失敗",
-};
+const FEEDBACK_STATUS_KEYS = {
+  pending: "dashboard.statusPending",
+  processing: "dashboard.statusProcessing",
+  done: "dashboard.statusDone",
+  failed: "dashboard.statusFailed",
+} as const satisfies Record<FeedbackStatus, string>;
 
-const JUDGMENT_STATUS_LABELS: Record<JudgmentStatus, string> = {
-  pending: "未実施",
-  processing: "ジャッジ中",
-  done: "実施済み",
-  failed: "失敗",
-};
+const JUDGMENT_STATUS_KEYS = {
+  pending: "lesson.judgePending",
+  processing: "lesson.judgeProcessing",
+  done: "lesson.judgeDone",
+  failed: "dashboard.statusFailed",
+} as const satisfies Record<JudgmentStatus, string>;
 
 interface ReflectionRow {
   submission_id: string;
@@ -166,6 +168,7 @@ export default async function LearnCourseSessionPage({
   const { courseId } = await params;
   const { step: requestedStepId } = await searchParams;
   const { user } = await requireRole("student");
+  const { t, lang } = await getT();
 
   const admin = createAdminClient();
   // 探究学習モード(0044)では、グループに入っていればグループの共有の議論、入っていなければ個人の探究(本人の議論)を表示する。
@@ -237,7 +240,7 @@ export default async function LearnCourseSessionPage({
       .eq("student_id", user.id)
       .order("created_at", { ascending: false }),
     loadLearnerFlow(admin, courseId, user.id),
-    loadLessonCrumbs(admin, courseId),
+    loadLessonCrumbs(admin, courseId, lang),
   ]);
 
   if (!course) {
@@ -256,8 +259,8 @@ export default async function LearnCourseSessionPage({
     return (
       <InputStepView
         admin={admin}
-        course={{ id: course.id, title: lessonName(course.lesson_no, course.title) }}
-        trail={lessonCrumbs?.learnerTrail ?? [{ label: "授業一覧", href: "/learn" }]}
+        course={{ id: course.id, title: lessonName(course.lesson_no, course.title, lang) }}
+        trail={lessonCrumbs?.learnerTrail ?? [{ label: t("learnList.title"), href: "/learn" }]}
         flow={flow}
         step={viewingStep}
         studentId={user.id}
@@ -351,7 +354,7 @@ export default async function LearnCourseSessionPage({
     memberIdsForNames.length > 0
       ? await admin.from("profiles").select("id, display_name").in("id", memberIdsForNames)
       : { data: [] as { id: string; display_name: string | null }[] };
-  const memberNames = new Map((memberProfiles ?? []).map((p) => [p.id as string, (p.display_name as string | null) ?? "メンバー"]));
+  const memberNames = new Map((memberProfiles ?? []).map((p) => [p.id as string, (p.display_name as string | null) ?? t("learnSeries.member")]));
   const keptTurnIds = new Set((keepRows ?? []).map((r) => r.turn_id as string));
   const pendingHandwritingUploads = (uploadRows ?? []) as HandwritingUploadRow[];
   const pendingAudioUploads = (audioUploadRows ?? []) as AudioUploadRow[];
@@ -439,38 +442,39 @@ export default async function LearnCourseSessionPage({
   const seriesArchived = lessonCrumbs?.archived ?? false;
   const inputLocked = ended || seriesArchived || (timeStatus?.blocksInput ?? false);
   const END_REASON_LABELS: Record<string, string> = {
-    time_limit: "制限時間になったため",
-    ai_suggested: "AIの提案に応じて",
-    student: "自分で終えたため",
+    time_limit: t("lesson.endTime"),
+    ai_suggested: t("lesson.endAi"),
+    student: t("lesson.endStudent"),
   };
+  const tempoLabel = (value: number) => t(`tempo.v${value}` as DictKey);
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <Breadcrumbs trail={lessonCrumbs?.learnerTrail ?? [{ label: "授業一覧", href: "/learn" }]} current={lessonName(course.lesson_no, course.title)} />
-      <h1 className="mt-3 text-2xl font-semibold text-ink">{lessonName(course.lesson_no, course.title)}</h1>
+      <Breadcrumbs trail={lessonCrumbs?.learnerTrail ?? [{ label: t("learnList.title"), href: "/learn" }]} current={lessonName(course.lesson_no, course.title, lang)} />
+      <h1 className="mt-3 text-2xl font-semibold text-ink">{lessonName(course.lesson_no, course.title, lang)}</h1>
       {course.subject && <p className="mt-1 text-sm text-ink-muted">{course.subject}</p>}
       {course.mode === "solo_study" && (
         <p className="mt-1 text-sm text-ink-muted">
-          独習モード: まだ分かっていない擬似メンバーに、自分の言葉で説明してみよう。
+          {t("lesson.soloMode")}
         </p>
       )}
       <Link
         href={`/learn/${courseId}/portfolio`}
         className="mt-1 inline-block text-sm text-ink-muted underline underline-offset-2"
       >
-        ポートフォリオを見る→
+        {t("lesson.viewPortfolio")}
       </Link>
 
       <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
         <span className="text-ink-muted">
-          探究の段階: <span className="font-medium text-ink">{stageLabel(currentStageKey)}</span>
+          {t("lesson.stagePrefix")}<span className="font-medium text-ink">{stageLabelT(t, currentStageKey)}</span>
         </span>
         {!seriesArchived && (
           <details className="text-xs">
-            <summary className="cursor-pointer text-ink-muted underline underline-offset-2">段階を変える</summary>
+            <summary className="cursor-pointer text-ink-muted underline underline-offset-2">{t("lesson.changeStage")}</summary>
             <form action={declareStageAction.bind(null, courseId)} className="mt-2 flex flex-wrap items-center gap-2">
               <label htmlFor="stage-select" className="sr-only">
-                いまの探究の段階
+                {t("lesson.stageNow")}
               </label>
               <select
                 id="stage-select"
@@ -480,33 +484,33 @@ export default async function LearnCourseSessionPage({
               >
                 {CANONICAL_STAGES.map((s) => (
                   <option key={s.key} value={s.key}>
-                    {s.label}
+                    {t(`stages.${s.key}`)}
                   </option>
                 ))}
               </select>
               <SubmitButton
-                pendingText="記録中…"
+                pendingText={t("lesson.recording")}
                 className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface disabled:opacity-50"
               >
-                この段階に進んだ
+                {t("lesson.stageMoved")}
               </SubmitButton>
             </form>
-            <p className="mt-1 text-ink-faint">段階が変わると、それまでの段階の記録がまとめられ、後輩の探究の参考になります。</p>
+            <p className="mt-1 text-ink-faint">{t("lesson.stageNote")}</p>
           </details>
         )}
       </div>
 
       {scope.kind === "solo" && scope.inquiry && (
         <p className="mt-3 text-sm text-ink-muted">
-          探究学習モードで、一人で探究しています。都合のよいときに発言しましょう。
+          {t("lesson.soloInquiry")}
           {scope.theme ? (
             <span className="mt-1 block">
-              あなたの探究のテーマ: <span className="text-ink">{scope.theme}</span>
+              {t("lesson.soloThemePrefix")}<span className="text-ink">{scope.theme}</span>
             </span>
           ) : (
             lessonCrumbs?.learnerTrail?.[1]?.href && (
               <Link href={lessonCrumbs.learnerTrail[1].href} className="ml-1 font-medium underline">
-                テーマを決める
+                {t("lesson.setTheme")}
               </Link>
             )
           )}
@@ -514,12 +518,12 @@ export default async function LearnCourseSessionPage({
       )}
       {scope.kind === "group" && (
         <p className="mt-3 text-sm text-ink-muted">
-          グループ「<span className="font-medium text-ink">{scope.groupTitle}</span>」の議論です(
-          {scope.memberIds.map((id) => (id === user.id ? "あなた" : (memberNames.get(id) ?? "メンバー"))).join("・")}
-          )。都合のよいときに発言しましょう。AIの仲間は、あなたを「{memberAlias(scope.memberIds, user.id)}」と呼びます。
+          {t("lesson.groupOpen")}<span className="font-medium text-ink">{scope.groupTitle}</span>{t("lesson.groupClose")}
+          {scope.memberIds.map((id) => (id === user.id ? t("learnSeries.you") : (memberNames.get(id) ?? t("learnSeries.member")))).join(t("lesson.memberJoin"))}
+          {t("lesson.groupTail", { alias: memberAlias(scope.memberIds, user.id) })}
           {scope.theme && (
             <span className="mt-1 block">
-              テーマ: <span className="text-ink">{scope.theme}</span>
+              {t("lesson.themePrefix")}<span className="text-ink">{scope.theme}</span>
             </span>
           )}
         </p>
@@ -535,23 +539,23 @@ export default async function LearnCourseSessionPage({
         policy={course.time_limit_policy ?? "soft"}
         affectsEvaluation={course.time_limit_affects_evaluation === true}
         ended={ended}
-        suggestionReason={!ended && session?.close_suggested_at ? (session.close_suggestion_reason ?? "議論がひと区切りついたようです。") : null}
+        suggestionReason={!ended && session?.close_suggested_at ? (session.close_suggestion_reason ?? t("lesson.pauseDefault")) : null}
         dismissAction={boundDismissCloseAction}
       />
 
       {ended && (
         <div className="mt-4 rounded-lg border border-accent p-5" id="discussion-summary">
-          <h2 className="text-sm font-medium text-ink">議論のまとめ(AI)</h2>
+          <h2 className="text-sm font-medium text-ink">{t("lesson.summaryTitle")}</h2>
           <p className="mt-1 text-xs text-ink-faint">
-            この議論は終了しました({END_REASON_LABELS[session?.end_reason ?? ""] ?? "終了"})。
-            このまとめはAIによるもので、最終的な評価ではありません。
+            {t("lesson.summaryEnded", { reason: END_REASON_LABELS[session?.end_reason ?? ""] ?? t("lesson.endGeneric") })}
+            {t("lesson.summaryNotFinal")}
           </p>
           {closingSummary?.summary && (
             <p className="mt-3 whitespace-pre-wrap text-sm text-ink">{closingSummary.summary}</p>
           )}
           {closingSummary?.keyPoints && closingSummary.keyPoints.length > 0 && (
             <>
-              <h3 className="mt-4 text-xs font-medium text-ink-faint">議論で出た大事な点</h3>
+              <h3 className="mt-4 text-xs font-medium text-ink-faint">{t("lesson.keyPoints")}</h3>
               <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-ink">
                 {closingSummary.keyPoints.map((point, i) => (
                   <li key={i}>{point}</li>
@@ -561,7 +565,7 @@ export default async function LearnCourseSessionPage({
           )}
           {closingSummary?.nextQuestions && closingSummary.nextQuestions.length > 0 && (
             <>
-              <h3 className="mt-4 text-xs font-medium text-ink-faint">次に考えてみよう</h3>
+              <h3 className="mt-4 text-xs font-medium text-ink-faint">{t("lesson.thinkNext")}</h3>
               <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-ink">
                 {closingSummary.nextQuestions.map((q, i) => (
                   <li key={i}>{q}</li>
@@ -573,40 +577,40 @@ export default async function LearnCourseSessionPage({
             href="#submit-outcome"
             className="mt-4 inline-block rounded-md bg-accent-fill px-4 py-2 text-sm font-medium text-white hover:bg-accent-fill-hover"
           >
-            成果を提出する →
+            {t("lesson.goSubmit")}
           </a>
         </div>
       )}
 
       <details className="mt-3 rounded-md border border-line px-4 py-3 text-sm">
         <summary className="cursor-pointer font-medium text-ink">
-          沈黙時の自動継続(テンポ)
+          {t("lesson.tempoTitle")}
         </summary>
         <p className="mt-2 text-xs text-ink-muted">
-          発言せずにいると、擬似メンバー同士が会話を少しだけ自動的に続けます(最大
-          {AUTO_CONTINUE_CAP}回)。教師の既定値:{" "}
+          {t("lesson.tempoIntro", { cap: AUTO_CONTINUE_CAP })}{" "}
           {course.auto_discussion_tempo_seconds
-            ? TEMPO_OPTIONS.find((o) => o.value === course.auto_discussion_tempo_seconds)?.label ??
-              `${course.auto_discussion_tempo_seconds}秒`
-            : "オフ"}
-          ・この設定は
+            ? TEMPO_OPTIONS.some((o) => o.value === course.auto_discussion_tempo_seconds)
+              ? tempoLabel(course.auto_discussion_tempo_seconds)
+              : t("lesson.tempoSeconds", { n: course.auto_discussion_tempo_seconds })
+            : t("lesson.tempoOff")}
+          {t("lesson.tempoThisSetting")}
           <span className={course.auto_discussion_affects_evaluation ? "text-warn" : ""}>
-            {course.auto_discussion_affects_evaluation ? "評価の参考にされます" : "評価には使われません"}
+            {course.auto_discussion_affects_evaluation ? t("lesson.tempoAffects") : t("lesson.tempoNoAffects")}
           </span>
-          (教師の設定。学習者側では変更できません)。
+          {t("lesson.tempoTeacherOnly")}
         </p>
         <form action={boundUpdateSessionTempoAction} className="mt-2 flex flex-wrap items-center gap-2">
           <label className="text-xs text-ink-muted">
-            自分用のテンポ(未選択なら教師の既定値を使う):
+            {t("lesson.tempoOwn")}
             <select
               name="tempoSeconds"
               defaultValue={session?.auto_discussion_tempo_seconds ? String(session.auto_discussion_tempo_seconds) : ""}
               className="ml-2 rounded-md border border-line px-2 py-1 text-xs bg-surface-raised"
             >
-              <option value="">教師の既定値を使う</option>
+              <option value="">{t("lesson.tempoUseDefault")}</option>
               {TEMPO_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>
-                  {opt.label}
+                  {tempoLabel(opt.value)}
                 </option>
               ))}
             </select>
@@ -615,7 +619,7 @@ export default async function LearnCourseSessionPage({
             type="submit"
             className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface"
           >
-            保存する
+            {t("lesson.save")}
           </button>
         </form>
       </details>
@@ -633,14 +637,13 @@ export default async function LearnCourseSessionPage({
 
       {personalization && (
         <p className="mt-4 rounded-md border border-accent bg-accent-soft px-4 py-3 text-sm text-accent">
-          おすすめの探究テーマ: {personalization.inquiry_theme_suggestion}
+          {t("lesson.recommendedTheme", { theme: personalization.inquiry_theme_suggestion })}
         </p>
       )}
 
       {(!activePersonaCount || activePersonaCount === 0) && (
         <p className="mt-4 rounded-md border border-warn bg-warn-soft px-4 py-3 text-sm text-warn">
-          この授業にはまだ「使用中」の擬似メンバーがいません。教師がペルソナ設定画面で
-          承認・有効化すると、擬似メンバーと議論できるようになります。発言は保存されます。
+          {t("lesson.noActiveMembers")}
         </p>
       )}
 
@@ -704,13 +707,13 @@ export default async function LearnCourseSessionPage({
                   {(isSeniorTier(persona.tier) || isAggregateTier(persona.tier)) && (
                     // 本人ではなく、記録をもとにしたAIであることを常に示す(要件定義書14章ステップ6)。
                     <span className="absolute left-2 top-2 rounded bg-black/60 px-1.5 py-0.5 text-xs font-medium text-white">
-                      {isAggregateTier(persona.tier) ? "前の年度の学習者の記録をもとにしたAI" : "先輩の記録をもとにしたAI"}
+                      {isAggregateTier(persona.tier) ? t("lesson.aggregateBadge") : t("lesson.seniorBadge")}
                     </span>
                   )}
                   {isSpeaker && (
                     <span className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-xs font-medium text-white">
                       <span className="persona-dot h-1.5 w-1.5 rounded-full" aria-hidden="true" />
-                      発言中
+                      {t("lesson.speaking")}
                     </span>
                   )}
                 </div>
@@ -726,32 +729,32 @@ export default async function LearnCourseSessionPage({
             {lastPersonaTurn ? (
               <>
                 <span className="persona-name font-semibold">
-                  {personaNames.get(lastPersonaTurn.persona_id ?? "") ?? "擬似メンバー"}:{" "}
+                  {personaNames.get(lastPersonaTurn.persona_id ?? "") ?? t("composer.member")}:{" "}
                 </span>
                 {lastPersonaTurn.auto_generated && (
-                  <span className="mr-1 text-xs text-ink-faint">(自動継続)</span>
+                  <span className="mr-1 text-xs text-ink-faint">{t("lesson.autoContinued")}</span>
                 )}
                 <span className="whitespace-pre-wrap text-ink">{lastPersonaTurn.content}</span>
               </>
             ) : (
-              <span className="text-ink-muted">下から話しかけてみよう。</span>
+              <span className="text-ink-muted">{t("lesson.sayBelow")}</span>
             )}
           </div>
         </div>
       )}
 
-      <h2 className="mt-8 text-sm font-medium text-ink">これまでのやり取り</h2>
+      <h2 className="mt-8 text-sm font-medium text-ink">{t("lesson.history")}</h2>
       <div className="mt-2 space-y-4">
         {turns.map((turn) => {
           if (turn.speaker_type === "student" && isGroup && turn.author_student_id !== user.id) {
             return (
               <div key={turn.id} className="text-left">
                 <p className="mb-1 text-xs font-semibold text-ink-muted">
-                  {(turn.author_student_id && memberNames.get(turn.author_student_id)) ?? "メンバー"}
+                  {(turn.author_student_id && memberNames.get(turn.author_student_id)) ?? t("learnSeries.member")}
                 </p>
                 <div className="inline-block max-w-[88%] rounded-lg border border-line bg-surface px-4 py-2 text-left text-sm leading-7 text-ink">
-                  {turn.source_kind === "handwriting" && <p className="mb-1 text-xs text-ink-faint">[手書きから変換]</p>}
-                  {turn.source_kind === "audio" && <p className="mb-1 text-xs text-ink-faint">[音声から変換]</p>}
+                  {turn.source_kind === "handwriting" && <p className="mb-1 text-xs text-ink-faint">{t("lesson.fromHandwriting")}</p>}
+                  {turn.source_kind === "audio" && <p className="mb-1 text-xs text-ink-faint">{t("lesson.fromAudio")}</p>}
                   <p className="whitespace-pre-wrap">{turn.content}</p>
                 </div>
                 {!seriesArchived && <KeepToggle courseId={courseId} turnId={turn.id} kept={keptTurnIds.has(turn.id)} />}
@@ -763,9 +766,9 @@ export default async function LearnCourseSessionPage({
               <div key={turn.id} className="text-right">
                 <div className="inline-block max-w-[88%] rounded-lg bg-accent-fill px-4 py-2 text-left text-sm leading-7 text-white">
                   {turn.source_kind === "handwriting" && (
-                    <p className="mb-1 text-xs text-ink-faint">[手書きから変換]</p>
+                    <p className="mb-1 text-xs text-ink-faint">{t("lesson.fromHandwriting")}</p>
                   )}
-                  {turn.source_kind === "audio" && <p className="mb-1 text-xs text-ink-faint">[音声から変換]</p>}
+                  {turn.source_kind === "audio" && <p className="mb-1 text-xs text-ink-faint">{t("lesson.fromAudio")}</p>}
                   <p className="whitespace-pre-wrap">{turn.content}</p>
                 </div>
                 {!seriesArchived && <KeepToggle courseId={courseId} turnId={turn.id} kept={keptTurnIds.has(turn.id)} />}
@@ -774,7 +777,7 @@ export default async function LearnCourseSessionPage({
           }
 
           const avatarPath = turn.persona_id ? personaAvatarPaths.get(turn.persona_id) : undefined;
-          const personaName = (turn.persona_id ? personaNames.get(turn.persona_id) : undefined) ?? turn.persona_name ?? "擬似メンバー";
+          const personaName = (turn.persona_id ? personaNames.get(turn.persona_id) : undefined) ?? turn.persona_name ?? t("composer.member");
           return (
             <div key={turn.id} className={`flex items-end gap-2 ${toneClass(turn.persona_id ? personaTones[turn.persona_id] : undefined)}`}>
               {avatarPath ? (
@@ -790,13 +793,13 @@ export default async function LearnCourseSessionPage({
               <div className="min-w-0 flex-1">
                 <p className="persona-name mb-1 text-xs font-semibold">
                   {withAiLabel(personaName)}
-                  {turn.auto_generated && <span className="ml-1 text-ink-faint">・自動継続</span>}
+                  {turn.auto_generated && <span className="ml-1 text-ink-faint">{t("lesson.autoContinuedDot")}</span>}
                 </p>
                 <div className="persona-bubble inline-block rounded-lg px-4 py-2 text-left text-sm leading-7 text-ink">
                   {turn.source_kind === "handwriting" && (
-                    <p className="mb-1 text-xs text-ink-faint">[手書きから変換]</p>
+                    <p className="mb-1 text-xs text-ink-faint">{t("lesson.fromHandwriting")}</p>
                   )}
-                  {turn.source_kind === "audio" && <p className="mb-1 text-xs text-ink-faint">[音声から変換]</p>}
+                  {turn.source_kind === "audio" && <p className="mb-1 text-xs text-ink-faint">{t("lesson.fromAudio")}</p>}
                   <p className="whitespace-pre-wrap">{turn.content}</p>
                 </div>
                 {!seriesArchived && <KeepToggle courseId={courseId} turnId={turn.id} kept={keptTurnIds.has(turn.id)} />}
@@ -805,7 +808,7 @@ export default async function LearnCourseSessionPage({
           );
         })}
         {turns.length === 0 && (
-          <p className="text-sm text-ink-muted">まだ発言がありません。下から発言してみましょう。</p>
+          <p className="text-sm text-ink-muted">{t("lesson.noTurns")}</p>
         )}
       </div>
 
@@ -813,11 +816,11 @@ export default async function LearnCourseSessionPage({
         <p className="mt-6 rounded-md border border-line bg-surface px-4 py-3 text-sm text-ink-muted">
           {seriesArchived
             ? lessonCrumbs?.endedBy === "lesson"
-              ? "この授業回は終了しています。記録は見返せますが、新しい発言はできません。"
-              : "この教科・科目は終了しています。記録は見返せますが、新しい発言はできません。"
+              ? t("lesson.lockedLesson")
+              : t("lesson.lockedSeries")
             : ended
-              ? "この議論は終了しました。上の「議論のまとめ」を確認して、成果を提出しましょう。"
-              : "制限時間を過ぎました。議論のまとめを作っています…"}
+              ? t("lesson.lockedEnded")
+              : t("lesson.lockedTime")}
         </p>
       ) : (
         <ChatComposer
@@ -834,11 +837,11 @@ export default async function LearnCourseSessionPage({
         <>
       <details className="mt-3 rounded-md border border-line px-4 py-3 text-sm">
         <summary className="cursor-pointer text-xs font-medium text-ink-muted">
-          手書き・音声で発言する
+          {t("lesson.voiceSummary")}
         </summary>
         <form action={boundUploadHandwritingAction} className="mt-3 flex flex-wrap items-center gap-2">
           <label className="text-xs text-ink-muted">
-            手書きで発言する
+            {t("lesson.handwriting")}
             <input
               name="image"
               type="file"
@@ -848,16 +851,16 @@ export default async function LearnCourseSessionPage({
             />
           </label>
           <SubmitButton
-            pendingText="読み取り中…"
+            pendingText={t("lesson.reading")}
             className="shrink-0 rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface disabled:opacity-50"
           >
-            画像を読み取る
+            {t("lesson.readImage")}
           </SubmitButton>
         </form>
 
         <form action={boundUploadAudioAction} className="mt-3 flex flex-wrap items-center gap-2">
           <label className="text-xs text-ink-muted">
-            音声で発言する
+            {t("lesson.voice")}
             <input
               name="audio"
               type="file"
@@ -867,10 +870,10 @@ export default async function LearnCourseSessionPage({
             />
           </label>
           <SubmitButton
-            pendingText="文字起こし中…"
+            pendingText={t("lesson.transcribing")}
             className="shrink-0 rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface disabled:opacity-50"
           >
-            音声を文字起こしする
+            {t("lesson.transcribe")}
           </SubmitButton>
         </form>
       </details>
@@ -886,19 +889,19 @@ export default async function LearnCourseSessionPage({
                 className="rounded-md border border-line px-4 py-3 text-sm"
               >
                 {upload.status === "transcribing" && (
-                  <p className="text-xs text-ink-muted">音声を文字起こししています…</p>
+                  <p className="text-xs text-ink-muted">{t("lesson.transcribingNow")}</p>
                 )}
                 {upload.status === "failed" && (
                   <>
                     <p className="text-xs text-danger">
-                      文字起こしに失敗しました: {upload.error}
+                      {t("lesson.transcribeFailed", { error: upload.error ?? "" })}
                     </p>
                     <form action={boundDiscardAction} className="mt-2">
                       <button
                         type="submit"
                         className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface"
                       >
-                        取り消す
+                        {t("lesson.cancel")}
                       </button>
                     </form>
                   </>
@@ -907,7 +910,7 @@ export default async function LearnCourseSessionPage({
                   <form action={boundConfirmAction} className="space-y-2">
                     <label className="block space-y-2">
                       <span className="block text-xs text-ink-muted">
-                        文字起こし結果です。内容を確認・修正してから送信してください。
+                        {t("lesson.transcribedHint")}
                       </span>
                       <textarea
                         name="message"
@@ -919,13 +922,13 @@ export default async function LearnCourseSessionPage({
                     </label>
                     <div className="flex gap-2">
                       <SubmitButton
-                        pendingText="送信中…"
+                        pendingText={t("composer.sending")}
                         className="rounded-md bg-accent-fill px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-fill-hover disabled:opacity-50"
                       >
-                        この内容で送信
+                        {t("lesson.sendThis")}
                       </SubmitButton>
                     </div>
-                    <ThinkingIndicator label="擬似メンバーが考えています" />
+                    <ThinkingIndicator label={t("thinking.members")} />
                   </form>
                 )}
                 {upload.status === "ready" && (
@@ -934,7 +937,7 @@ export default async function LearnCourseSessionPage({
                       type="submit"
                       className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface"
                     >
-                      取り消す
+                      {t("lesson.cancel")}
                     </button>
                   </form>
                 )}
@@ -955,19 +958,19 @@ export default async function LearnCourseSessionPage({
                 className="rounded-md border border-line px-4 py-3 text-sm"
               >
                 {upload.status === "recognizing" && (
-                  <p className="text-xs text-ink-muted">画像を読み取っています…</p>
+                  <p className="text-xs text-ink-muted">{t("lesson.readingNow")}</p>
                 )}
                 {upload.status === "failed" && (
                   <>
                     <p className="text-xs text-danger">
-                      読み取りに失敗しました: {upload.error}
+                      {t("lesson.readFailed", { error: upload.error ?? "" })}
                     </p>
                     <form action={boundDiscardAction} className="mt-2">
                       <button
                         type="submit"
                         className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface"
                       >
-                        取り消す
+                        {t("lesson.cancel")}
                       </button>
                     </form>
                   </>
@@ -976,7 +979,7 @@ export default async function LearnCourseSessionPage({
                   <form action={boundConfirmAction} className="space-y-2">
                     <label className="block space-y-2">
                       <span className="block text-xs text-ink-muted">
-                        読み取り結果です。内容を確認・修正してから送信してください。
+                        {t("lesson.readHint")}
                       </span>
                       <textarea
                         name="message"
@@ -988,13 +991,13 @@ export default async function LearnCourseSessionPage({
                     </label>
                     <div className="flex gap-2">
                       <SubmitButton
-                        pendingText="送信中…"
+                        pendingText={t("composer.sending")}
                         className="rounded-md bg-accent-fill px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-fill-hover disabled:opacity-50"
                       >
-                        この内容で送信
+                        {t("lesson.sendThis")}
                       </SubmitButton>
                     </div>
-                    <ThinkingIndicator label="擬似メンバーが考えています" />
+                    <ThinkingIndicator label={t("thinking.members")} />
                   </form>
                 )}
                 {upload.status === "ready" && (
@@ -1003,7 +1006,7 @@ export default async function LearnCourseSessionPage({
                       type="submit"
                       className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface"
                     >
-                      取り消す
+                      {t("lesson.cancel")}
                     </button>
                   </form>
                 )}
@@ -1018,35 +1021,35 @@ export default async function LearnCourseSessionPage({
       <div className="mt-12 border-t border-line-soft pt-8" id="submit-outcome">
         {seriesArchived ? (
           <p className="text-sm text-ink-muted">
-            {lessonCrumbs?.endedBy === "lesson" ? "この授業回は終了しているため、新しい成果は提出できません。" : "この教科・科目は終了しているため、新しい成果は提出できません。"}
+            {lessonCrumbs?.endedBy === "lesson" ? t("lesson.submitClosedLesson") : t("lesson.submitClosedSeries")}
           </p>
         ) : null}
         {!seriesArchived && (
           <>
         <h2 className="text-sm font-medium text-ink">
-          成果を提出する
+          {t("lesson.submitTitle")}
         </h2>
         <p className="mt-1 text-sm text-ink-muted">
-          擬似メンバーとの議論をふまえて、自分の考えをまとめて提出しましょう。
+          {t("lesson.submitLead")}
         </p>
 
         <form action={boundSubmitOutcomeAction} className="mt-4 space-y-3">
           <label htmlFor="outcome-content" className="sr-only">
-            成果の内容
+            {t("lesson.contentLabel")}
           </label>
           <textarea
             id="outcome-content"
             name="content"
             required
             rows={4}
-            placeholder="議論をふまえた自分の考えをまとめて書く"
+            placeholder={t("lesson.contentPlaceholder")}
             className="w-full rounded-md border border-line px-3 py-2 text-sm bg-surface-raised"
           />
           <SubmitButton
-            pendingText="提出中…"
+            pendingText={t("lesson.submitting")}
             className="rounded-md bg-accent-fill px-4 py-2 text-sm font-medium text-white hover:bg-accent-fill-hover disabled:opacity-60"
           >
-            提出する
+            {t("lesson.submit")}
           </SubmitButton>
         </form>
 
@@ -1082,44 +1085,44 @@ export default async function LearnCourseSessionPage({
                 >
                   <p className="whitespace-pre-wrap">{submission.content}</p>
                   <p className="mt-2 text-xs text-ink-faint">
-                    {new Date(submission.created_at).toLocaleString("ja-JP")}
+                    {formatDateTime(submission.created_at, lang)}
                   </p>
-                  <ol className="mt-3 space-y-2 rounded-md bg-surface px-3 py-2" aria-label="提出したあとの流れ">
+                  <ol className="mt-3 space-y-2 rounded-md bg-surface px-3 py-2" aria-label={t("lesson.afterFlow")}>
                     <li className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                       <span className="text-xs font-medium text-ink">
                         <StepNumber n={1} />
-                        AIフィードバック
-                        <span className="ml-2 font-normal text-ink-faint">{FEEDBACK_STATUS_LABELS[submission.feedback_status]}</span>
+                        {t("lesson.aiFeedback")}
+                        <span className="ml-2 font-normal text-ink-faint">{t(FEEDBACK_STATUS_KEYS[submission.feedback_status])}</span>
                       </span>
                       <form action={boundGenerateFeedbackAction}>
                         <SubmitButton
-                          pendingText="生成中…"
+                          pendingText={t("dashboard.generating")}
                           className="rounded-md border border-line bg-surface-raised px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface disabled:opacity-50"
                         >
-                          {submission.feedback_status === "done" ? "再生成する" : "もらう"}
+                          {submission.feedback_status === "done" ? t("dashboard.regenerate") : t("lesson.get")}
                         </SubmitButton>
                       </form>
                     </li>
                     <li className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                       <span className="text-xs font-medium text-ink">
                         <StepNumber n={2} />
-                        AIジャッジ(議論全体の評価・任意)
-                        <span className="ml-2 font-normal text-ink-faint">{JUDGMENT_STATUS_LABELS[submission.judgment_status]}</span>
+                        {t("lesson.aiJudge")}
+                        <span className="ml-2 font-normal text-ink-faint">{t(JUDGMENT_STATUS_KEYS[submission.judgment_status])}</span>
                       </span>
                       <form action={boundJudgeDiscussionAction}>
                         <SubmitButton
-                          pendingText="ジャッジ中…"
+                          pendingText={t("lesson.judging")}
                           className="rounded-md border border-line bg-surface-raised px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface disabled:opacity-50"
                         >
-                          {submission.judgment_status === "done" ? "再ジャッジする" : "受ける"}
+                          {submission.judgment_status === "done" ? t("lesson.rejudge") : t("lesson.takeJudge")}
                         </SubmitButton>
                       </form>
                     </li>
                     <li className="text-xs font-medium text-ink">
                       <StepNumber n={3} />
-                      振り返り
+                      {t("lesson.reflection")}
                       <span className="ml-2 font-normal text-ink-faint">
-                        {reflection ? "記入済み" : submission.feedback_status === "done" ? "下の欄に書けます" : "フィードバックのあとに書けます"}
+                        {reflection ? t("lesson.reflDone") : submission.feedback_status === "done" ? t("lesson.reflBelow") : t("lesson.reflAfter")}
                       </span>
                     </li>
                   </ol>
@@ -1143,15 +1146,15 @@ export default async function LearnCourseSessionPage({
                             {item.criteria_label}
                           </p>
                           <p className="mt-1">
-                            <span className="text-ink-muted">良い点: </span>
+                            <span className="text-ink-muted">{t("portfolioEntry.goodPoints")}</span>
                             {item.good_points}
                           </p>
                           <p className="mt-1">
-                            <span className="text-ink-muted">次に考える問い: </span>
+                            <span className="text-ink-muted">{t("portfolioEntry.nextQuestion")}</span>
                             {item.next_question}
                           </p>
                           <p className="mt-1 text-xs text-ink-muted">
-                            参照すべき資料の箇所: {item.material_reference}
+                            {t("lesson.materialRef", { ref: item.material_reference })}
                           </p>
                         </div>
                       ))}
@@ -1161,15 +1164,14 @@ export default async function LearnCourseSessionPage({
                   {judgment && (
                     <div className="mt-4 space-y-1 border-t border-line-soft pt-3">
                       <p className="text-xs font-medium text-ink">
-                        AIジャッジ: 議論全体を通しての評価
+                        {t("lesson.judgeHeading")}
                       </p>
                       <p className="text-xs text-ink-muted">
-                        論理構成 {judgment.logic_structure}/5 ・ 根拠の質 {judgment.evidence_quality}/5 ・
-                        反論への応答 {judgment.rebuttal_response}/5
+                        {t("lesson.judgeScores", { logic: judgment.logic_structure, evidence: judgment.evidence_quality, rebuttal: judgment.rebuttal_response })}
                       </p>
                       <p className="mt-1">{judgment.summary_comment}</p>
                       <p className="mt-1 text-xs text-ink-faint">
-                        この評価は最終ではありません。自己評価や教師の評価の参考にしてください。
+                        {t("lesson.notFinal")}
                       </p>
                     </div>
                   )}
@@ -1178,38 +1180,38 @@ export default async function LearnCourseSessionPage({
                     <div className="mt-4 border-t border-line-soft pt-3">
                       <p className="text-xs font-medium text-ink">
                         <StepNumber n={3} />
-                        振り返り{reflection && "(記入済み・編集できます)"}
+                        {t("lesson.reflection")}{reflection && t("lesson.reflEditable")}
                       </p>
                       <form action={boundSaveReflectionAction} className="mt-2 space-y-2">
                         <label className="block">
-                          <span className="sr-only">学んだこと</span>
+                          <span className="sr-only">{t("lesson.learned")}</span>
                           <textarea
                             name="whatLearned"
                             required
                             rows={2}
-                            placeholder="学んだこと"
+                            placeholder={t("lesson.learned")}
                             defaultValue={reflection?.what_learned}
                             className="w-full rounded-md border border-line px-3 py-2 text-sm bg-surface-raised"
                           />
                         </label>
                         <label className="block">
-                          <span className="sr-only">迷ったこと</span>
+                          <span className="sr-only">{t("lesson.confused")}</span>
                           <textarea
                             name="whatConfused"
                             required
                             rows={2}
-                            placeholder="迷ったこと"
+                            placeholder={t("lesson.confused")}
                             defaultValue={reflection?.what_confused}
                             className="w-full rounded-md border border-line px-3 py-2 text-sm bg-surface-raised"
                           />
                         </label>
                         <label className="block">
-                          <span className="sr-only">次にやりたいこと</span>
+                          <span className="sr-only">{t("lesson.nextGoal")}</span>
                           <textarea
                             name="nextGoal"
                             required
                             rows={2}
-                            placeholder="次にやりたいこと"
+                            placeholder={t("lesson.nextGoal")}
                             defaultValue={reflection?.next_goal}
                             className="w-full rounded-md border border-line px-3 py-2 text-sm bg-surface-raised"
                           />
@@ -1220,13 +1222,13 @@ export default async function LearnCourseSessionPage({
                             name="sharedWithTeacher"
                             defaultChecked={reflection?.shared_with_teacher}
                           />
-                          教師に共有する
+                          {t("lesson.shareTeacher")}
                         </label>
                         <SubmitButton
-                          pendingText="保存中…"
+                          pendingText={t("portfolio.saving")}
                           className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface disabled:opacity-60"
                         >
-                          {reflection ? "更新する" : "振り返りを保存"}
+                          {reflection ? t("lesson.update") : t("lesson.saveReflection")}
                         </SubmitButton>
                       </form>
                     </div>
@@ -1238,22 +1240,23 @@ export default async function LearnCourseSessionPage({
         )}
       </div>
 
-      <BackLink href={lessonCrumbs ? `/learn/series/${lessonCrumbs.seriesId}` : "/learn"} label={lessonCrumbs?.seriesTitle ?? "授業一覧"} />
+      <BackLink href={lessonCrumbs ? `/learn/series/${lessonCrumbs.seriesId}` : "/learn"} label={lessonCrumbs?.seriesTitle ?? t("learnList.title")} />
     </div>
   );
 }
 
 // 「後輩に残したい」の印の付け外し(要件定義書14章ステップ5)。発言の下に小さく出す。
-function KeepToggle({ courseId, turnId, kept }: { courseId: string; turnId: string; kept: boolean }) {
+async function KeepToggle({ courseId, turnId, kept }: { courseId: string; turnId: string; kept: boolean }) {
+  const { t } = await getT();
   return (
     <form action={toggleKeepForJuniorsAction.bind(null, courseId, turnId)} className="mt-0.5">
       <button
         type="submit"
         aria-pressed={kept}
-        title={kept ? "印を外す" : "この場面を、後輩の探究の参考に残す"}
+        title={kept ? t("lesson.unmark") : t("lesson.markTitle")}
         className={`text-xs underline underline-offset-2 ${kept ? "font-medium text-warn" : "text-ink-faint"}`}
       >
-        {kept ? "★ 後輩に残す" : "☆ 後輩に残す"}
+        {kept ? t("lesson.marked") : t("lesson.unmarked")}
       </button>
     </form>
   );

@@ -1,5 +1,6 @@
 import { revalidatePath } from "next/cache";
 import { getEffectiveStudent } from "@/lib/auth/session";
+import { getT } from "@/lib/i18n/server";
 import { hasConsent } from "@/lib/consent";
 import { isEnrolled } from "@/lib/courses/enrollment";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -12,27 +13,28 @@ export const dynamic = "force-dynamic";
 
 export async function POST(_request: Request, { params }: { params: Promise<{ courseId: string }> }) {
   const { courseId } = await params;
+  const { t, lang } = await getT();
 
   const user = await getEffectiveStudent();
   if (!user) {
-    return Response.json({ error: "ログインしてください。" }, { status: 401 });
+    return Response.json({ error: t("apiErrors.login") }, { status: 401 });
   }
 
   const admin = createAdminClient();
   if (!(await hasConsent(admin, user.id))) {
-    return Response.json({ error: "データ利用への同意が必要です。" }, { status: 403 });
+    return Response.json({ error: t("apiErrors.needConsent") }, { status: 403 });
   }
   if (!(await isEnrolled(admin, courseId, user.id))) {
-    return Response.json({ error: "この授業への参加登録がありません。" }, { status: 403 });
+    return Response.json({ error: t("apiErrors.notEnrolled") }, { status: 403 });
   }
 
   try {
-    const { summary, alreadyEnded } = await closeDiscussion(admin, courseId, user.id);
+    const { summary, alreadyEnded } = await closeDiscussion(admin, courseId, user.id, lang);
     revalidatePath(`/learn/${courseId}`);
     return Response.json({ ok: true, summary, alreadyEnded });
   } catch (error) {
     return Response.json(
-      { error: error instanceof Error ? error.message : "議論のまとめに失敗しました。" },
+      { error: error instanceof Error ? error.message : t("apiErrors.summaryFailed") },
       { status: 500 },
     );
   }

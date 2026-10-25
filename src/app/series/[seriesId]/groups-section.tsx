@@ -1,4 +1,5 @@
 import { SubmitButton } from "@/components/submit-button";
+import { formatShortDate, getT } from "@/lib/i18n/server";
 import type { createAdminClient } from "@/lib/supabase/server";
 import { loadSeriesGroups } from "@/lib/inquiry/groups";
 import { loadSoloThemes } from "@/lib/inquiry/solo";
@@ -31,27 +32,27 @@ export async function GroupsSection({
   nameOf: (studentId: string) => string;
   error?: string;
 }) {
+  const { t, lang } = await getT();
   const groups = await loadSeriesGroups(admin, seriesId);
   const grouped = new Set(groups.flatMap((g) => g.members.map((m) => m.studentId)));
   const ungrouped = enrolledStudentIds.filter((id) => !grouped.has(id));
   const soloThemes = await loadSoloThemes(admin, seriesId);
-  const dateFmt = new Intl.DateTimeFormat("ja-JP", { timeZone: "Asia/Tokyo", month: "numeric", day: "numeric" });
 
   return (
     <section id="groups" className="mt-10">
-      <h2 className="border-b border-line-soft pb-2 text-base font-semibold text-ink">グループ({groups.length})</h2>
+      <h2 className="border-b border-line-soft pb-2 text-base font-semibold text-ink">{t("groupsAdmin.heading", { n: groups.length })}</h2>
       <p className="mt-2 text-sm text-ink-muted">
-        グループは任意です。入った学習者はグループで、入らない学習者は一人で探究します(1人1グループ)。
+        {t("groupsAdmin.lead")}
       </p>
       {error && <p className="mt-3 rounded-md border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
       {ungrouped.length > 0 && (
         <div className="mt-3 rounded-md border border-line bg-surface px-3 py-2 text-sm text-ink-muted">
-          <p className="font-medium text-ink">一人で探究している学習者({ungrouped.length}人)</p>
+          <p className="font-medium text-ink">{t("groupsAdmin.soloHeading", { n: ungrouped.length })}</p>
           <ul className="mt-1 space-y-0.5">
             {ungrouped.map((id) => (
               <li key={id}>
                 {nameOf(id)}
-                <span className="ml-2 text-xs text-ink-faint">{soloThemes.get(id) ? `テーマ: ${soloThemes.get(id)}` : "テーマはまだ決まっていません"}</span>
+                <span className="ml-2 text-xs text-ink-faint">{soloThemes.get(id) ? t("groupsAdmin.themeOf", { theme: soloThemes.get(id) ?? "" }) : t("groupsAdmin.themeUnset")}</span>
               </li>
             ))}
           </ul>
@@ -64,21 +65,21 @@ export async function GroupsSection({
             <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
               <span className="font-medium text-ink">
                 {g.title}
-                <span className="ml-2 text-xs font-normal text-ink-muted">{g.members.length}人</span>
+                <span className="ml-2 text-xs font-normal text-ink-muted">{t("groupsAdmin.people", { n: g.members.length })}</span>
               </span>
               {g.joinCode && (
                 <span className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs text-ink-muted">グループのコード</span>
+                  <span className="text-xs text-ink-muted">{t("groupsAdmin.groupCode")}</span>
                   <span className="rounded-md border border-line bg-surface-raised px-2 py-0.5 font-mono tracking-widest text-ink">{g.joinCode}</span>
                   {!archived && (
                     <form action={regenerateGroupCodeAction.bind(null, seriesId, g.id)}>
-                      <button type="submit" className="text-xs text-ink-faint underline underline-offset-2">再発行</button>
+                      <button type="submit" className="text-xs text-ink-faint underline underline-offset-2">{t("groupsAdmin.regen")}</button>
                     </form>
                   )}
                 </span>
               )}
             </div>
-            <p className="mt-1 text-sm text-ink-muted">テーマ: {g.theme ? <span className="text-ink">{g.theme}</span> : "(まだ決まっていません)"}</p>
+            <p className="mt-1 text-sm text-ink-muted">{t("groupsAdmin.themeLabel")}{g.theme ? <span className="text-ink">{g.theme}</span> : t("groupsAdmin.themeNone")}</p>
 
             <ul className="mt-2 space-y-1">
               {g.members.map((m) => (
@@ -86,38 +87,38 @@ export async function GroupsSection({
                   <span className="text-ink-muted">{nameOf(m.studentId)}</span>
                   {!archived && (
                     <form action={removeMemberAction.bind(null, seriesId, g.id, m.studentId)}>
-                      <button type="submit" className="text-xs text-ink-faint underline underline-offset-2 hover:text-danger">グループから外す</button>
+                      <button type="submit" className="text-xs text-ink-faint underline underline-offset-2 hover:text-danger">{t("groupsAdmin.removeMember")}</button>
                     </form>
                   )}
                 </li>
               ))}
-              {g.members.length === 0 && <li className="text-sm text-ink-faint">まだメンバーがいません。</li>}
+              {g.members.length === 0 && <li className="text-sm text-ink-faint">{t("groupsAdmin.noMembers")}</li>}
             </ul>
 
             {!archived && enrolledStudentIds.length > 0 && (
               <form action={assignMemberAction.bind(null, seriesId, g.id)} className="mt-3 flex flex-wrap items-center gap-2">
-                <label htmlFor={`assign-${g.id}`} className="sr-only">割り当てる学習者</label>
+                <label htmlFor={`assign-${g.id}`} className="sr-only">{t("groupsAdmin.assignLabel")}</label>
                 <select id={`assign-${g.id}`} name="studentId" defaultValue="" className="min-w-0 flex-1 rounded-md border border-line bg-surface-raised px-2 py-1.5 text-sm">
-                  <option value="" disabled>学習者を選ぶ(ほかのグループからは移ります)</option>
+                  <option value="" disabled>{t("groupsAdmin.pickLearner")}</option>
                   {enrolledStudentIds
                     .filter((id) => !g.members.some((m) => m.studentId === id))
                     .map((id) => (
                       <option key={id} value={id}>
-                        {nameOf(id)}{grouped.has(id) ? "(別のグループから移る)" : ""}
+                        {nameOf(id)}{grouped.has(id) ? t("groupsAdmin.movesFrom") : ""}
                       </option>
                     ))}
                 </select>
-                <SubmitButton pendingText="割り当て中…" className={small}>割り当てる</SubmitButton>
+                <SubmitButton pendingText={t("groupsAdmin.assigning")} className={small}>{t("groupsAdmin.assign")}</SubmitButton>
               </form>
             )}
 
             {g.themeHistory.length > 0 && (
               <details className="mt-3">
-                <summary className="cursor-pointer text-xs text-ink-muted">テーマの変化({g.themeHistory.length})</summary>
+                <summary className="cursor-pointer text-xs text-ink-muted">{t("groupsAdmin.themeChanges", { n: g.themeHistory.length })}</summary>
                 <ol className="mt-2 space-y-1 text-sm">
                   {g.themeHistory.map((h, i) => (
                     <li key={i} className="text-ink-muted">
-                      <span className="text-xs text-ink-faint">{dateFmt.format(new Date(h.createdAt))} {h.changedBy ? nameOf(h.changedBy) : ""}</span>
+                      <span className="text-xs text-ink-faint">{formatShortDate(h.createdAt, lang)} {h.changedBy ? nameOf(h.changedBy) : ""}</span>
                       <span className="ml-2 text-ink">{h.theme}</span>
                     </li>
                   ))}
@@ -127,30 +128,30 @@ export async function GroupsSection({
 
             {!archived && (
               <details className="mt-2">
-                <summary className="cursor-pointer text-xs text-ink-muted">名前を変える・グループを消す</summary>
+                <summary className="cursor-pointer text-xs text-ink-muted">{t("groupsAdmin.renameSummary")}</summary>
                 <form action={renameGroupAction.bind(null, seriesId, g.id)} className="mt-2 flex flex-wrap gap-2">
-                  <label htmlFor={`rename-${g.id}`} className="sr-only">グループの名前</label>
+                  <label htmlFor={`rename-${g.id}`} className="sr-only">{t("groupsAdmin.groupName")}</label>
                   <input id={`rename-${g.id}`} name="title" defaultValue={g.title} required maxLength={40} className="min-w-0 flex-1 rounded-md border border-line bg-surface-raised px-3 py-1.5 text-sm" />
-                  <SubmitButton pendingText="保存中…" className={small}>保存</SubmitButton>
+                  <SubmitButton pendingText={t("groupsAdmin.saving")} className={small}>{t("groupsAdmin.save")}</SubmitButton>
                 </form>
                 <form action={deleteGroupAction.bind(null, seriesId, g.id)} className="mt-2">
                   <button type="submit" className="text-xs text-ink-faint underline underline-offset-2 hover:text-danger">
-                    このグループを消す(議論の記録が無いときだけ)
+                    {t("groupsAdmin.deleteGroup")}
                   </button>
                 </form>
               </details>
             )}
           </li>
         ))}
-        {groups.length === 0 && <li className="text-sm text-ink-muted">まだグループがありません。</li>}
+        {groups.length === 0 && <li className="text-sm text-ink-muted">{t("groupsAdmin.noGroups")}</li>}
       </ul>
 
       {!archived && (
         <form action={createGroupAction.bind(null, seriesId)} className="mt-4 flex flex-wrap items-center gap-2">
-          <label htmlFor="group-new-title" className="sr-only">新しいグループの名前</label>
-          <input id="group-new-title" name="title" required maxLength={40} placeholder="新しいグループの名前(例: 防災班)" className="min-w-0 flex-1 rounded-md border border-line bg-surface-raised px-3 py-2 text-sm" />
-          <SubmitButton pendingText="作成中…" className="rounded-md bg-accent-fill px-4 py-2 text-sm font-medium text-white hover:bg-accent-fill-hover disabled:opacity-50">
-            グループを作る
+          <label htmlFor="group-new-title" className="sr-only">{t("groupsAdmin.newName")}</label>
+          <input id="group-new-title" name="title" required maxLength={40} placeholder={t("groupsAdmin.newPlaceholder")} className="min-w-0 flex-1 rounded-md border border-line bg-surface-raised px-3 py-2 text-sm" />
+          <SubmitButton pendingText={t("groupsAdmin.creating")} className="rounded-md bg-accent-fill px-4 py-2 text-sm font-medium text-white hover:bg-accent-fill-hover disabled:opacity-50">
+            {t("groupsAdmin.createGroup")}
           </SubmitButton>
         </form>
       )}

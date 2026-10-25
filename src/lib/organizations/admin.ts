@@ -1,3 +1,4 @@
+import type { Translator } from "@/lib/i18n/translate";
 // 管理者が組織の種類・親(自治体)・所属の確認を変えるときの入力チェック(純粋関数、テストあり)。
 export const ORG_KINDS = ["school", "municipality", "other"] as const;
 export type OrgKind = (typeof ORG_KINDS)[number];
@@ -6,6 +7,11 @@ export const ORG_KIND_LABELS: Record<OrgKind, string> = {
   municipality: "自治体",
   other: "その他の団体",
 };
+
+/** 画面の言語に合わせた組織の種類の名前。 */
+export function orgKindLabel(t: Translator, kind: OrgKind): string {
+  return t(`orgEnums.kind_${kind}`);
+}
 
 export function isOrgKind(value: unknown): value is OrgKind {
   return typeof value === "string" && (ORG_KINDS as readonly string[]).includes(value);

@@ -1,25 +1,28 @@
+import { getT } from "@/lib/i18n/server";
+import type { Translator } from "@/lib/i18n/translate";
 import type { Metadata } from "next";
 import Link from "next/link";
 import videos from "./videos.json";
 
-export const metadata: Metadata = {
-  title: "使い方ガイド(動画) - Synclie",
-  description: "Synclie の使い方と特長を紹介する動画です。",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT();
+  return { title: t("guidePage.metaTitle"), description: t("guidePage.metaDesc") };
+}
 
 const NUMBERS = ["①", "②", "③", "④", "⑤"];
 
-function minutes(seconds: number) {
-  return `約${Math.max(1, Math.round(seconds / 60))}分`;
+function minutes(seconds: number, t: Translator) {
+  return t("guidePage.about", { n: Math.max(1, Math.round(seconds / 60)) });
 }
 
 // ログインしていなくても見られる公開ページ。動画は public/guide/ に置き、字幕(WebVTT)と文字起こしを添える。
-export default function GuidePage() {
+export default async function GuidePage() {
+  const { t } = await getT();
   return (
     <div className="mx-auto max-w-3xl px-6 py-12">
-      <h1 className="text-2xl font-semibold text-ink">使い方ガイド(動画)</h1>
+      <h1 className="text-2xl font-semibold text-ink">{t("guidePage.heading")}</h1>
       <p className="mt-2 text-sm text-ink-muted">
-        字幕(映像に表示)と文字起こしつきです。画面はデモ用のデータ、音声は読み上げです。
+        {t("guidePage.lead")}
       </p>
       <ul className="mt-4 flex flex-wrap gap-x-5 gap-y-1 text-sm">
         {videos.map((v, i) => (
@@ -36,7 +39,7 @@ export default function GuidePage() {
           <section key={v.slug} id={v.slug} aria-labelledby={`${v.slug}-title`} className="scroll-mt-6">
             <h2 id={`${v.slug}-title`} className="text-lg font-semibold text-ink">
               {NUMBERS[i]} {v.title}
-              <span className="ml-2 text-sm font-normal text-ink-muted">{minutes(v.seconds)}</span>
+              <span className="ml-2 text-sm font-normal text-ink-muted">{minutes(v.seconds, t)}</span>
             </h2>
             <p className="mt-1 text-sm text-ink-muted">{v.description}</p>
             <video
@@ -48,10 +51,10 @@ export default function GuidePage() {
             >
               <source src={`/guide/${v.slug}.mp4`} type="video/mp4" />
               <track kind="captions" src={`/guide/${v.slug}.ja.vtt`} srcLang="ja" label="日本語" />
-              お使いのブラウザは動画に対応していません。
+              {t("guidePage.noSupport")}
             </video>
             <details className="mt-3 rounded-md border border-line px-4 py-3">
-              <summary className="cursor-pointer text-sm font-medium text-ink">文字起こしを読む</summary>
+              <summary className="cursor-pointer text-sm font-medium text-ink">{t("guidePage.transcript")}</summary>
               <div className="mt-3 space-y-3 text-sm leading-7 text-ink-muted">
                 {v.transcript.map((t, k) => (
                   <div key={k}>
@@ -66,15 +69,15 @@ export default function GuidePage() {
       </div>
 
       <p id="credit" className="mt-10 text-xs text-ink-muted">
-        音声: Open JTalk(名古屋工業大学)、音声モデル「Mei」(MMDAgent、CC BY 3.0)
+        {t("guidePage.credit")}
       </p>
 
       <nav className="mt-12 flex flex-wrap gap-x-4 gap-y-2 border-t border-line-soft pt-6 text-sm text-ink-muted">
         <Link href="/" className="underline underline-offset-2">
-          トップへ戻る
+          {t("guidePage.top")}
         </Link>
         <Link href="/login" className="underline underline-offset-2">
-          ログイン
+          {t("guidePage.login")}
         </Link>
       </nav>
     </div>

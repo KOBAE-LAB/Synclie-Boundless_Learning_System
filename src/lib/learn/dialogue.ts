@@ -3,6 +3,9 @@
 // (app/api/learn/[courseId]/message/route.ts)からも同じ処理を呼びたいため、ここに切り出した。
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
+import { getLang } from "@/lib/i18n/server";
+import { translatorFor } from "@/lib/i18n/translate";
+import type { Lang } from "@/lib/i18n/config";
 import { createAdminClient } from "@/lib/supabase/server";
 import { loadActiveMembers, recordRetrievals, retrieveForTurn, type LessonMember } from "@/lib/learn/members";
 import { askPersona, askPersonaStream, type PersonaProfile, type ChatTurn } from "@/lib/ai/persona";
@@ -100,7 +103,7 @@ export async function getOrCreateSessionRow(
           );
       }
     } else {
-      throw new Error("この授業への参加登録がありません。授業コードで申請し、先生の承認を受けてから発言してください。");
+      throw new Error(translatorFor(await getLang())("dialogue.notEnrolled"));
     }
   }
 
@@ -120,7 +123,7 @@ export async function getOrCreateSessionRow(
   const latest = await findLatest();
   if (latest) {
     if (latest.ended_at && !options.allowEnded) {
-      throw new Error("この議論は終了しました。議論のまとめを確認して、成果を提出しましょう。");
+      throw new Error(translatorFor(await getLang())("dialogue.discussionEnded"));
     }
     return { ...(latest as Omit<SessionRow, "scope">), scope };
   }
@@ -148,7 +151,8 @@ export async function getOrCreateSessionRow(
   // グループの別のメンバーが同時に最初の発言をした場合は、先に作られた方を使う(一意の索引、0044)。
   const created = inserted ?? (error?.code === "23505" ? await findLatest() : null);
   if (!created) {
-    throw new Error(`学習セッションの作成に失敗しました: ${error?.message ?? "不明なエラー"}`);
+    const t = translatorFor(await getLang());
+    throw new Error(t("dialogue.createSessionFailed", { detail: error?.message ?? t("dialogue.unknownError") }));
   }
   // 探究の段階(要件定義書14章ステップ5): 授業回の「想定の段階」がいまより先なら、そこまで進める。失敗しても学習は止めない。
   const projectId = scope.kind === "group" ? scope.projectId : context.projectId;
@@ -266,8 +270,10 @@ export async function postStudentMessageAndRespond(
   studentId: string,
   message: string,
   source: { kind: "text" | "handwriting" | "audio"; sourcePath?: string } = { kind: "text" },
-  options: { onEvent?: (event: DialogueEvent) => void } = {},
+  options: { onEvent?: (event: DialogueEvent) => void; lang?: Lang } = {},
 ) {
+  const lang = options.lang ?? (await getLang());
+  const t = translatorFor(lang);
   // 授業の存在確認と、セッションの取得(参加登録の確認を含む)は互いに独立なので並行して行う。
   const [{ data: course }, session] = await Promise.all([
     admin
@@ -278,7 +284,7 @@ export async function postStudentMessageAndRespond(
     getOrCreateSessionRow(admin, courseId, studentId),
   ]);
   if (!course) {
-    throw new Error("授業が見つかりません。");
+    throw new Error(t("dialogue.lessonNotFound"));
   }
   const sessionId = session.id;
 
@@ -307,7 +313,7 @@ export async function postStudentMessageAndRespond(
     policy: course.time_limit_policy,
   });
   if (timeStatus.blocksInput) {
-    throw new Error("制限時間を過ぎました。「まとめに進む」を押して、議論のまとめを確認しましょう。");
+    throw new Error(t("dialogue.timeUpBlocked"));
   }
 
   // 学習者の発言の保存と、誰が返答するかの選択も互いに独立(選択は発言の本文だけを使う)。
@@ -329,7 +335,7 @@ export async function postStudentMessageAndRespond(
   ]);
   const { data: studentTurn, error: studentTurnError } = studentTurnResult;
   if (studentTurnError || !studentTurn) {
-    throw new Error(`発言の保存に失敗しました: ${studentTurnError?.message ?? "不明なエラー"}`);
+    throw new Error(t("dialogue.saveTurnFailed", { detail: studentTurnError?.message ?? t("dialogue.unknownError") }));
   }
 
   if (!picked) {
@@ -432,7 +438,7 @@ export async function postStudentMessageAndRespond(
     };
     // 制限時間を過ぎていれば、AIを呼ばずに提案する。
     if (timeStatus.isOver) {
-      await suggest("制限時間になりました。ここで議論をまとめましょう。");
+      await suggest(t("dialogue.timeUpSuggest"));
       return;
     }
     if (
@@ -447,9 +453,9 @@ export async function postStudentMessageAndRespond(
       return;
     }
     try {
-      const judgment = await judgeDiscussionState(transcriptText, course.objective);
+      const judgment = await judgeDiscussionState(transcriptText, course.objective, lang);
       if (judgment.state !== "continue") {
-        await suggest(judgment.reason || "議論がひと区切りついたようです。");
+        await suggest(judgment.reason || t("dialogue.pauseSuggest"));
       }
     } catch {
       // 判定の失敗は、対話を止めない(付加的な機能のため)。
@@ -506,6 +512,7 @@ export async function postStudentMessageAndRespond(
     otherParticipants,
     courseContext: withStepContext(withStepContext(buildCourseContext(course), stepContext), groupNote),
     memory: memories.get(persona.id)?.memory.text,
+    lang,
   };
 
   // 返答: 擬似メンバーが1人なら従来どおり1人が答える。2人以上いる授業では、各メンバーの
@@ -532,6 +539,7 @@ export async function postStudentMessageAndRespond(
           maxMessages: maxMessagesFor(course.discussion_liveliness),
           calledOut: activeMembers.filter((p) => isPersonaMentioned(p.name, message)).map((p) => p.name),
           reasoningEffort,
+          lang,
         },
         history,
         toScenePersona(persona, memories.get(persona.id)?.memory.text),
@@ -545,11 +553,11 @@ export async function postStudentMessageAndRespond(
       replies.push({ personaId: persona.id, text: result.reply, conceded: result.conceded });
     }
   } catch (err) {
-    const detail = err instanceof Error ? err.message : "不明なエラー";
-    throw new Error(`擬似メンバーの発言生成に失敗しました: ${detail}`);
+    const detail = err instanceof Error ? err.message : t("dialogue.unknownError");
+    throw new Error(t("dialogue.genFailed", { detail }));
   }
   if (replies.length === 0) {
-    throw new Error("擬似メンバーの発言を生成できませんでした。もう一度お試しください。");
+    throw new Error(t("dialogue.genEmpty"));
   }
 
   // 発言は順番に1つずつ保存する(同じ瞬間の時刻になって、並び順が崩れないように)。
@@ -572,7 +580,7 @@ export async function postStudentMessageAndRespond(
       .select("id")
       .single();
     if (personaTurnError || !personaTurn) {
-      throw new Error(`擬似メンバーの発言保存に失敗しました: ${personaTurnError?.message ?? "不明なエラー"}`);
+      throw new Error(t("dialogue.savePersonaTurnFailed", { detail: personaTurnError?.message ?? t("dialogue.unknownError") }));
     }
     // 先輩型の発言には、使った記録(軌跡・段階の物語・エピソード)を残す(発言の根拠をたどれるように)。
     const used = memories.get(reply.personaId);

@@ -3,21 +3,19 @@
 // その様子(処理待ち・失敗・後回し)と、失敗したものの「やり直す」、この授業回の今月のAIの使用量の目安を見せる。
 import type { createAdminClient } from "@/lib/supabase/server";
 import { SubmitButton } from "@/components/submit-button";
+import { getT } from "@/lib/i18n/server";
+import { LOCALES } from "@/lib/i18n/config";
+import type { DictKey } from "@/lib/i18n/translate";
 import { monthStartJst } from "@/lib/inquiry/queue";
 import { retryInquiryJobsAction } from "./actions";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
-const STATUS_LABELS: Record<string, string> = {
-  pending: "処理待ち",
-  running: "処理中",
-  done: "完了",
-  skipped: "対象外",
-  failed: "失敗",
-  deferred: "後回し(月の上限)",
-};
+const STATUS_KEYS = ["pending", "running", "done", "skipped", "failed", "deferred"];
 
 export async function InquiryRecordsPanel({ admin, courseId }: { admin: AdminClient; courseId: string }) {
+  const { t, lang } = await getT();
+  const locale = LOCALES[lang];
   const { data: course } = await admin.from("courses").select("series_id").eq("id", courseId).maybeSingle();
   const { data: projects } = course
     ? await admin.from("inquiry_projects").select("id").eq("series_id", course.series_id)
@@ -41,42 +39,40 @@ export async function InquiryRecordsPanel({ admin, courseId }: { admin: AdminCli
 
   return (
     <section className="mt-8 rounded-lg border border-line p-4">
-      <h2 className="text-sm font-medium text-ink">探究の記録づくり(自動)</h2>
+      <h2 className="text-sm font-medium text-ink">{t("inquiryPanel.heading")}</h2>
       <p className="mt-1 text-xs text-ink-muted">
-        議論が終わったとき・探究の段階が変わったときに、印の付いた場面から、後輩の参考になる記録(エピソード)を作ります。
-        この教科・科目のエピソード: {episodeCount ?? 0}件
+        {t("inquiryPanel.lead", { n: episodeCount ?? 0 })}
       </p>
       {counts.size > 0 ? (
         <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-muted">
           {[...counts.entries()].map(([status, n]) => (
             <li key={status} className={status === "failed" ? "font-medium text-danger" : undefined}>
-              {STATUS_LABELS[status] ?? status}: {n}
+              {STATUS_KEYS.includes(status) ? t(`inquiryPanel.s_${status}` as DictKey) : status}: {n}
             </li>
           ))}
         </ul>
       ) : (
-        <p className="mt-2 text-xs text-ink-faint">まだ記録づくりは動いていません。</p>
+        <p className="mt-2 text-xs text-ink-faint">{t("inquiryPanel.notRunning")}</p>
       )}
       {retryable > 0 && (
         <form action={retryInquiryJobsAction.bind(null, courseId)} className="mt-2">
           <SubmitButton
-            pendingText="実行中…"
+            pendingText={t("inquiryPanel.running")}
             className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface disabled:opacity-50"
           >
-            失敗・後回しの{retryable}件をやり直す
+            {t("inquiryPanel.retry", { n: retryable })}
           </SubmitButton>
         </form>
       )}
 
-      <h3 className="mt-4 text-xs font-medium text-ink">この授業回のAIの使用量(今月の目安)</h3>
+      <h3 className="mt-4 text-xs font-medium text-ink">{t("inquiryPanel.usageHeading")}</h3>
       {usage && usage.calls > 0 ? (
         <p className="mt-1 text-xs text-ink-muted">
-          {Number(usage.calls).toLocaleString("ja-JP")}回・入力{Number(usage.input_tokens).toLocaleString("ja-JP")}トークン・出力
-          {Number(usage.output_tokens).toLocaleString("ja-JP")}トークン・約 ${Number(usage.cost_usd).toFixed(2)}
-          <span className="ml-1 text-ink-faint">(公開価格からの目安で、請求額そのものではありません)</span>
+          {t("inquiryPanel.usageLine", { c: Number(usage.calls).toLocaleString(locale), i: Number(usage.input_tokens).toLocaleString(locale), o: Number(usage.output_tokens).toLocaleString(locale), cost: Number(usage.cost_usd).toFixed(2) })}
+          <span className="ml-1 text-ink-faint">{t("inquiryPanel.usageNote")}</span>
         </p>
       ) : (
-        <p className="mt-1 text-xs text-ink-faint">今月の記録はまだありません。</p>
+        <p className="mt-1 text-xs text-ink-faint">{t("inquiryPanel.noUsage")}</p>
       )}
     </section>
   );

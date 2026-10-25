@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatDateJst, formatDateTime, getT } from "@/lib/i18n/server";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { requireConsent } from "@/lib/consent";
@@ -34,12 +35,12 @@ interface LearnerSuggestionRow {
   challenge_level_tip: string;
 }
 
-const LEARNER_PROFILE_STATUS_LABELS: Record<LearnerProfileStatus, string> = {
-  pending: "未生成",
-  processing: "生成中",
-  done: "生成済み",
-  failed: "失敗",
-};
+const LEARNER_PROFILE_STATUS_KEYS = {
+  pending: "dashboard.statusPending",
+  processing: "dashboard.statusProcessing",
+  done: "dashboard.statusDone",
+  failed: "dashboard.statusFailed",
+} as const satisfies Record<LearnerProfileStatus, string>;
 
 // F23: 生徒ダッシュボード。
 // 「学習者が自分の学習履歴(対話ログ、成果物、フィードバック、振り返り)を一覧で確認し、
@@ -73,9 +74,10 @@ interface PlanItem {
 
 export default async function StudentDashboardPage() {
   const { user } = await requireRole("student");
+  const { t, lang } = await getT();
   const admin = createAdminClient();
   await requireConsent(admin, user.id);
-  const portfolioSummary = summarizePortfolio((await loadPortfolio(admin, user.id)).entries);
+  const portfolioSummary = summarizePortfolio((await loadPortfolio(admin, user.id, { lang })).entries);
 
   // F26: 横断的な学びの記録とAIフィードバック。授業をまたいだ蓄積のため courseId では絞らない。
   const { data: learnerProfileRow } = await admin
@@ -112,7 +114,7 @@ export default async function StudentDashboardPage() {
 
   const stats = new Map<string, CourseStat>();
   if (courseIds.length > 0) {
-    const labels = await loadLessonLabels(admin, courseIds);
+    const labels = await loadLessonLabels(admin, courseIds, lang);
     for (const [id, label] of labels) {
       const c = { id, title: label };
       stats.set(c.id, {
@@ -183,7 +185,7 @@ export default async function StudentDashboardPage() {
       const submission = submissionById.get(r.submission_id);
       if (!submission) continue;
       nextGoals.push({
-        courseTitle: stats.get(submission.course_id)?.title ?? submission.course_label ?? "(不明)",
+        courseTitle: stats.get(submission.course_id)?.title ?? submission.course_label ?? t("dashboard.unknown"),
         content: r.next_goal,
         createdAt: r.updated_at,
       });
@@ -202,31 +204,31 @@ export default async function StudentDashboardPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <Breadcrumbs trail={[{ label: "授業一覧", href: "/learn" }]} current="学習ダッシュボード" />
+      <Breadcrumbs trail={[{ label: t("learnList.title"), href: "/learn" }]} current={t("dashboard.title")} />
       <h1 className="mt-2 text-2xl font-semibold text-ink">
-        学習ダッシュボード
+        {t("dashboard.title")}
       </h1>
       <p className="mt-1 text-sm text-ink-muted">
-        すべての授業の学習状況を確認し、次の学習計画を立てます。
+        {t("dashboard.lead")}
       </p>
 
       <section className="mt-6 rounded-lg border border-line p-5">
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-          <h2 className="text-sm font-medium text-ink">ポートフォリオ</h2>
+          <h2 className="text-sm font-medium text-ink">{t("dashboard.portfolio")}</h2>
           <Link href="/learn/portfolio" className="text-xs text-accent underline underline-offset-2">
-            すべて見る・書き出す →
+            {t("dashboard.seeAll")}
           </Link>
         </div>
         {portfolioSummary.total === 0 ? (
-          <p className="mt-2 text-sm text-ink-muted">成果を提出すると、ここに記録が集まります。</p>
+          <p className="mt-2 text-sm text-ink-muted">{t("dashboard.portfolioEmpty")}</p>
         ) : (
           <>
             <dl className="mt-3 grid grid-cols-[repeat(auto-fill,minmax(7rem,1fr))] gap-2 text-center">
               {[
-                ["成果", portfolioSummary.total],
-                ["先生のコメント", portfolioSummary.withTeacherComment],
-                ["自己評価がまだ", portfolioSummary.withoutSelfAssessment],
-                ["公開用", portfolioSummary.shared],
+                [t("dashboard.statWork"), portfolioSummary.total],
+                [t("dashboard.statTeacher"), portfolioSummary.withTeacherComment],
+                [t("dashboard.statNoSelf"), portfolioSummary.withoutSelfAssessment],
+                [t("dashboard.statPublic"), portfolioSummary.shared],
               ].map(([label, value]) => (
                 <div key={label} className="rounded-md bg-surface px-2 py-2">
                   <dt className="text-xs text-ink-muted">{label}</dt>
@@ -239,12 +241,12 @@ export default async function StudentDashboardPage() {
                 <li key={entry.submissionId} className="flex flex-wrap items-baseline justify-between gap-x-3">
                   <span className="min-w-0 truncate">
                     <span className="text-xs text-ink-faint">
-                      {new Date(entry.createdAt).toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo" })} ・ {entry.courseTitle}
+                      {t("dashboard.entryMeta", { date: formatDateJst(entry.createdAt, lang), course: entry.courseTitle })}
                     </span>{" "}
                     {entry.content.slice(0, 40)}
                     {entry.content.length > 40 ? "…" : ""}
                   </span>
-                  {!entry.selfAssessment && <span className="text-xs text-warn">自己評価を書こう</span>}
+                  {!entry.selfAssessment && <span className="text-xs text-warn">{t("dashboard.writeSelf")}</span>}
                 </li>
               ))}
             </ul>
@@ -254,21 +256,21 @@ export default async function StudentDashboardPage() {
 
       <div className="mt-6 rounded-lg border border-line p-5">
         <h2 className="text-sm font-medium text-ink">
-          次の学びに向けて(横断的な学びの記録とAIの提案)
+          {t("dashboard.nextTitle")}
         </h2>
         <p className="mt-1 text-xs text-ink-muted">
-          全授業の記録から、次の学びへの提案を作ります(押したときだけ)。取り入れるかは、自分で決めます。
+          {t("dashboard.nextLead")}
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <span className="text-xs text-ink-faint">
-            {LEARNER_PROFILE_STATUS_LABELS[learnerProfile?.status ?? "pending"]}
+            {t(LEARNER_PROFILE_STATUS_KEYS[learnerProfile?.status ?? "pending"])}
           </span>
           <form action={generateLearnerProfileAction}>
             <SubmitButton
-              pendingText="生成中…"
+              pendingText={t("dashboard.generating")}
               className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface disabled:opacity-50"
             >
-              {learnerProfile?.status === "done" ? "再生成する" : "生成する"}
+              {learnerProfile?.status === "done" ? t("dashboard.regenerate") : t("dashboard.generate")}
             </SubmitButton>
           </form>
         </div>
@@ -278,25 +280,25 @@ export default async function StudentDashboardPage() {
         {learnerProfile?.status === "done" && (
           <div className="mt-3 space-y-2 border-t border-line-soft pt-3 text-sm">
             <p>
-              <span className="text-xs font-medium text-ink-muted">得意な点: </span>
+              <span className="text-xs font-medium text-ink-muted">{t("dashboard.strengths")}</span>
               {learnerProfile.strengths}
             </p>
             <p>
-              <span className="text-xs font-medium text-ink-muted">課題: </span>
+              <span className="text-xs font-medium text-ink-muted">{t("dashboard.challenges")}</span>
               {learnerProfile.challenges}
             </p>
             <p>
-              <span className="text-xs font-medium text-ink-muted">学習履歴の要約: </span>
+              <span className="text-xs font-medium text-ink-muted">{t("dashboard.summary")}</span>
               {learnerProfile.summary}
             </p>
 
             <div className="mt-3 border-t border-line-soft pt-3">
               <form action={generateLearnerSuggestionsAction}>
                 <SubmitButton
-                  pendingText="生成中…"
+                  pendingText={t("dashboard.generating")}
                   className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface disabled:opacity-50"
                 >
-                  {learnerSuggestion ? "提案を再生成する" : "次に取り組むことの提案を生成する"}
+                  {learnerSuggestion ? t("dashboard.suggestRegen") : t("dashboard.suggestGen")}
                 </SubmitButton>
               </form>
 
@@ -304,10 +306,10 @@ export default async function StudentDashboardPage() {
                 <ul className="mt-3 space-y-2 text-sm">
                   {(
                     [
-                      ["avoid_misconception_question", "次に確かめてみるとよい問い"],
-                      ["inquiry_theme_suggestion", "次の探究テーマの提案"],
-                      ["self_regulation_tip", "自分で意識するとよい工夫"],
-                      ["challenge_level_tip", "次に挑戦するとよい難易度の目安"],
+                      ["avoid_misconception_question", t("dashboard.kindQuestion")],
+                      ["inquiry_theme_suggestion", t("dashboard.kindTheme")],
+                      ["self_regulation_tip", t("dashboard.kindTip")],
+                      ["challenge_level_tip", t("dashboard.kindLevel")],
                     ] as const
                   ).map(([kind, label]) => (
                     <li key={kind} className="rounded-md border border-line px-3 py-2">
@@ -315,10 +317,10 @@ export default async function StudentDashboardPage() {
                       <p className="mt-1">{learnerSuggestion[kind]}</p>
                       <form action={addSuggestionToPlanAction.bind(null, kind)} className="mt-2">
                         <SubmitButton
-                          pendingText="追加中…"
+                          pendingText={t("dashboard.adding")}
                           className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface disabled:opacity-50"
                         >
-                          学習計画に取り入れる
+                          {t("dashboard.addToPlan")}
                         </SubmitButton>
                       </form>
                     </li>
@@ -330,7 +332,7 @@ export default async function StudentDashboardPage() {
         )}
       </div>
 
-      <h2 className="mt-8 text-sm font-medium text-ink">授業ごとの学習状況</h2>
+      <h2 className="mt-8 text-sm font-medium text-ink">{t("dashboard.perLesson")}</h2>
       <ul className="mt-3 space-y-2">
         {statList.map((stat) => (
           <li key={stat.courseId} className="rounded-md border border-line px-4 py-3 text-sm">
@@ -339,27 +341,27 @@ export default async function StudentDashboardPage() {
                 {stat.title}
               </Link>
               <Link href={`/learn/${stat.courseId}/portfolio`} className="shrink-0 text-xs text-ink-muted underline underline-offset-2">
-                ポートフォリオ→
+                {t("dashboard.portfolioArrow")}
               </Link>
             </div>
             <p className="mt-1 text-xs text-ink-muted">
-              発言{stat.turnCount}件・提出{stat.submissionCount}件
-              {stat.lastActivityAt && `・最終活動 ${new Date(stat.lastActivityAt).toLocaleString("ja-JP")}`}
+              {t("dashboard.lessonStats", { turns: stat.turnCount, subs: stat.submissionCount })}
+              {stat.lastActivityAt && t("dashboard.lastActivity", { date: formatDateTime(stat.lastActivityAt, lang) })}
             </p>
             {stat.inquiryThemeSuggestion && (
               <p className="mt-1 text-xs text-accent">
-                おすすめの探究テーマ: {stat.inquiryThemeSuggestion}
+                {t("dashboard.recommendedTheme", { theme: stat.inquiryThemeSuggestion })}
               </p>
             )}
           </li>
         ))}
-        {statList.length === 0 && <li className="text-sm text-ink-muted">まだ活動記録がありません。</li>}
+        {statList.length === 0 && <li className="text-sm text-ink-muted">{t("dashboard.noActivity")}</li>}
       </ul>
 
       {nextGoals.length > 0 && (
         <>
           <h2 className="mt-8 text-sm font-medium text-ink">
-            振り返りで書いた「次にやりたいこと」
+            {t("dashboard.nextGoalsHeading")}
           </h2>
           <ul className="mt-3 space-y-2 text-sm">
             {nextGoals.map((goal, i) => (
@@ -372,23 +374,23 @@ export default async function StudentDashboardPage() {
         </>
       )}
 
-      <h2 className="mt-8 text-sm font-medium text-ink">学習計画</h2>
+      <h2 className="mt-8 text-sm font-medium text-ink">{t("dashboard.planHeading")}</h2>
       <p className="mt-1 text-xs text-ink-muted">
-        上のAIの提案や振り返りを参考に、次に取り組むことを自分で書き留めておける。
+        {t("dashboard.planLead")}
       </p>
       <form action={addStudyPlanItemAction} className="mt-3 flex flex-wrap gap-2">
         <label htmlFor="plan-content" className="sr-only">
-          次に取り組むこと
+          {t("dashboard.planContent")}
         </label>
         <input
           id="plan-content"
           name="content"
           required
-          placeholder="次に取り組むこと"
+          placeholder={t("dashboard.planContent")}
           className="min-w-0 flex-1 rounded-md border border-line px-3 py-2 text-sm bg-surface-raised"
         />
         <label htmlFor="plan-course" className="sr-only">
-          関連する授業
+          {t("dashboard.planCourse")}
         </label>
         <select
           id="plan-course"
@@ -396,7 +398,7 @@ export default async function StudentDashboardPage() {
           defaultValue=""
           className="min-w-0 max-w-full rounded-md border border-line px-2 py-2 text-sm bg-surface-raised"
         >
-          <option value="">(授業を指定しない)</option>
+          <option value="">{t("dashboard.planNoCourse")}</option>
           {statList.map((stat) => (
             <option key={stat.courseId} value={stat.courseId}>
               {stat.title}
@@ -404,10 +406,10 @@ export default async function StudentDashboardPage() {
           ))}
         </select>
         <SubmitButton
-          pendingText="追加中…"
+          pendingText={t("dashboard.adding")}
           className="shrink-0 rounded-md bg-accent-fill px-4 py-2 text-sm font-medium text-white hover:bg-accent-fill-hover disabled:opacity-60"
         >
-          追加する
+          {t("dashboard.add")}
         </SubmitButton>
       </form>
 
@@ -431,7 +433,7 @@ export default async function StudentDashboardPage() {
                     type="submit"
                     className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface"
                   >
-                    {item.done ? "未完了に戻す" : "完了にする"}
+                    {item.done ? t("dashboard.undo") : t("dashboard.done")}
                   </button>
                 </form>
                 <form action={boundDelete}>
@@ -439,14 +441,14 @@ export default async function StudentDashboardPage() {
                     type="submit"
                     className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface"
                   >
-                    削除
+                    {t("dashboard.delete")}
                   </button>
                 </form>
               </div>
             </li>
           );
         })}
-        {planItems.length === 0 && <li className="text-sm text-ink-muted">まだ学習計画がありません。</li>}
+        {planItems.length === 0 && <li className="text-sm text-ink-muted">{t("dashboard.planEmpty")}</li>}
       </ul>
     </div>
   );

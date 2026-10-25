@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getT } from "@/lib/i18n/server";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { parseAssessmentInput } from "@/lib/portfolio/assessment";
@@ -13,7 +14,7 @@ export async function saveSelfAssessmentAction(submissionId: string, formData: F
   const { user } = await requireRole("student");
   const admin = createAdminClient();
   if (!(await ownsSubmission(admin, user.id, submissionId))) {
-    throw new Error("この成果を操作する権限がありません。");
+    throw new Error((await getT()).t("portfolio.errNoPermission"));
   }
   const assessment = parseAssessmentInput({
     rating: String(formData.get("rating") ?? ""),
@@ -27,7 +28,7 @@ export async function toggleSharedAction(submissionId: string, shared: boolean) 
   const { user } = await requireRole("student");
   const admin = createAdminClient();
   if (!(await ownsSubmission(admin, user.id, submissionId))) {
-    throw new Error("この成果を操作する権限がありません。");
+    throw new Error((await getT()).t("portfolio.errNoPermission"));
   }
   await patchPortfolioEntry(admin, user.id, submissionId, { shared });
   revalidatePath("/learn/portfolio");
@@ -44,7 +45,7 @@ export async function createShareLinkAction(formData: FormData) {
     label: label || null,
     expires_at: computeExpiry(days),
   });
-  if (error) throw new Error("公開リンクを作れませんでした。");
+  if (error) throw new Error((await getT()).t("portfolio.errCreateLink"));
   revalidatePath("/learn/portfolio");
 }
 

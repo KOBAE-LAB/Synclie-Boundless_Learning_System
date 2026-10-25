@@ -1,3 +1,4 @@
+import { getT } from "@/lib/i18n/server";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -12,6 +13,7 @@ export default async function EditCriterionPage({
 }) {
   const { courseId, criteriaId } = await params;
   const { user } = await requireRole("teacher");
+  const { t, lang } = await getT();
 
   const admin = createAdminClient();
   const { data: course } = await admin
@@ -36,9 +38,9 @@ export default async function EditCriterionPage({
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <Breadcrumbs trail={[...((await loadLessonCrumbs(admin, courseId))?.teacherTrail ?? []), { label: "評価の観点", href: `/courses/${courseId}/criteria` }]} current={criterion.label} />
+      <Breadcrumbs trail={[...((await loadLessonCrumbs(admin, courseId, lang))?.teacherTrail ?? []), { label: t("criteria.title"), href: `/courses/${courseId}/criteria` }]} current={criterion.label} />
       <h1 className="mt-2 text-2xl font-semibold text-ink">
-        {criterion.label} を編集
+        {t("criteriaEdit.edit", { name: criterion.label })}
       </h1>
 
       <form
@@ -46,23 +48,23 @@ export default async function EditCriterionPage({
         className="mt-8 space-y-3 rounded-lg border border-line p-5"
       >
         <label htmlFor="criteria-label" className="sr-only">
-          観点の名前
+          {t("criteria.nameLabel")}
         </label>
         <input
           id="criteria-label"
           name="label"
-          placeholder="観点の名前(例: 根拠の明確さ)"
+          placeholder={t("criteria.namePlaceholder")}
           required
           defaultValue={criterion.label}
           className="w-full rounded-md border border-line px-3 py-2 text-sm bg-surface-raised"
         />
         <label htmlFor="criteria-description" className="sr-only">
-          説明
+          {t("criteria.descLabel")}
         </label>
         <textarea
           id="criteria-description"
           name="description"
-          placeholder="説明(任意)"
+          placeholder={t("criteriaEdit.descPlaceholder")}
           rows={2}
           defaultValue={criterion.description ?? ""}
           className="w-full rounded-md border border-line px-3 py-2 text-sm bg-surface-raised"
@@ -71,7 +73,7 @@ export default async function EditCriterionPage({
           type="submit"
           className="rounded-md bg-accent-fill px-4 py-2 text-sm font-medium text-white hover:bg-accent-fill-hover"
         >
-          更新する
+          {t("criteriaEdit.update")}
         </button>
       </form>
     </div>

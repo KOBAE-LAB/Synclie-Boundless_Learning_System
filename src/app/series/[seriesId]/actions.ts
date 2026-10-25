@@ -1,5 +1,7 @@
 "use server";
 
+import { getT } from "@/lib/i18n/server";
+import type { DictKey, Vars } from "@/lib/i18n/translate";
 import { revalidatePath } from "next/cache";
 import { closeInquiryForSeries } from "@/lib/inquiry/project-stage";
 import { leaveSeriesGroups } from "@/lib/inquiry/groups";
@@ -11,6 +13,11 @@ import { copyCriteriaBetweenLessons, copyPersonasBetweenLessons } from "@/lib/co
 import { carryOverSeries, deleteSeries, forceDeleteSeries } from "@/lib/courses/series-admin";
 import { hashPassword } from "@/lib/auth/password";
 import { normalizeEmail, validateSignupFields } from "@/lib/auth/signup-validation";
+
+// 画面の言語でのメッセージ(エラーなど)。
+async function msg(key: DictKey, vars?: Vars): Promise<string> {
+  return (await getT()).t(key, vars);
+}
 
 // 教科・科目: 教師が担当し、学習者が履修登録する単位。履修(参加コード・申請・承認・直接登録)と、
 // 授業回(courses)の追加を扱う。すべて、その教科・科目の担当教師だけが操作できる。
@@ -30,16 +37,16 @@ export async function createLessonAction(seriesId: string, formData: FormData) {
   const title = String(formData.get("title") ?? "").trim().slice(0, 80);
   const mode = formData.get("mode") === "solo_study" ? "solo_study" : "group";
   if (!title) {
-    throw new Error("授業回の名前を入力してください。");
+    throw new Error((await msg("seriesActions.needLessonName")));
   }
 
   const { data: seriesRow } = await admin.from("course_series").select("archived_at").eq("id", seriesId).maybeSingle();
   if (seriesRow?.archived_at) {
-    throw new Error("終了した教科・科目には、授業回を追加できません。");
+    throw new Error((await msg("seriesActions.endedNoLesson")));
   }
   const { data: existing } = await admin.from("courses").select("lesson_no").eq("series_id", seriesId);
   if ((existing?.length ?? 0) >= MAX_LESSONS) {
-    throw new Error(`授業回は最大${MAX_LESSONS}回までです。`);
+    throw new Error(await msg("seriesActions.maxLessons", { n: MAX_LESSONS }));
   }
   const lessonNo = Math.max(0, ...(existing ?? []).map((c) => c.lesson_no)) + 1;
 
@@ -59,7 +66,7 @@ export async function createLessonAction(seriesId: string, formData: FormData) {
     .select("id")
     .single();
   if (error) {
-    throw new Error(`授業回の作成に失敗しました: ${error.message}`);
+    throw new Error(await msg("seriesActions.createLessonFailed", { message: error.message }));
   }
 
   if (formData.get("inherit") === "on" && previous) {
@@ -97,7 +104,7 @@ export async function updateSeriesAction(seriesId: string, formData: FormData) {
   const { admin } = await guard(seriesId);
   const fields = parseSeriesFields(formData);
   if (!fields.title) {
-    throw new Error("教科・科目の名前を入力してください。");
+    throw new Error((await msg("seriesActions.needSubjectName")));
   }
   const { error } = await admin
     .from("course_series")
@@ -109,7 +116,7 @@ export async function updateSeriesAction(seriesId: string, formData: FormData) {
     })
     .eq("id", seriesId);
   if (error) {
-    throw new Error(`更新に失敗しました: ${error.message}`);
+    throw new Error(await msg("seriesActions.updateFailed", { message: error.message }));
   }
   revalidatePath(`/series/${seriesId}`);
   revalidatePath("/courses");
@@ -122,7 +129,7 @@ export async function regenerateJoinCodeAction(seriesId: string) {
   const newCode = crypto.randomUUID().replace(/-/g, "").slice(0, 6).toUpperCase();
   const { error } = await admin.from("course_series").update({ join_code: newCode }).eq("id", seriesId);
   if (error) {
-    throw new Error(`コードの再発行に失敗しました: ${error.message}`);
+    throw new Error(await msg("seriesActions.regenFailed", { message: error.message }));
   }
   revalidatePath(`/series/${seriesId}`);
 }
@@ -137,7 +144,7 @@ export async function removeEnrollmentAction(seriesId: string, studentId: string
     .eq("series_id", seriesId)
     .eq("student_id", studentId);
   if (error) {
-    throw new Error(`履修登録の削除に失敗しました: ${error.message}`);
+    throw new Error(await msg("seriesActions.removeEnrollFailed", { message: error.message }));
   }
   await leaveSeriesGroups(admin, seriesId, [studentId]);
   revalidatePath(`/series/${seriesId}`);
@@ -154,7 +161,7 @@ export async function approveEnrollmentAction(seriesId: string, studentId: strin
     .eq("student_id", studentId)
     .eq("status", "pending");
   if (error) {
-    throw new Error(`承認に失敗しました: ${error.message}`);
+    throw new Error(await msg("seriesActions.approveFailed", { message: error.message }));
   }
   revalidatePath(`/series/${seriesId}`);
 }
@@ -181,7 +188,7 @@ export async function registerStudentAction(seriesId: string, formData: FormData
   let studentId: string;
   if (existing) {
     if (existing.role !== "student") {
-      throw new Error("そのメールアドレスは学習者以外のアカウントに使われています。");
+      throw new Error((await msg("seriesActions.emailNotLearner")));
     }
     studentId = existing.id;
   } else {
@@ -197,7 +204,7 @@ export async function registerStudentAction(seriesId: string, formData: FormData
       display_name: fields.name.trim(),
     });
     if (error) {
-      throw new Error(`学習者の登録に失敗しました: ${error.message}`);
+      throw new Error(await msg("seriesActions.registerFailed", { message: error.message }));
     }
   }
 
@@ -205,7 +212,7 @@ export async function registerStudentAction(seriesId: string, formData: FormData
     .from("series_enrollments")
     .upsert({ series_id: seriesId, student_id: studentId, status: "approved" }, { onConflict: "series_id,student_id" });
   if (enrollError) {
-    throw new Error(`履修登録に失敗しました: ${enrollError.message}`);
+    throw new Error(await msg("seriesActions.enrollFailed", { message: enrollError.message }));
   }
 
   revalidatePath(`/series/${seriesId}`);
@@ -216,7 +223,7 @@ export async function registerStudentAction(seriesId: string, formData: FormData
 export async function archiveSeriesAction(seriesId: string) {
   const { admin } = await guard(seriesId);
   const { error } = await admin.from("course_series").update({ archived_at: new Date().toISOString() }).eq("id", seriesId);
-  if (error) throw new Error(`終了に失敗しました: ${error.message}`);
+  if (error) throw new Error(await msg("seriesActions.endFailed", { message: error.message }));
   // 探究の終了(要件定義書14章ステップ5): 最後の段階の物語と、振り返り版を作る(後処理)。
   await closeInquiryForSeries(admin, [seriesId]);
   revalidatePath(`/series/${seriesId}`);
@@ -226,7 +233,7 @@ export async function archiveSeriesAction(seriesId: string) {
 export async function unarchiveSeriesAction(seriesId: string) {
   const { admin } = await guard(seriesId);
   const { error } = await admin.from("course_series").update({ archived_at: null }).eq("id", seriesId);
-  if (error) throw new Error(`元に戻せませんでした: ${error.message}`);
+  if (error) throw new Error(await msg("seriesActions.reopenFailed", { message: error.message }));
   revalidatePath(`/series/${seriesId}`);
   revalidatePath("/courses");
 }
@@ -269,10 +276,10 @@ export async function carryOverSeriesAction(seriesId: string, formData: FormData
 export async function copyEnrollmentsAction(seriesId: string, formData: FormData) {
   const { user, admin } = await guard(seriesId);
   const targetId = String(formData.get("targetSeriesId") ?? "");
-  if (!targetId || targetId === seriesId) throw new Error("登録先の教科・科目を選んでください。");
+  if (!targetId || targetId === seriesId) throw new Error((await msg("seriesActions.pickTarget")));
   await assertOwnsSeries(admin, targetId, user.id);
   const { data: target } = await admin.from("course_series").select("archived_at").eq("id", targetId).maybeSingle();
-  if (target?.archived_at) throw new Error("終了した教科・科目には登録できません。");
+  if (target?.archived_at) throw new Error((await msg("seriesActions.endedNoEnroll")));
 
   const { data: rows } = await admin
     .from("series_enrollments")
@@ -282,7 +289,7 @@ export async function copyEnrollmentsAction(seriesId: string, formData: FormData
   const records = (rows ?? []).map((r) => ({ series_id: targetId, student_id: r.student_id, status: "approved" }));
   if (records.length > 0) {
     const { error } = await admin.from("series_enrollments").upsert(records, { onConflict: "series_id,student_id" });
-    if (error) throw new Error(`履修登録に失敗しました: ${error.message}`);
+    if (error) throw new Error(await msg("seriesActions.enrollFailed", { message: error.message }));
   }
   revalidatePath(`/series/${seriesId}`);
   revalidatePath(`/series/${targetId}`);
@@ -293,7 +300,7 @@ export async function copyEnrollmentsAction(seriesId: string, formData: FormData
 export async function clearEnrollmentsAction(seriesId: string) {
   const { admin } = await guard(seriesId);
   const { error } = await admin.from("series_enrollments").delete().eq("series_id", seriesId);
-  if (error) throw new Error(`履修登録の整理に失敗しました: ${error.message}`);
+  if (error) throw new Error(await msg("seriesActions.tidyFailed", { message: error.message }));
   await leaveSeriesGroups(admin, seriesId);
   revalidatePath(`/series/${seriesId}`);
   revalidatePath("/courses");

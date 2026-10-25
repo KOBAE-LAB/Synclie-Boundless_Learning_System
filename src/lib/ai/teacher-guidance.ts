@@ -9,6 +9,8 @@
 import { z } from "zod";
 import { zodTextFormat } from "openai/helpers/zod";
 import { openai, MODEL_JUDGE } from "./openai";
+import { languageDirective } from "./language";
+import type { Lang } from "@/lib/i18n/config";
 
 const GuidanceSchema = z.object({
   classOverview: z.string().describe("授業全体の様子(2〜3文。事実に基づく)"),
@@ -29,14 +31,14 @@ const GuidanceSchema = z.object({
 
 export type TeacherGuidance = z.infer<typeof GuidanceSchema>;
 
-export async function generateTeacherGuidance(courseSummary: string): Promise<TeacherGuidance> {
+export async function generateTeacherGuidance(courseSummary: string, lang?: Lang): Promise<TeacherGuidance> {
   const systemPrompt = `あなたは、AI擬似メンバーとの討論で学ぶ授業を担当する教師を支える、授業づくりのアドバイザーです。
 授業の記録をもとに、教師が次に学習者の学びをどうファシリテートし、どう指導するとよいかを提案してください。
 - 提案は、教師が自分で選べる形(「〜してみる」「〜という手もある」)で、具体的な行動(声かけ・問い・進め方)で書く。
 - 学習者の能力や人格を決めつけない。点数は材料にとどめ、点数が低いことをそのまま「できない」と結論しない。
 - 記録に無いことを推測で断定しない。記録が少ないときは、その旨を述べて控えめに提案する。
 - 個別の提案は、記録から目立った様子が読み取れる学習者だけにする(全員分を無理に作らない)。
-- 学習者は「学習者A」のような仮の呼び名で示されている。文中でも必ず「学習者A」と省略せずに書く(「A」「A・B」と略さない)。入力に無い呼び名は書かない。`;
+- 学習者は「学習者A」のような仮の呼び名で示されている。文中でも必ず「学習者A」と省略せずに書く(「A」「A・B」と略さない)。入力に無い呼び名は書かない。${languageDirective(lang)}`;
 
   const response = await openai.responses.parse({
     model: MODEL_JUDGE,

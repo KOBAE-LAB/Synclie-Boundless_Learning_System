@@ -1,5 +1,7 @@
 "use server";
 
+import { getT } from "@/lib/i18n/server";
+import type { DictKey, Vars } from "@/lib/i18n/translate";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -8,6 +10,11 @@ import { retryJobs, scheduleJobRun } from "@/lib/inquiry/queue";
 import { generateTeacherGuidance } from "@/lib/ai/teacher-guidance";
 import { formatGuidanceInput, mapIndividuals, restoreNames, type GuidanceData } from "@/lib/teacher-guidance/input";
 import { loadCourseStats } from "@/lib/teacher-guidance/stats";
+
+// 画面の言語でのメッセージ(エラーなど)。
+async function msg(key: DictKey, vars?: Vars): Promise<string> {
+  return (await getT()).t(key, vars);
+}
 
 // 教師ダッシュボード: 「指導のヒント」。教師が明示的に押したときだけ、AIが次の指導・ファシリテーションを
 // 提案する(AI呼び出しを自動化しない)。AIには学習者の氏名を送らず、データの利用に同意していない
@@ -27,10 +34,10 @@ export async function generateTeacherGuidanceAction(courseId: string) {
       .select("title, objective, learner_level, discussion_style")
       .eq("id", courseId)
       .maybeSingle();
-    if (!course) throw new Error("授業が見つかりません。");
+    if (!course) throw new Error(await msg("dashActions.lessonNotFound"));
 
     const { stats, names, turnIds } = await loadCourseStats(admin, courseId);
-    if (stats.length === 0) throw new Error("まだ活動記録のある学習者がいません。");
+    if (stats.length === 0) throw new Error((await msg("dashActions.noActive")));
 
     // 同意(撤回していない)学習者だけを対象にする。
     const { data: consents } = await admin
@@ -48,7 +55,7 @@ export async function generateTeacherGuidanceAction(courseId: string) {
       .not("test_owner_id", "is", null);
     const testIds = new Set((testRows ?? []).map((t) => t.id));
     const targets = stats.filter((s) => consented.has(s.studentId) && !testIds.has(s.studentId));
-    if (targets.length === 0) throw new Error("データの利用に同意している学習者がいません。");
+    if (targets.length === 0) throw new Error((await msg("dashActions.noConsent")));
     const targetIds = targets.map((s) => s.studentId);
 
     // 学習者が「教師に共有する」を選んだ振り返りの「迷ったこと」だけ(共有していないものは使わない)。
@@ -122,10 +129,10 @@ export async function generateTeacherGuidanceAction(courseId: string) {
       discussionNextQuestions: discussionNextQuestions.slice(0, 10),
     });
 
-    const guidance = await generateTeacherGuidance(text);
+    const guidance = await generateTeacherGuidance(text, (await getT()).lang);
     // AIが文中で使った仮の呼び名を、教師が分かる名前に戻して保存する(AIには氏名を送っていない)。
     const labelToName = new Map<string, string>();
-    for (const [label, studentId] of labelToStudentId) labelToName.set(label, names.get(studentId) ?? "(名称未設定)");
+    for (const [label, studentId] of labelToStudentId) labelToName.set(label, names.get(studentId) ?? (await msg("teacherDash.unnamed")));
     const restore = (t: string) => restoreNames(t, labelToName);
     const content = {
       classOverview: restore(guidance.classOverview),
@@ -140,9 +147,9 @@ export async function generateTeacherGuidanceAction(courseId: string) {
       { course_id: courseId, status: "done", error: null, content, generated_at: new Date().toISOString() },
       { onConflict: "course_id" },
     );
-    if (error) throw new Error(`保存に失敗しました: ${error.message}`);
+    if (error) throw new Error(await msg("dashActions.saveFailed", { message: error.message }));
   } catch (err) {
-    const message = err instanceof Error ? err.message : "不明なエラーが発生しました。";
+    const message = err instanceof Error ? err.message : await msg("dashActions.unknown");
     await admin.from("teacher_guidance").upsert({ course_id: courseId, status: "failed", error: message }, { onConflict: "course_id" });
   }
 
@@ -156,7 +163,7 @@ export async function retryInquiryJobsAction(courseId: string) {
   await assertOwnsCourse(admin, courseId, user.id);
 
   const { data: course } = await admin.from("courses").select("series_id").eq("id", courseId).maybeSingle();
-  if (!course) throw new Error("授業が見つかりません。");
+  if (!course) throw new Error(await msg("dashActions.lessonNotFound"));
   const { data: projects } = await admin.from("inquiry_projects").select("id").eq("series_id", course.series_id);
   const retried = await retryJobs(admin, (projects ?? []).map((p) => p.id as string));
   if (retried > 0) scheduleJobRun();

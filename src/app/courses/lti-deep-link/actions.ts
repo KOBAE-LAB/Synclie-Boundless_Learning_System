@@ -1,9 +1,16 @@
 "use server";
 
+import { getT } from "@/lib/i18n/server";
+import type { DictKey, Vars } from "@/lib/i18n/translate";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { assertOwnsCourse } from "@/lib/courses/ownership";
+
+// 画面の言語でのメッセージ(エラーなど)。
+async function msg(key: DictKey, vars?: Vars): Promise<string> {
+  return (await getT()).t(key, vars);
+}
 
 // F17: LTIを経由しない直接起動(Deep Linkingを使っていないツール配置URLからの起動)で、
 // まだSynclieの授業が紐づいていないリソースリンクに、教師がこの場で授業を割り当てる。
@@ -17,7 +24,7 @@ export async function linkResourceDirectlyAction(formData: FormData) {
   const deploymentId = String(formData.get("deploymentId") ?? "");
   const resourceLinkId = String(formData.get("resourceLinkId") ?? "");
   if (!courseId || !issuer || !deploymentId || !resourceLinkId) {
-    throw new Error("不正なリクエストです。");
+    throw new Error((await msg("ltiActions.badRequest")));
   }
 
   await assertOwnsCourse(admin, courseId, user.id);
@@ -27,7 +34,7 @@ export async function linkResourceDirectlyAction(formData: FormData) {
     { onConflict: "issuer,deployment_id,resource_link_id" },
   );
   if (error) {
-    throw new Error(`授業の紐づけに失敗しました: ${error.message}`);
+    throw new Error(await msg("ltiActions.linkFailed", { message: error.message }));
   }
 
   redirect(`/courses/${courseId}`);

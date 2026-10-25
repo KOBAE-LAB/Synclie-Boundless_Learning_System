@@ -1,3 +1,4 @@
+import type { Translator } from "@/lib/i18n/translate";
 // 授業回の状態: 準備中 → 公開中 → 終了(2026-10-23)。教科・科目が終了(アーカイブ)していれば、公開済みの授業回はすべて終了として扱う。
 //  - 準備中: 学習者には見えない / 公開中: 履修している学習者が開ける / 終了: 見返すだけ(新しい発言・提出・インプットの完了はできない)。
 export type LessonStatus = "preparing" | "open" | "closed";
@@ -14,6 +15,11 @@ export const LESSON_STATUS_CLASSES: Record<LessonStatus, string> = {
   open: "bg-success-soft text-success",
   closed: "bg-surface text-ink-muted ring-1 ring-line",
 };
+
+/** 画面の言語に合わせた状態の名前。 */
+export function lessonStatusLabel(t: Translator, status: LessonStatus): string {
+  return t(`lessonStatus.${status}`);
+}
 
 export function lessonStatus(lesson: { released: boolean; closed_at: string | null }, seriesEnded: boolean): LessonStatus {
   if (lesson.closed_at) return "closed";

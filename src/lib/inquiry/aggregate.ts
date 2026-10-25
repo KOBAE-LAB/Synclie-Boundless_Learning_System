@@ -1,3 +1,5 @@
+import { getT } from "@/lib/i18n/server";
+import type { DictKey, Vars } from "@/lib/i18n/translate";
 // 集約型ペルソナ(0047、要件定義書14章の実装(2c))。前の年度の教科・科目の、複数の学習者の記録(②)から、共通するつまずき・
 // よくある誤解・有効だった問いをまとめ、「前の年度の学習者の記録をもとにしたAI」を作る。
 //  - 材料は、②(軌跡と、匿名化・語り化された場面)だけ。個人の発言(①)は使わない。AIには、記録の要約だけを渡す(氏名は元から無い)。
@@ -10,6 +12,9 @@ import { draftAggregatePersona } from "@/lib/ai/aggregate-persona";
 import { isEligibleLearner } from "./pipeline";
 import { assertCreator, isAggregateTier, MAX_NICKNAME, normalizeNickname, pauseCrossOrgLoans, SCOPE_RESET, SeniorRuleError } from "./senior";
 import { aggregateDisplayName, linesToItems, MIN_AGGREGATE_LEARNERS, parseAggregateItems } from "./aggregate-items";
+
+// 画面の言語でのメッセージ(エラーなど)。
+const rt = async (key: DictKey, vars?: Vars): Promise<string> => (await getT()).t(key, vars);
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -143,7 +148,7 @@ export async function createAggregateDraft(
     .select("id, title, fiscal_year, owner_teacher_id")
     .eq("id", input.seriesId)
     .maybeSingle();
-  if (!series || series.owner_teacher_id !== input.teacherId) throw new SeniorRuleError("教科・科目が見つかりません。");
+  if (!series || series.owner_teacher_id !== input.teacherId) throw new SeniorRuleError(await rt("libErrors.s0"));
 
   const material = await loadSeriesMaterial(admin, input.seriesId);
   const { projects, learnerCount } = await eligibleMaterial(admin, material);
@@ -180,14 +185,14 @@ export async function createAggregateDraft(
     })
     .select("id")
     .single();
-  if (error || !data) throw new Error(`集約型のペルソナを保存できませんでした: ${error?.message}`);
+  if (error || !data) throw new Error(await rt("libErrors.p31", { message: error?.message }));
   const personaId = data.id as string;
   const { error: srcError } = await admin
     .from("persona_source_projects")
     .insert(projects.map((p) => ({ persona_id: personaId, project_id: p.id })));
   if (srcError) {
     await admin.from("personas").delete().eq("id", personaId);
-    throw new Error(`材料の記録を保存できませんでした: ${srcError.message}`);
+    throw new Error(await rt("libErrors.p32", { message: srcError.message }));
   }
   return { personaId };
 }
@@ -198,7 +203,7 @@ export async function updateAggregatePersona(
   input: { teacherId: string; personaId: string; nickname: string; role: string; tone: string; position: string; goal: string; itemsText: string },
 ) {
   const persona = await assertCreator(admin, input.personaId, input.teacherId);
-  if (!isAggregateTier(persona.tier)) throw new SeniorRuleError("集約型のAIではありません。");
+  if (!isAggregateTier(persona.tier)) throw new SeniorRuleError(await rt("libErrors.s45"));
   const nickname = normalizeNickname(input.nickname).slice(0, MAX_NICKNAME);
   const { data: current } = await admin.from("personas").select("source_fiscal_year").eq("id", input.personaId).maybeSingle();
   const { error } = await admin
@@ -213,7 +218,7 @@ export async function updateAggregatePersona(
       ...SCOPE_RESET,
     })
     .eq("id", input.personaId);
-  if (error) throw new Error(`保存できませんでした: ${error.message}`);
+  if (error) throw new Error(await rt("libErrors.p20", { message: error.message }));
   await pauseCrossOrgLoans(admin, input.personaId);
 }
 
@@ -257,6 +262,6 @@ export async function invalidateAggregatesForStudent(admin: AdminClient, student
     .eq("tier", "aggregate")
     .eq("status", "approved")
     .select("id");
-  if (error) throw new Error(`集約型のAIを下書きに戻せませんでした: ${error.message}`);
+  if (error) throw new Error(await rt("libErrors.p33", { message: error.message }));
   return changed?.length ?? 0;
 }

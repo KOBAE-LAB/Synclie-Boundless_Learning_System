@@ -1,11 +1,18 @@
 // 学習の流れ(インプット/アウトプットのステップ)の、画面やDBに依存しない判定ロジック。
 
+import type { Translator } from "@/lib/i18n/translate";
+
 export type StepKind = "input" | "output";
 
 export const STEP_KIND_LABELS: Record<StepKind, string> = {
   input: "インプット",
   output: "アウトプット",
 };
+
+/** 画面の言語に合わせたステップの種類の名前。 */
+export function stepKindLabel(t: Translator, kind: StepKind): string {
+  return kind === "input" ? t("flowView.kindInput") : t("flowView.kindOutput");
+}
 
 export interface FlowStep {
   id: string;

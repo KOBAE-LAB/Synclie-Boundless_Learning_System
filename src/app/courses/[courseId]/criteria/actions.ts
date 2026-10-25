@@ -1,10 +1,17 @@
 "use server";
 
+import { getT } from "@/lib/i18n/server";
+import type { DictKey, Vars } from "@/lib/i18n/translate";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { assertOwnsCourse } from "@/lib/courses/ownership";
+
+// 画面の言語でのメッセージ(エラーなど)。
+async function msg(key: DictKey, vars?: Vars): Promise<string> {
+  return (await getT()).t(key, vars);
+}
 
 // F07: 評価の観点(教師が授業ごとに設定する。例: 根拠の明確さ、多面的な見方、資料の活用)。
 
@@ -19,7 +26,7 @@ async function getOwnedCriterion(
     .eq("id", criteriaId)
     .maybeSingle();
   if (!criterion || criterion.course_id !== courseId) {
-    throw new Error("評価の観点が見つかりません。");
+    throw new Error((await msg("criteriaActions.notFound")));
   }
   return criterion;
 }
@@ -31,7 +38,7 @@ export async function createCriterionAction(courseId: string, formData: FormData
 
   const label = String(formData.get("label") ?? "").trim();
   if (!label) {
-    throw new Error("観点の名前を入力してください。");
+    throw new Error((await msg("criteriaActions.needName")));
   }
   const description = String(formData.get("description") ?? "").trim();
 
@@ -47,7 +54,7 @@ export async function createCriterionAction(courseId: string, formData: FormData
     position: count ?? 0,
   });
   if (error) {
-    throw new Error(`観点の作成に失敗しました: ${error.message}`);
+    throw new Error(await msg("criteriaActions.createFailed", { message: error.message }));
   }
 
   revalidatePath(`/courses/${courseId}/criteria`);
@@ -65,7 +72,7 @@ export async function updateCriterionAction(
 
   const label = String(formData.get("label") ?? "").trim();
   if (!label) {
-    throw new Error("観点の名前を入力してください。");
+    throw new Error((await msg("criteriaActions.needName")));
   }
   const description = String(formData.get("description") ?? "").trim();
 
@@ -74,7 +81,7 @@ export async function updateCriterionAction(
     .update({ label, description: description || null })
     .eq("id", criteriaId);
   if (error) {
-    throw new Error(`観点の更新に失敗しました: ${error.message}`);
+    throw new Error(await msg("criteriaActions.updateFailed", { message: error.message }));
   }
 
   revalidatePath(`/courses/${courseId}/criteria`);
@@ -89,7 +96,7 @@ export async function deleteCriterionAction(courseId: string, criteriaId: string
 
   const { error } = await admin.from("evaluation_criteria").delete().eq("id", criteriaId);
   if (error) {
-    throw new Error(`観点の削除に失敗しました: ${error.message}`);
+    throw new Error(await msg("criteriaActions.deleteFailed", { message: error.message }));
   }
 
   revalidatePath(`/courses/${courseId}/criteria`);

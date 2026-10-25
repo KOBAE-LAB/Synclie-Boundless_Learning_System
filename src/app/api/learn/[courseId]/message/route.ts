@@ -1,4 +1,5 @@
 import { getEffectiveStudent } from "@/lib/auth/session";
+import { getT } from "@/lib/i18n/server";
 import { hasConsent } from "@/lib/consent";
 import { createAdminClient } from "@/lib/supabase/server";
 import { postStudentMessageAndRespond, type DialogueEvent } from "@/lib/learn/dialogue";
@@ -17,11 +18,12 @@ function json(status: number, body: Record<string, unknown>) {
 
 export async function POST(request: Request, { params }: { params: Promise<{ courseId: string }> }) {
   const { courseId } = await params;
+  const { t, lang } = await getT();
 
   // 学習者本人、または「学習者として表示」中の管理者(テスト学習者)だけが使える。
   const user = await getEffectiveStudent();
   if (!user) {
-    return json(401, { error: "ログインしてください。" });
+    return json(401, { error: t("apiErrors.login") });
   }
 
   let message = "";
@@ -29,17 +31,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ cou
     const body = (await request.json()) as { message?: unknown };
     message = typeof body.message === "string" ? body.message.trim() : "";
   } catch {
-    return json(400, { error: "リクエストの形式が正しくありません。" });
+    return json(400, { error: t("apiErrors.badRequest") });
   }
   if (!message) {
-    return json(400, { error: "発言を入力してください。" });
+    return json(400, { error: t("apiErrors.needMessage") });
   }
 
   const admin = createAdminClient();
   // 学習画面(ページ)と同じ境界: 同意していない/撤回した学習者は対話できない。
   // (参加登録・承認の確認は postStudentMessageAndRespond 内の getOrCreateSession が行う)
   if (!(await hasConsent(admin, user.id))) {
-    return json(403, { error: "データ利用への同意が必要です。" });
+    return json(403, { error: t("apiErrors.needConsent") });
   }
 
   const encoder = new TextEncoder();
@@ -62,11 +64,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ cou
       void (async () => {
         try {
           await postStudentMessageAndRespond(admin, courseId, studentId, message, { kind: "text" }, {
+            lang,
             onEvent: (event: DialogueEvent) => send(event),
           });
           send({ type: "done" });
         } catch (error) {
-          send({ type: "error", message: error instanceof Error ? error.message : "不明なエラーが発生しました。" });
+          send({ type: "error", message: error instanceof Error ? error.message : t("apiErrors.unknown") });
         } finally {
           try {
             controller.close();

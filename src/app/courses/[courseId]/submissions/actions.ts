@@ -1,5 +1,7 @@
 "use server";
 
+import { getT } from "@/lib/i18n/server";
+import type { DictKey, Vars } from "@/lib/i18n/translate";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -7,6 +9,11 @@ import { assertOwnsCourse } from "@/lib/courses/ownership";
 import { sendScoreToLms } from "@/lib/lti/ags";
 import { parseAssessmentInput } from "@/lib/portfolio/assessment";
 import { patchPortfolioEntry } from "@/lib/portfolio/entries";
+
+// 画面の言語でのメッセージ(エラーなど)。
+async function msg(key: DictKey, vars?: Vars): Promise<string> {
+  return (await getT()).t(key, vars);
+}
 
 // ポートフォリオ: 教師が成果ごとに評価(段階とコメント)を書く。AIの評価は材料で、最終判断は教師と学習者。
 // 学習者のポートフォリオに表示される。
@@ -21,7 +28,7 @@ export async function saveTeacherAssessmentAction(courseId: string, submissionId
     .eq("id", submissionId)
     .maybeSingle();
   if (!submission || submission.course_id !== courseId) {
-    throw new Error("提出物が見つかりません。");
+    throw new Error((await msg("subActions.subNotFound")));
   }
 
   const assessment = parseAssessmentInput({
@@ -48,7 +55,7 @@ export async function updateFeedbackAction(
     .eq("id", feedbackId)
     .maybeSingle();
   if (!feedback) {
-    throw new Error("フィードバックが見つかりません。");
+    throw new Error((await msg("subActions.fbNotFound")));
   }
 
   const { data: submission } = await admin
@@ -57,14 +64,14 @@ export async function updateFeedbackAction(
     .eq("id", feedback.submission_id)
     .maybeSingle();
   if (!submission || submission.course_id !== courseId) {
-    throw new Error("フィードバックが見つかりません。");
+    throw new Error((await msg("subActions.fbNotFound")));
   }
 
   const goodPoints = String(formData.get("goodPoints") ?? "").trim();
   const nextQuestion = String(formData.get("nextQuestion") ?? "").trim();
   const materialReference = String(formData.get("materialReference") ?? "").trim();
   if (!goodPoints || !nextQuestion || !materialReference) {
-    throw new Error("すべての項目を入力してください。");
+    throw new Error((await msg("subActions.needAll")));
   }
 
   const { error } = await admin
@@ -77,7 +84,7 @@ export async function updateFeedbackAction(
     })
     .eq("id", feedbackId);
   if (error) {
-    throw new Error(`フィードバックの更新に失敗しました: ${error.message}`);
+    throw new Error(await msg("subActions.updateFailed", { message: error.message }));
   }
 
   revalidatePath(`/courses/${courseId}/submissions`);
@@ -97,7 +104,7 @@ export async function sendGradeToLmsAction(courseId: string, submissionId: strin
     .eq("id", submissionId)
     .maybeSingle();
   if (!submission || submission.course_id !== courseId) {
-    throw new Error("成果が見つかりません。");
+    throw new Error((await msg("subActions.workNotFound")));
   }
 
   const { data: judgment } = await admin
@@ -106,11 +113,11 @@ export async function sendGradeToLmsAction(courseId: string, submissionId: strin
     .eq("submission_id", submissionId)
     .maybeSingle();
   if (!judgment) {
-    throw new Error("先にAIジャッジ(F24)を実施してください。");
+    throw new Error((await msg("subActions.needJudge")));
   }
 
   if (!submission.session_id) {
-    throw new Error("この成果に紐づく対話セッションが見つかりません。");
+    throw new Error((await msg("subActions.noSession")));
   }
   const { data: session } = await admin
     .from("learning_sessions")
@@ -118,7 +125,7 @@ export async function sendGradeToLmsAction(courseId: string, submissionId: strin
     .eq("id", submission.session_id)
     .maybeSingle();
   if (!session?.lti_resource_link_id) {
-    throw new Error("この成果はLTI経由の活動ではないため、成績を送信できません。");
+    throw new Error((await msg("subActions.notLti")));
   }
 
   const { data: link } = await admin
@@ -127,7 +134,7 @@ export async function sendGradeToLmsAction(courseId: string, submissionId: strin
     .eq("id", session.lti_resource_link_id)
     .maybeSingle();
   if (!link?.lineitem_url) {
-    throw new Error("成績の送信先(lineitem)が分かりません。");
+    throw new Error((await msg("subActions.noLineitem")));
   }
 
   const { data: studentProfile } = await admin
@@ -136,7 +143,7 @@ export async function sendGradeToLmsAction(courseId: string, submissionId: strin
     .eq("id", submission.student_id)
     .maybeSingle();
   if (!studentProfile?.lti_subject) {
-    throw new Error("この学習者はLTI経由のアカウントではないため、成績を送信できません。");
+    throw new Error((await msg("subActions.learnerNotLti")));
   }
 
   const scoreGiven =

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { getT } from "@/lib/i18n/server";
 
 // 画面の「いまの場所」と「戻る」を、全画面で同じ形に統一する部品。
 //
@@ -11,17 +12,18 @@ export interface Crumb {
   href: string;
 }
 
-export function Breadcrumbs({ trail, current }: { trail: Crumb[]; current: string }) {
+export async function Breadcrumbs({ trail, current }: { trail: Crumb[]; current: string }) {
+  const { t } = await getT();
   const parent = trail[trail.length - 1];
   return (
-    <nav aria-label="現在の場所" className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
+    <nav aria-label={t("common2.currentLocation")} className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
       {parent && (
         <Link
           href={parent.href}
           className="inline-flex max-w-full items-center gap-1 rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface"
         >
           <span aria-hidden="true">←</span>
-          <span className="truncate">{parent.label}に戻る</span>
+          <span className="truncate">{t("common2.backTo", { label: parent.label })}</span>
         </Link>
       )}
       <ol className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-ink-faint">
@@ -42,7 +44,8 @@ export function Breadcrumbs({ trail, current }: { trail: Crumb[]; current: strin
 }
 
 /** 長い画面の最後に置く「戻る」。最後まで読んだあとに、上まで戻らなくてよいようにする。 */
-export function BackLink({ href, label }: { href: string; label: string }) {
+export async function BackLink({ href, label }: { href: string; label: string }) {
+  const { t } = await getT();
   return (
     <div className="mt-10 border-t border-line-soft pt-4">
       <Link
@@ -50,7 +53,7 @@ export function BackLink({ href, label }: { href: string; label: string }) {
         className="inline-flex items-center gap-1 rounded-md border border-line px-3 py-1.5 text-sm font-medium text-ink hover:bg-surface"
       >
         <span aria-hidden="true">←</span>
-        {label}に戻る
+        {t("common2.backTo", { label })}
       </Link>
     </div>
   );

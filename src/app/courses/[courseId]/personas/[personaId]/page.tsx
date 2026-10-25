@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { getT } from "@/lib/i18n/server";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { updatePersonaAction } from "../actions";
@@ -28,6 +29,7 @@ export default async function EditPersonaPage({
 }) {
   const { courseId, personaId } = await params;
   const { user } = await requireRole("teacher");
+  const { t, lang } = await getT();
 
   const admin = createAdminClient();
   const { data: course } = await admin
@@ -69,15 +71,15 @@ export default async function EditPersonaPage({
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <Breadcrumbs trail={[...((await loadLessonCrumbs(admin, courseId))?.teacherTrail ?? []), { label: "ペルソナ設定", href: `/courses/${courseId}/personas` }]} current={persona.name} />
+      <Breadcrumbs trail={[...((await loadLessonCrumbs(admin, courseId, lang))?.teacherTrail ?? []), { label: t("personasPage.title"), href: `/courses/${courseId}/personas` }]} current={persona.name} />
       <h1 className="mt-2 text-2xl font-semibold text-ink">
-        {persona.name} を編集
+        {t("personaEdit.edit", { name: persona.name })}
       </h1>
 
       <div className="mt-8 rounded-lg border border-line p-5">
         <PersonaForm
           action={boundUpdateAction}
-          submitLabel="更新する"
+          submitLabel={t("personaEdit.update")}
           defaultValues={defaultValues}
         />
       </div>

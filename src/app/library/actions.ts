@@ -1,9 +1,16 @@
 "use server";
 
+import { getT } from "@/lib/i18n/server";
+import type { DictKey, Vars } from "@/lib/i18n/translate";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { assertOwnsCourse } from "@/lib/courses/ownership";
+
+// 画面の言語でのメッセージ(エラーなど)。
+async function msg(key: DictKey, vars?: Vars): Promise<string> {
+  return (await getT()).t(key, vars);
+}
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 type ItemKind = "persona" | "material";
@@ -55,18 +62,18 @@ export async function requestCrossOrgAccessAction(itemKind: ItemKind, itemId: st
     .eq("id", user.id)
     .maybeSingle();
   if (!myProfile?.organization_id) {
-    throw new Error("先に組織に参加してください。");
+    throw new Error((await msg("libraryActions.joinFirst")));
   }
 
   const owner = await getItemOwnerOrganization(admin, itemKind, itemId);
   if (!owner) {
-    throw new Error("共有アイテムが見つかりません。");
+    throw new Error((await msg("libraryActions.itemNotFound")));
   }
   if (!owner.ownerOrganizationId) {
-    throw new Error("このアイテムの所有者は組織に未所属のため、共有リクエストできません。");
+    throw new Error((await msg("libraryActions.ownerNoOrg")));
   }
   if (owner.ownerOrganizationId === myProfile.organization_id) {
-    throw new Error("同じ組織のアイテムはリクエスト不要で複製できます。");
+    throw new Error((await msg("libraryActions.sameOrgNoReq")));
   }
 
   const { data: existing } = await admin
@@ -79,7 +86,7 @@ export async function requestCrossOrgAccessAction(itemKind: ItemKind, itemId: st
     .limit(1)
     .maybeSingle();
   if (existing && existing.status === "pending") {
-    throw new Error("既にリクエスト済みです(承認待ち)。");
+    throw new Error((await msg("libraryActions.alreadyReq")));
   }
 
   const { error } = await admin.from("share_requests").insert({
@@ -90,7 +97,7 @@ export async function requestCrossOrgAccessAction(itemKind: ItemKind, itemId: st
     item_id: itemId,
   });
   if (error) {
-    throw new Error(`リクエストの送信に失敗しました: ${error.message}`);
+    throw new Error(await msg("libraryActions.reqFailed", { message: error.message }));
   }
 
   revalidatePath("/library");
@@ -102,7 +109,7 @@ export async function duplicatePersonaAction(personaId: string, formData: FormDa
   const { user } = await requireRole("teacher");
   const targetCourseId = String(formData.get("targetCourseId") ?? "").trim();
   if (!targetCourseId) {
-    throw new Error("複製先の授業を選択してください。");
+    throw new Error((await msg("libraryActions.pickTarget")));
   }
 
   const admin = createAdminClient();
@@ -125,10 +132,10 @@ export async function duplicatePersonaAction(personaId: string, formData: FormDa
     profile: source!.profile,
     stance: source!.stance,
     behavior_rules: source!.behavior_rules,
-    origin_note: `共有ライブラリ(F21)から複製: ${sourceTeacherName}`,
+    origin_note: await msg("libraryActions.originNote", { who: sourceTeacherName }),
   });
   if (error) {
-    throw new Error(`複製に失敗しました: ${error.message}`);
+    throw new Error(await msg("libraryActions.copyFailed", { message: error.message }));
   }
 
   revalidatePath(`/courses/${targetCourseId}/personas`);
@@ -141,7 +148,7 @@ export async function duplicateMaterialAction(materialId: string, formData: Form
   const { user } = await requireRole("teacher");
   const targetCourseId = String(formData.get("targetCourseId") ?? "").trim();
   if (!targetCourseId) {
-    throw new Error("複製先の授業を選択してください。");
+    throw new Error((await msg("libraryActions.pickTarget")));
   }
 
   const admin = createAdminClient();
@@ -162,7 +169,7 @@ export async function duplicateMaterialAction(materialId: string, formData: Form
       .from("materials")
       .copy(source!.storage_path, newStoragePath);
     if (copyError) {
-      throw new Error(`ファイルの複製に失敗しました: ${copyError.message}`);
+      throw new Error(await msg("libraryActions.fileCopyFailed", { message: copyError.message }));
     }
   }
 
@@ -172,12 +179,12 @@ export async function duplicateMaterialAction(materialId: string, formData: Form
     course_id: targetCourseId,
     uploaded_by: user.id,
     kind: source!.kind,
-    title: `${source!.title}(${sourceTeacherName}より複製)`,
+    title: await msg("libraryActions.copiedTitle", { title: source!.title, who: sourceTeacherName }),
     storage_path: newStoragePath,
     source_url: source!.source_url,
   });
   if (error) {
-    throw new Error(`複製に失敗しました: ${error.message}`);
+    throw new Error(await msg("libraryActions.copyFailed", { message: error.message }));
   }
 
   revalidatePath(`/courses/${targetCourseId}`);
@@ -193,7 +200,7 @@ async function assertCanDuplicate(admin: AdminClient, teacherId: string, itemKin
 
   const owner = await getItemOwnerOrganization(admin, itemKind, itemId);
   if (!owner) {
-    throw new Error("共有アイテムが見つかりません。");
+    throw new Error((await msg("libraryActions.itemNotFound")));
   }
 
   const sameOrg =
@@ -209,17 +216,17 @@ async function assertCanDuplicate(admin: AdminClient, teacherId: string, itemKin
     .eq("status", "approved")
     .maybeSingle();
   if (!approvedRequest) {
-    throw new Error("この共有アイテムはまだ複製できません(組織の承認者による承認が必要です)。");
+    throw new Error((await msg("libraryActions.needApproval")));
   }
 }
 
 async function getSourceTeacherLabel(admin: AdminClient, itemKind: ItemKind, itemId: string) {
   const owner = await getItemOwnerOrganization(admin, itemKind, itemId);
-  if (!owner) return "(不明)";
+  if (!owner) return (await msg("libraryActions.unknown"));
   const { data: teacher } = await admin
     .from("profiles")
     .select("display_name, email")
     .eq("id", owner.ownerTeacherId)
     .maybeSingle();
-  return teacher?.display_name || teacher?.email || "(不明)";
+  return teacher?.display_name || teacher?.email || (await msg("libraryActions.unknown"));
 }

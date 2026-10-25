@@ -8,6 +8,8 @@
 import { z } from "zod";
 import { zodTextFormat } from "openai/helpers/zod";
 import { openai, MODEL_JUDGE } from "./openai";
+import { languageDirective } from "./language";
+import type { Lang } from "@/lib/i18n/config";
 
 const StudentProfileSchema = z.object({
   strengths: z.string().describe("得意な点(2〜3文。具体的な行動や発言に基づく)"),
@@ -19,10 +21,11 @@ export type StudentProfileSummary = z.infer<typeof StudentProfileSchema>;
 
 export async function generateStudentProfileSummary(
   activityLog: string,
+  lang?: Lang,
 ): Promise<StudentProfileSummary> {
   const systemPrompt = `あなたは学習者の活動記録から、学習者プロファイルを作成するアシスタントです。
 点数や順位は付けず、具体的な得意な点・今後の課題・学習の流れの要約を、教師が次の指導に使える形で書いてください。
-記録に無いことを推測で断定しないでください。`;
+記録に無いことを推測で断定しないでください。${languageDirective(lang)}`;
 
   const response = await openai.responses.parse({
     model: MODEL_JUDGE,

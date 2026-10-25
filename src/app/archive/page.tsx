@@ -18,7 +18,8 @@ import {
   updateAggregateAction,
   requestScopeAction,
 } from "./actions";
-import { SHARE_SCOPES, SHARE_SCOPE_LABELS } from "@/lib/organizations/scope";
+import { SHARE_SCOPES, shareScopeLabel } from "@/lib/organizations/scope";
+import { getT } from "@/lib/i18n/server";
 
 // 先輩の記録(アーカイブ): 先輩の探究の記録から「先輩のAI」を作り、承認して、同じ学校の授業回で使えるようにする。
 // 使うときは、授業回のペルソナ設定の「先輩の記録から加える」で選ぶ(当時モード/振り返りモード)。
@@ -29,6 +30,7 @@ const small = "rounded-md border border-line px-2.5 py-1 text-xs font-medium tex
 export default async function ArchivePage({ searchParams }: { searchParams: Promise<{ error?: string; notice?: string }> }) {
   const { error, notice } = await searchParams;
   const { user } = await requireRole("teacher");
+  const { t } = await getT();
   const admin = createAdminClient();
   const [entries, projects, aggregateSources, { data: avatarRows }] = await Promise.all([
     listArchive(admin, user.id),
@@ -47,16 +49,16 @@ export default async function ArchivePage({ searchParams }: { searchParams: Prom
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <Breadcrumbs trail={[{ label: "教科・科目一覧", href: "/courses" }]} current="先輩の記録" />
-      <h1 className="mt-3 text-2xl font-semibold text-ink">先輩の記録</h1>
+      <Breadcrumbs trail={[{ label: t("lessonCrumbs.courseList"), href: "/courses" }]} current={t("archivePage.title")} />
+      <h1 className="mt-3 text-2xl font-semibold text-ink">{t("archivePage.title")}</h1>
       <p className="mt-1 text-sm text-ink-muted">
-        先輩の探究の記録から「先輩のAI」を作り、承認すると、授業回で使えます。
+        {t("archivePage.lead")}
       </p>
       {error && <p className="mt-3 rounded-md border border-danger bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>}
       {notice && <p role="status" className="mt-3 rounded-md border border-success px-3 py-2 text-sm text-success">{notice}</p>}
 
       <section className="mt-8">
-        <h2 className="border-b border-line-soft pb-2 text-base font-semibold text-ink">先輩のAI({entries.length})</h2>
+        <h2 className="border-b border-line-soft pb-2 text-base font-semibold text-ink">{t("archivePage.aiHeading", { n: entries.length })}</h2>
         <ul className="mt-3 space-y-3">
           {entries.map((e) => (
             <li key={e.id} id={`persona-${e.id}`} className="rounded-lg border border-line p-4">
@@ -72,35 +74,35 @@ export default async function ArchivePage({ searchParams }: { searchParams: Prom
                   )}
                   {e.name}
                   <span className="rounded-full bg-surface px-2 py-0.5 text-xs font-normal text-ink-muted ring-1 ring-line">
-                    {e.tier === "aggregate" ? "集約型" : "先輩型"}
+                    {e.tier === "aggregate" ? t("archivePage.tagAggregate") : t("archivePage.tagSenior")}
                   </span>
                   {e.crossOrg && (
                     <span className="rounded-full bg-surface px-2 py-0.5 text-xs font-normal text-ink-muted ring-1 ring-line">
-                      他の学校{e.ownerOrgName ? `(${e.ownerOrgName})` : ""}の先輩
+                      {t("archivePage.otherSchoolTag", { org: e.ownerOrgName ? `(${e.ownerOrgName})` : "" })}
                     </span>
                   )}
                 </span>
                 <span className="flex flex-wrap items-center gap-2 text-xs">
                   <span className={e.status === "draft" ? "font-semibold text-warn" : "text-ink-faint"}>
                     <StepNumber n={1} />
-                    下書き
+                    {t("archivePage.draft")}
                   </span>
                   <span aria-hidden="true" className="text-ink-faint">→</span>
                   <span className={e.status === "approved" ? "font-semibold text-success" : "text-ink-faint"}>
                     <StepNumber n={2} />
-                    承認済み(授業回で使える)
+                    {t("archivePage.approvedUse")}
                   </span>
                 </span>
               </div>
               <p className="mt-1 text-sm text-ink-muted">{e.role}</p>
               <dl className="mt-2 space-y-1 text-sm">
                 <div>
-                  <dt className="inline text-xs text-ink-faint">{e.tier === "aggregate" ? "大事にしている見方: " : "当時の問い: "}</dt>
-                  <dd className="inline text-ink">{e.position || "(未設定)"}</dd>
+                  <dt className="inline text-xs text-ink-faint">{e.tier === "aggregate" ? t("archivePage.aggPosition") : t("archivePage.thenPosition")}</dt>
+                  <dd className="inline text-ink">{e.position || t("archivePage.unset")}</dd>
                 </div>
                 <div>
-                  <dt className="inline text-xs text-ink-faint">後輩との関わり方: </dt>
-                  <dd className="inline text-ink">{e.goal || "(未設定)"}</dd>
+                  <dt className="inline text-xs text-ink-faint">{t("archivePage.approach")}</dt>
+                  <dd className="inline text-ink">{e.goal || t("archivePage.unset")}</dd>
                 </div>
               </dl>
               {e.tier === "aggregate" && e.itemsText && (
@@ -112,131 +114,131 @@ export default async function ArchivePage({ searchParams }: { searchParams: Prom
               )}
               {e.mine ? (
                 <>
-                  {e.sourceTitle && <p className="mt-2 text-xs text-ink-faint">材料: 探究プロジェクト「{e.sourceTitle}」</p>}
-                  {e.sourceSeriesTitle && <p className="mt-2 text-xs text-ink-faint">材料: 教科・科目「{e.sourceSeriesTitle}」の、前の年度の学習者の記録</p>}
+                  {e.sourceTitle && <p className="mt-2 text-xs text-ink-faint">{t("archivePage.srcProject", { t: e.sourceTitle })}</p>}
+                  {e.sourceSeriesTitle && <p className="mt-2 text-xs text-ink-faint">{t("archivePage.srcSeries", { t: e.sourceSeriesTitle })}</p>}
                   <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <span className="text-xs text-ink-faint">アバター: {e.avatarPath ? "設定済み" : "未設定"}</span>
+                    <span className="text-xs text-ink-faint">{t("archivePage.avatarLine", { s: e.avatarPath ? t("archivePage.avatarSet") : t("archivePage.avatarUnset") })}</span>
                     <form action={recommendSeniorAvatarAction.bind(null, e.id)}>
-                      <SubmitButton pendingText="推薦中…" className={small}>AIに推薦させる</SubmitButton>
+                      <SubmitButton pendingText={t("archivePage.recommending")} className={small}>{t("archivePage.recommend")}</SubmitButton>
                     </form>
                   </div>
                   <details className="mt-2">
-                    <summary className="cursor-pointer text-xs text-ink-muted">アバターを手動で選ぶ</summary>
+                    <summary className="cursor-pointer text-xs text-ink-muted">{t("archivePage.manualSummary")}</summary>
                     <form action={setSeniorAvatarAction.bind(null, e.id)} className="mt-2 flex flex-wrap items-center gap-2">
-                      <label htmlFor={`avatar-${e.id}`} className="sr-only">アバター</label>
+                      <label htmlFor={`avatar-${e.id}`} className="sr-only">{t("archivePage.avatarLabel")}</label>
                       <select id={`avatar-${e.id}`} name="avatarId" defaultValue={e.avatarId ?? ""} required className={`${input} max-w-xs`}>
-                        <option value="" disabled>選んでください</option>
+                        <option value="" disabled>{t("archivePage.pickPlease")}</option>
                         {(avatarRows ?? []).map((a) => (
                           <option key={a.id as string} value={a.id as string}>{a.label as string}</option>
                         ))}
                       </select>
-                      <SubmitButton pendingText="保存中…" className={small}>変更する</SubmitButton>
+                      <SubmitButton pendingText={t("archivePage.saving")} className={small}>{t("archivePage.change")}</SubmitButton>
                     </form>
                   </details>
                   <div className="mt-3 rounded-md border border-line-soft p-3">
                     <p className="text-xs font-medium text-ink">
-                      公開範囲: {SHARE_SCOPE_LABELS[e.shareScope]}
+                      {t("archivePage.scopeLine", { s: shareScopeLabel(t, e.shareScope) })}
                       {e.scopeRequest && (
                         <span className="ml-2 font-normal text-warn">
-                          承認待ち: {SHARE_SCOPE_LABELS[e.scopeRequest]}へ広げる申請(組織の承認者の承認が要ります)
+                          {t("archivePage.scopePending", { s: shareScopeLabel(t, e.scopeRequest) })}
                         </span>
                       )}
                     </p>
                     <form action={requestScopeAction.bind(null, e.id)} className="mt-2 flex flex-wrap items-end gap-2">
                       <label className="text-xs text-ink-muted">
-                        <span className="block">変える先</span>
+                        <span className="block">{t("archivePage.changeTo")}</span>
                         <select name="scope" defaultValue={e.shareScope} className={`${input} mt-1 w-auto`}>
                           {SHARE_SCOPES.map((sc) => (
-                            <option key={sc} value={sc}>{SHARE_SCOPE_LABELS[sc]}</option>
+                            <option key={sc} value={sc}>{shareScopeLabel(t, sc)}</option>
                           ))}
                         </select>
                       </label>
                       {(networkRows ?? []).length > 0 && (
                         <label className="text-xs text-ink-muted">
-                          <span className="block">連携グループ(「連携グループの学校」のとき)</span>
+                          <span className="block">{t("archivePage.networkLabel")}</span>
                           <select name="networkId" defaultValue={e.shareNetworkId ?? ""} className={`${input} mt-1 w-auto`}>
-                            <option value="">(選ばない)</option>
+                            <option value="">{t("archivePage.noPick")}</option>
                             {(networkRows ?? []).map((n) => (
                               <option key={n.id as string} value={n.id as string}>{n.name as string}</option>
                             ))}
                           </select>
                         </label>
                       )}
-                      <SubmitButton pendingText="送信中…" className={small}>変更する・申請する</SubmitButton>
+                      <SubmitButton pendingText={t("archivePage.sending")} className={small}>{t("archivePage.applyScope")}</SubmitButton>
                     </form>
                     <details className="mt-2">
-                      <summary className="cursor-pointer text-xs text-ink-muted">広い範囲に出すときの決まり</summary>
+                      <summary className="cursor-pointer text-xs text-ink-muted">{t("archivePage.rulesSummary")}</summary>
                       <ul className="mt-1 list-disc space-y-1 pl-5 text-xs text-ink-muted">
-                        <li>自分の学校が、所属を確かめた組織で、自治体や連携グループに入っていること。</li>
-                        <li>組織の承認者が承認すること。</li>
-                        <li>材料の学習者の全員が、「他の学校でも使う」ことに同意していること。</li>
-                        <li>役割・当時の問い・関わり方に、学校名や地名が入っていないか確認すること。直すと、承認からやり直しになります。</li>
-                        <li>他の学校には、学校名・地名などをぼかした場面だけが使われます。</li>
+                        <li>{t("archivePage.rule1")}</li>
+                        <li>{t("archivePage.rule2")}</li>
+                        <li>{t("archivePage.rule3")}</li>
+                        <li>{t("archivePage.rule4")}</li>
+                        <li>{t("archivePage.rule5")}</li>
                       </ul>
                     </details>
                   </div>
                   <details className="mt-3">
-                    <summary className="cursor-pointer text-xs text-ink-muted">内容を確認・修正する</summary>
+                    <summary className="cursor-pointer text-xs text-ink-muted">{t("archivePage.editSummary")}</summary>
                     <form action={(e.tier === "aggregate" ? updateAggregateAction : updateSeniorAction).bind(null, e.id)} className="mt-2 space-y-2">
                       <label className="block text-xs text-ink-muted">
-                        {e.tier === "aggregate" ? "呼び名(任意。名前は「年度のみんな 呼び名(AI)」になります)" : "呼び名(名前は「年度の先輩 呼び名(AI)」になります)"}
+                        {e.tier === "aggregate" ? t("archivePage.nickAgg") : t("archivePage.nickSenior")}
                         <input name="nickname" defaultValue={e.nickname ?? ""} required={e.tier !== "aggregate"} maxLength={MAX_NICKNAME} className={input} />
                       </label>
                       <label className="block text-xs text-ink-muted">
-                        役割
+                        {t("archivePage.role")}
                         <input name="role" defaultValue={e.role} maxLength={80} className={input} />
                       </label>
                       <label className="block text-xs text-ink-muted">
-                        口調
+                        {t("archivePage.tone")}
                         <input name="tone" defaultValue={e.tone} maxLength={80} className={input} />
                       </label>
                       <label className="block text-xs text-ink-muted">
-                        {e.tier === "aggregate" ? "大事にしている見方" : "当時の問い・考え"}
+                        {e.tier === "aggregate" ? t("archivePage.viewAgg") : t("archivePage.thenQ")}
                         <textarea name="position" defaultValue={e.position} maxLength={300} rows={2} className={input} />
                       </label>
                       <label className="block text-xs text-ink-muted">
-                        後輩との関わり方
+                        {t("archivePage.approachLabel")}
                         <textarea name="goal" defaultValue={e.goal} maxLength={300} rows={2} className={input} />
                       </label>
                       {e.tier === "aggregate" && (
                         <label className="block text-xs text-ink-muted">
-                          まとめた項目(1行に1つ。例「つまずき(第3回): 内容」)
+                          {t("archivePage.items")}
                           <textarea name="items" defaultValue={e.itemsText} rows={6} className={input} />
                         </label>
                       )}
-                      <SubmitButton pendingText="保存中…" className={small}>保存</SubmitButton>
+                      <SubmitButton pendingText={t("archivePage.saving")} className={small}>{t("archivePage.save")}</SubmitButton>
                     </form>
                   </details>
                   <div className="mt-3 flex flex-wrap items-center gap-3">
                     {e.status === "draft" ? (
                       <form action={setSeniorStatusAction.bind(null, e.id, "approved")}>
                         <button type="submit" className="rounded-md bg-accent-fill px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-fill-hover">
-                          次へ: 承認する
+                          {t("archivePage.nextApprove")}
                         </button>
                       </form>
                     ) : (
                       <form action={setSeniorStatusAction.bind(null, e.id, "draft")}>
-                        <button type="submit" className={small}>下書きに戻す(授業回でも話さなくなります)</button>
+                        <button type="submit" className={small}>{t("archivePage.backDraft")}</button>
                       </form>
                     )}
                     <form action={deleteSeniorAction.bind(null, e.id)}>
-                      <button type="submit" className="text-xs text-ink-faint underline underline-offset-2 hover:text-danger">削除する</button>
+                      <button type="submit" className="text-xs text-ink-faint underline underline-offset-2 hover:text-danger">{t("archivePage.delete")}</button>
                     </form>
                   </div>
                 </>
               ) : (
-                <p className="mt-2 text-xs text-ink-faint">同じ学校の先生が作った先輩のAIです(使うことができます)。</p>
+                <p className="mt-2 text-xs text-ink-faint">{t("archivePage.othersMade")}</p>
               )}
             </li>
           ))}
-          {entries.length === 0 && <li className="text-sm text-ink-muted">まだ先輩のAIはありません。下の記録から作れます。</li>}
+          {entries.length === 0 && <li className="text-sm text-ink-muted">{t("archivePage.noAi")}</li>}
         </ul>
       </section>
 
       <section className="mt-10">
-        <h2 className="border-b border-line-soft pb-2 text-base font-semibold text-ink">記録から先輩のAIを作る</h2>
+        <h2 className="border-b border-line-soft pb-2 text-base font-semibold text-ink">{t("archivePage.makeHeading")}</h2>
         <p className="mt-2 text-sm text-ink-muted">
-          記録ができた探究から、先輩のAIの下書きを作ります。同意した学習者の記録だけを使います。
+          {t("archivePage.makeLead")}
         </p>
         <ul className="mt-3 space-y-2">
           {projects.map((p) => (
@@ -245,41 +247,41 @@ export default async function ArchivePage({ searchParams }: { searchParams: Prom
                 <span className="font-medium text-ink">
                   {p.title}
                   <span className="ml-2 text-xs font-normal text-ink-faint">
-                    {p.fiscalYear ? `${p.fiscalYear}年度・` : ""}
-                    {p.kind === "group" ? "グループ" : "個人"}
+                    {p.fiscalYear ? t("archivePage.fyPart", { y: p.fiscalYear }) : ""}
+                    {p.kind === "group" ? t("archivePage.kindGroup") : t("archivePage.kindSolo")}
                     {p.seriesLabel ? `・${p.seriesLabel}` : ""}
-                    {p.hasRetrospective ? "・探究を終えた" : "・探究の途中"}
+                    {p.hasRetrospective ? t("archivePage.finished") : t("archivePage.inProgress")}
                   </span>
                 </span>
-                {p.seniorCount > 0 && <span className="text-xs text-ink-faint">先輩のAI {p.seniorCount}人</span>}
+                {p.seniorCount > 0 && <span className="text-xs text-ink-faint">{t("archivePage.seniorCount", { n: p.seniorCount })}</span>}
               </div>
-              {p.theme && <p className="mt-1 text-xs text-ink-muted">テーマ: {p.theme}</p>}
+              {p.theme && <p className="mt-1 text-xs text-ink-muted">{t("archivePage.themeLine", { t: p.theme })}</p>}
               <form action={createSeniorDraftAction.bind(null, p.id)} className="mt-2 flex flex-wrap items-center gap-2">
-                <label htmlFor={`nick-${p.id}`} className="sr-only">呼び名</label>
+                <label htmlFor={`nick-${p.id}`} className="sr-only">{t("archivePage.nickLabel")}</label>
                 <input
                   id={`nick-${p.id}`}
                   name="nickname"
                   required
                   maxLength={MAX_NICKNAME}
-                  placeholder="呼び名(例: ミナト)"
+                  placeholder={t("archivePage.nickPlaceholder")}
                   className="w-40 rounded-md border border-line bg-surface-raised px-3 py-1.5 text-sm"
                 />
-                <SubmitButton pendingText="下書きを作成中…" className={small}>先輩のAIの下書きを作る</SubmitButton>
+                <SubmitButton pendingText={t("archivePage.makingDraft")} className={small}>{t("archivePage.makeDraft")}</SubmitButton>
               </form>
             </li>
           ))}
           {projects.length === 0 && (
             <li className="text-sm text-ink-muted">
-              まだ記録ができた探究はありません。探究の段階が進むか、教科・科目をアーカイブ(探究の終了)すると作られます。
+              {t("archivePage.noProjects")}
             </li>
           )}
         </ul>
       </section>
 
       <section className="mt-10">
-        <h2 className="border-b border-line-soft pb-2 text-base font-semibold text-ink">集約型のAIを作る(前の年度のみんなの記録から)</h2>
+        <h2 className="border-b border-line-soft pb-2 text-base font-semibold text-ink">{t("archivePage.aggHeading")}</h2>
         <p className="mt-2 text-sm text-ink-muted">
-          前の年度の複数の学習者の記録から、共通するつまずきをまとめたAIを作ります。同意した3人分以上の記録が要ります。
+          {t("archivePage.aggLead")}
         </p>
         <ul className="mt-3 space-y-2">
           {aggregateSources.map((s) => (
@@ -288,29 +290,29 @@ export default async function ArchivePage({ searchParams }: { searchParams: Prom
                 <span className="font-medium text-ink">
                   {s.title}
                   <span className="ml-2 text-xs font-normal text-ink-faint">
-                    {s.fiscalYear ? `${s.fiscalYear}年度・` : ""}同意した学習者 {s.learnerCount}人分{s.archived ? "・終了済み" : ""}
+                    {s.fiscalYear ? t("archivePage.fyPart", { y: s.fiscalYear }) : ""}{t("archivePage.learnersAgreed", { n: s.learnerCount, ended: s.archived ? t("archivePage.endedPart") : "" })}
                   </span>
                 </span>
-                {s.aggregateCount > 0 && <span className="text-xs text-ink-faint">集約型のAI {s.aggregateCount}人</span>}
+                {s.aggregateCount > 0 && <span className="text-xs text-ink-faint">{t("archivePage.aggCount", { n: s.aggregateCount })}</span>}
               </div>
               {s.learnerCount >= MIN_AGGREGATE_LEARNERS ? (
                 <form action={createAggregateDraftAction.bind(null, s.seriesId)} className="mt-2 flex flex-wrap items-center gap-2">
-                  <label htmlFor={`agg-nick-${s.seriesId}`} className="sr-only">呼び名(任意)</label>
-                  <input id={`agg-nick-${s.seriesId}`} name="nickname" maxLength={MAX_NICKNAME} placeholder="呼び名(任意。例: ミライ)" className="w-48 rounded-md border border-line bg-surface-raised px-3 py-1.5 text-sm" />
-                  <SubmitButton pendingText="作成中…" className="rounded-md bg-accent-fill px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-fill-hover disabled:opacity-50">
-                    集約型のAIの下書きを作る
+                  <label htmlFor={`agg-nick-${s.seriesId}`} className="sr-only">{t("archivePage.nickOpt")}</label>
+                  <input id={`agg-nick-${s.seriesId}`} name="nickname" maxLength={MAX_NICKNAME} placeholder={t("archivePage.nickOptPlaceholder")} className="w-48 rounded-md border border-line bg-surface-raised px-3 py-1.5 text-sm" />
+                  <SubmitButton pendingText={t("archivePage.creating")} className="rounded-md bg-accent-fill px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-fill-hover disabled:opacity-50">
+                    {t("archivePage.makeAgg")}
                   </SubmitButton>
                 </form>
               ) : (
-                <p className="mt-2 text-xs text-ink-faint">まだ{MIN_AGGREGATE_LEARNERS}人分に足りないため、作れません。</p>
+                <p className="mt-2 text-xs text-ink-faint">{t("archivePage.notEnough", { n: MIN_AGGREGATE_LEARNERS })}</p>
               )}
             </li>
           ))}
-          {aggregateSources.length === 0 && <li className="text-sm text-ink-muted">記録(軌跡や場面)ができている教科・科目が、まだありません。</li>}
+          {aggregateSources.length === 0 && <li className="text-sm text-ink-muted">{t("archivePage.noSources")}</li>}
         </ul>
       </section>
 
-      <BackLink href="/courses" label="教科・科目一覧" />
+      <BackLink href="/courses" label={t("lessonCrumbs.courseList")} />
     </div>
   );
 }

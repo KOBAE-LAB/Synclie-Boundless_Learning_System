@@ -1,3 +1,5 @@
+import { getT } from "@/lib/i18n/server";
+import type { DictKey, Vars } from "@/lib/i18n/translate";
 // 先輩のAIの公開範囲を変える・広げる申請を承認する(0049)。
 //  - 狭める(自分だけ/同じ学校)は、作った先生がすぐ変えられる。広い範囲に出していたものは、他校への貸し出しを止める。
 //  - 広げる(同じ自治体/連携グループ)は、申請 → 持ち主の組織の承認者が承認して、はじめて有効になる。
@@ -9,13 +11,16 @@ import { SeniorRuleError, assertCreator } from "./senior";
 import { wideConsentOk } from "./wide-consent";
 import { enqueueJob } from "./queue";
 
+// 画面の言語でのメッセージ(エラーなど)。
+const rt = async (key: DictKey, vars?: Vars): Promise<string> => (await getT()).t(key, vars);
+
 type AdminClient = ReturnType<typeof createAdminClient>;
 
 export async function requestScopeChange(
   admin: AdminClient,
   input: { teacherId: string; personaId: string; requested: string; networkId?: string | null },
 ): Promise<{ applied: boolean }> {
-  if (!isShareScope(input.requested)) throw new SeniorRuleError("公開範囲が正しくありません。");
+  if (!isShareScope(input.requested)) throw new SeniorRuleError(await rt("libErrors.s38"));
   const requested: ShareScope = input.requested;
   const persona = await assertCreator(admin, input.personaId, input.teacherId);
   const infos = await loadOrgInfos(admin, [persona.organization_id]);
@@ -30,21 +35,21 @@ export async function requestScopeChange(
       .from("personas")
       .update({ share_scope: requested, share_network_id: null, scope_request: null, scope_request_network_id: null, scope_requested_at: null })
       .eq("id", persona.id);
-    if (error) throw new Error(`公開範囲を変えられませんでした: ${error.message}`);
+    if (error) throw new Error(await rt("libErrors.p27", { message: error.message }));
     // 狭めたら、他の学校への貸し出しは使わない(行は残す)
     if (wasWide) await admin.from("persona_loans").update({ status: "paused" }).eq("persona_id", persona.id).eq("scope", "cross_org");
     return { applied: true };
   }
 
-  if (persona.status !== "approved") throw new SeniorRuleError("承認済みの先輩のペルソナだけを、広い範囲に公開できます。");
+  if (persona.status !== "approved") throw new SeniorRuleError(await rt("libErrors.s39"));
   if (!(await wideConsentOk(admin, persona as { id: string; tier: string; source_project_id?: string | null }))) {
-    throw new SeniorRuleError("材料の学習者の全員が、他の学校で使うことに同意している必要があります(同意が足りません)。");
+    throw new SeniorRuleError(await rt("libErrors.s40"));
   }
   const { error } = await admin
     .from("personas")
     .update({ scope_request: requested, scope_request_network_id: networkId, scope_requested_at: new Date().toISOString() })
     .eq("id", persona.id);
-  if (error) throw new Error(`申請を保存できませんでした: ${error.message}`);
+  if (error) throw new Error(await rt("libErrors.p28", { message: error.message }));
   return { applied: false };
 }
 
@@ -100,14 +105,14 @@ export async function decideScopeRequest(
     .select("id, tier, status, organization_id, source_project_id, scope_request, scope_request_network_id")
     .eq("id", input.personaId)
     .maybeSingle();
-  if (!persona || !isShareScope(persona.scope_request) || !persona.organization_id) throw new SeniorRuleError("承認待ちの申請が見つかりません。");
+  if (!persona || !isShareScope(persona.scope_request) || !persona.organization_id) throw new SeniorRuleError(await rt("libErrors.s41"));
   const { data: org } = await admin.from("organizations").select("approver_teacher_id").eq("id", persona.organization_id).maybeSingle();
-  if (!org || org.approver_teacher_id !== input.approverId) throw new SeniorRuleError("この申請を判断できるのは、組織の承認者だけです。");
+  if (!org || org.approver_teacher_id !== input.approverId) throw new SeniorRuleError(await rt("libErrors.s42"));
 
   const clear = { scope_request: null, scope_request_network_id: null, scope_requested_at: null };
   if (input.decision === "declined") {
     const { error } = await admin.from("personas").update(clear).eq("id", persona.id);
-    if (error) throw new Error(`見送りを保存できませんでした: ${error.message}`);
+    if (error) throw new Error(await rt("libErrors.p29", { message: error.message }));
     return;
   }
 
@@ -116,12 +121,12 @@ export async function decideScopeRequest(
   const infos = await loadOrgInfos(admin, [persona.organization_id as string]);
   const problem = validateScopeChange({ requested, networkId, ownerOrg: infos.get(persona.organization_id as string) ?? null });
   if (problem) throw new SeniorRuleError(problem);
-  if (persona.status !== "approved") throw new SeniorRuleError("この先輩のペルソナは、承認済みではなくなっています。");
+  if (persona.status !== "approved") throw new SeniorRuleError(await rt("libErrors.s43"));
   if (!(await wideConsentOk(admin, persona as { id: string; tier: string; source_project_id?: string | null }))) {
-    throw new SeniorRuleError("材料の学習者の同意が足りなくなっています。承認できません。");
+    throw new SeniorRuleError(await rt("libErrors.s44"));
   }
   const { error } = await admin.from("personas").update({ share_scope: requested, share_network_id: networkId, ...clear }).eq("id", persona.id);
-  if (error) throw new Error(`承認を保存できませんでした: ${error.message}`);
+  if (error) throw new Error(await rt("libErrors.p30", { message: error.message }));
   // 先輩型は、エピソードの他校向けの版を作る(集約型は、まとめた項目だけを使うので要らない)
   if (persona.tier !== "aggregate" && persona.source_project_id) {
     await enqueueJob(admin, { kind: "anonymize_episodes", projectId: persona.source_project_id as string, round: `approve-${persona.id}` });

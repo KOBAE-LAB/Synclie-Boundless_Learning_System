@@ -15,7 +15,8 @@ import {
   updateSeniorPersona,
 } from "@/lib/inquiry/senior";
 import { requestScopeChange } from "@/lib/inquiry/share-scope";
-import { SHARE_SCOPE_LABELS, isShareScope } from "@/lib/organizations/scope";
+import { shareScopeLabel, isShareScope } from "@/lib/organizations/scope";
+import { getT } from "@/lib/i18n/server";
 
 // 先輩の記録(アーカイブ)の操作。決まりは @/lib/inquiry/senior にある。決まりに反するときは、画面に理由を出す(?error=)。
 
@@ -112,13 +113,14 @@ export async function updateAggregateAction(personaId: string, formData: FormDat
 // 公開範囲を変える・広げる申請をする。狭める変更はすぐ有効。広げる申請は、組織の承認者が承認するまで有効にならない。
 export async function requestScopeAction(personaId: string, formData: FormData) {
   const { user } = await requireRole("teacher");
+  const { t } = await getT();
   const scope = String(formData.get("scope") ?? "");
   const networkId = String(formData.get("networkId") ?? "") || null;
   let notice = "";
   await run(async () => {
     const result = await requestScopeChange(createAdminClient(), { teacherId: user.id, personaId, requested: scope, networkId });
-    const label = isShareScope(scope) ? SHARE_SCOPE_LABELS[scope] : "";
-    notice = result.applied ? `公開範囲を「${label}」にしました。` : `「${label}」への公開を申請しました。組織の承認者が承認すると、有効になります。`;
+    const label = isShareScope(scope) ? shareScopeLabel(t, scope) : "";
+    notice = result.applied ? t("archiveActions.scopeApplied", { label }) : t("archiveActions.scopeRequested", { label });
   }, `#persona-${personaId}`);
   redirect(`/archive?notice=${encodeURIComponent(notice)}#persona-${personaId}`);
 }

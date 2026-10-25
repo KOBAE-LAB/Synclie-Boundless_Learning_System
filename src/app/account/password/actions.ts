@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { requireLogin } from "@/lib/auth/session";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
+import { getT } from "@/lib/i18n/server";
 import { validatePassword } from "@/lib/auth/signup-validation";
 import { createAdminClient } from "@/lib/supabase/server";
 
@@ -13,10 +14,11 @@ export async function changePasswordAction(formData: FormData) {
   const current = String(formData.get("current") ?? "");
   const next = String(formData.get("next") ?? "");
 
+  const { t, lang } = await getT();
   const fail = (message: string): never =>
     redirect(`/account/password?error=${encodeURIComponent(message)}`);
 
-  const problem = validatePassword(next);
+  const problem = validatePassword(next, lang);
   if (problem) fail(problem);
 
   const admin = createAdminClient();
@@ -26,10 +28,10 @@ export async function changePasswordAction(formData: FormData) {
     .eq("id", user.id)
     .maybeSingle();
   if (!profile?.password_hash) {
-    fail("このアカウントはパスワードを使わないログイン方法(学校・組織のアカウント等)のため、変更できません。");
+    fail(t("account.errNoPassword"));
   }
   if (!(await verifyPassword(current, profile!.password_hash))) {
-    fail("現在のパスワードが正しくありません。");
+    fail(t("account.errWrongCurrent"));
   }
 
   const { error } = await admin
@@ -37,7 +39,7 @@ export async function changePasswordAction(formData: FormData) {
     .update({ password_hash: await hashPassword(next) })
     .eq("id", user.id);
   if (error) {
-    fail("変更に失敗しました。時間をおいてもう一度お試しください。");
+    fail(t("account.errFailed"));
   }
 
   redirect("/account/password?done=1");

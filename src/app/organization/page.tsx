@@ -2,8 +2,9 @@ import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { joinOrCreateOrganizationAction, setApproverAction, decideShareRequestAction, decideScopeRequestAction } from "./actions";
 import { listPendingScopeRequests } from "@/lib/inquiry/share-scope";
-import { SHARE_SCOPE_LABELS } from "@/lib/organizations/scope";
-import { ORG_KIND_LABELS, isOrgKind } from "@/lib/organizations/admin";
+import { shareScopeLabel } from "@/lib/organizations/scope";
+import { getT } from "@/lib/i18n/server";
+import { orgKindLabel, isOrgKind } from "@/lib/organizations/admin";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 
 // F21: 組織(学校・地域単位)への参加と、組織をまたぐ共有リクエストの承認者設定。
@@ -11,14 +12,10 @@ import { Breadcrumbs } from "@/components/breadcrumbs";
 // 「同一組織はSSOで自動承認、組織を跨ぐ共有は学校ごとに指定した承認者が判断する」
 // (要件定義書12章)の「承認者」をこの画面で管理する。
 
-const ITEM_KIND_LABELS: Record<string, string> = {
-  persona: "ペルソナ",
-  material: "教材(単元の対応表)",
-};
-
 export default async function OrganizationPage({ searchParams }: { searchParams: Promise<{ error?: string; notice?: string }> }) {
   const { error, notice } = await searchParams;
   const { user } = await requireRole("teacher");
+  const { t } = await getT();
   const admin = createAdminClient();
 
   const { data: profile } = await admin
@@ -30,37 +27,34 @@ export default async function OrganizationPage({ searchParams }: { searchParams:
   if (!profile?.organization_id) {
     return (
       <div className="mx-auto max-w-2xl px-6 py-12">
-        <Breadcrumbs trail={[{ label: "教科・科目一覧", href: "/courses" }]} current="組織" />
-      <h1 className="mt-3 text-2xl font-semibold text-ink">組織</h1>
+        <Breadcrumbs trail={[{ label: t("lessonCrumbs.courseList"), href: "/courses" }]} current={t("orgPage.title")} />
+      <h1 className="mt-3 text-2xl font-semibold text-ink">{t("orgPage.title")}</h1>
         <p className="mt-1 text-sm text-ink-muted">
-          組織(学校・地域単位)に参加すると、同じ組織の教師が共有したペルソナ・教材を
-          自動的に複製できるようになる(承認不要)。組織をまたぐ共有には、組織側の承認者の
-          判断が必要になる。
+          {t("orgPage.noOrgLead")}
         </p>
         <form
           action={joinOrCreateOrganizationAction}
           className="mt-6 space-y-3 rounded-lg border border-line p-5"
         >
-          <h2 className="text-sm font-medium text-ink">組織に参加する</h2>
+          <h2 className="text-sm font-medium text-ink">{t("orgPage.joinHeading")}</h2>
           <label htmlFor="organization-name" className="sr-only">
-            組織名
+            {t("orgPage.orgNameLabel")}
           </label>
           <input
             id="organization-name"
             name="name"
-            placeholder="組織名(例: ○○市立△△小学校)"
+            placeholder={t("orgPage.orgNamePlaceholder")}
             required
             className="w-full rounded-md border border-line px-3 py-2 text-sm bg-surface-raised"
           />
           <p className="text-xs text-ink-muted">
-            既存の組織と同じ名前を入力すれば参加、無ければ新規作成される(作成した場合は自分が
-            この組織の承認者になる)。
+            {t("orgPage.joinNote")}
           </p>
           <button
             type="submit"
             className="rounded-md bg-accent-fill px-4 py-2 text-sm font-medium text-white hover:bg-accent-fill-hover"
           >
-            参加する
+            {t("orgPage.join")}
           </button>
         </form>
       </div>
@@ -83,7 +77,7 @@ export default async function OrganizationPage({ searchParams }: { searchParams:
   const memberName = (id: string | null) =>
     (members ?? []).find((m) => m.id === id)?.display_name ??
     (members ?? []).find((m) => m.id === id)?.email ??
-    "(不明)";
+    t("orgPage.unknown");
 
   const isApprover = org?.approver_teacher_id === user.id;
   const { data: parentOrg } = org?.parent_organization_id
@@ -119,7 +113,7 @@ export default async function OrganizationPage({ searchParams }: { searchParams:
         .from("profiles")
         .select("id, display_name, email")
         .in("id", requesterIds);
-      for (const r of requesters ?? []) requesterNames.set(r.id, r.display_name || r.email || "(不明)");
+      for (const r of requesters ?? []) requesterNames.set(r.id, r.display_name || r.email || t("orgPage.unknown"));
     }
 
     const personaIds = pendingRequests.filter((r) => r.item_kind === "persona").map((r) => r.item_id);
@@ -136,28 +130,28 @@ export default async function OrganizationPage({ searchParams }: { searchParams:
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <Breadcrumbs trail={[{ label: "教科・科目一覧", href: "/courses" }]} current="組織" />
-      <h1 className="mt-3 text-2xl font-semibold text-ink">組織</h1>
+      <Breadcrumbs trail={[{ label: t("lessonCrumbs.courseList"), href: "/courses" }]} current={t("orgPage.title")} />
+      <h1 className="mt-3 text-2xl font-semibold text-ink">{t("orgPage.title")}</h1>
       <p className="mt-1 text-sm text-ink-muted">
-        所属組織: <span className="font-medium text-ink">{org?.name}</span>
+        {t("orgPage.myOrg")}<span className="font-medium text-ink">{org?.name}</span>
       </p>
       <dl className="mt-2 space-y-1 text-sm text-ink-muted">
         <div>
-          <dt className="inline">種類: </dt>
-          <dd className="inline text-ink">{isOrgKind(org?.kind) ? ORG_KIND_LABELS[org.kind] : "学校"}</dd>
+          <dt className="inline">{t("orgPage.kindLabel")}</dt>
+          <dd className="inline text-ink">{isOrgKind(org?.kind) ? orgKindLabel(t, org.kind) : t("orgEnums.kind_school")}</dd>
         </div>
         <div>
-          <dt className="inline">属する自治体: </dt>
-          <dd className="inline text-ink">{parentOrg?.name ?? "(なし)"}</dd>
+          <dt className="inline">{t("orgPage.parentLabel")}</dt>
+          <dd className="inline text-ink">{parentOrg?.name ?? t("orgPage.none")}</dd>
         </div>
         <div>
-          <dt className="inline">連携グループ: </dt>
-          <dd className="inline text-ink">{(myNetworks ?? []).map((n) => n.name as string).join("、") || "(なし)"}</dd>
+          <dt className="inline">{t("orgPage.networkLabel")}</dt>
+          <dd className="inline text-ink">{(myNetworks ?? []).map((n) => n.name as string).join("、") || t("orgPage.none")}</dd>
         </div>
         <div>
-          <dt className="inline">所属の確認: </dt>
+          <dt className="inline">{t("orgPage.verifiedLabel")}</dt>
           <dd className={org?.verified ? "inline text-success" : "inline text-warn"}>
-            {org?.verified ? "確認済み" : "未確認(先輩のAIを、同じ学校の外へ出すには、管理者の確認が要ります)"}
+            {org?.verified ? t("orgPage.verified") : t("orgPage.unverified")}
           </dd>
         </div>
       </dl>
@@ -166,15 +160,15 @@ export default async function OrganizationPage({ searchParams }: { searchParams:
 
       <div className="mt-6 rounded-lg border border-line p-5">
         <h2 className="text-sm font-medium text-ink">
-          共有の承認者: {memberName(org?.approver_teacher_id ?? null)}
-          {isApprover && <span className="ml-2 text-xs text-accent">(あなた)</span>}
+          {t("orgPage.approver", { name: memberName(org?.approver_teacher_id ?? null) })}
+          {isApprover && <span className="ml-2 text-xs text-accent">{t("orgPage.you")}</span>}
         </h2>
         <p className="mt-1 text-xs text-ink-muted">
-          組織をまたぐ共有リクエストを判断する人。同じ組織の教師なら誰でも変更できる。
+          {t("orgPage.approverLead")}
         </p>
         <form action={setApproverAction} className="mt-3 flex items-center gap-2">
           <label htmlFor="approver-id" className="sr-only">
-            新しい承認者
+            {t("orgPage.newApprover")}
           </label>
           <select
             id="approver-id"
@@ -183,7 +177,7 @@ export default async function OrganizationPage({ searchParams }: { searchParams:
             className="flex-1 rounded-md border border-line px-3 py-2 text-sm bg-surface-raised"
           >
             <option value="" disabled>
-              新しい承認者を選択
+              {t("orgPage.pickApprover")}
             </option>
             {(members ?? []).map((m) => (
               <option key={m.id} value={m.id}>
@@ -195,13 +189,13 @@ export default async function OrganizationPage({ searchParams }: { searchParams:
             type="submit"
             className="shrink-0 rounded-md border border-line px-3 py-2 text-xs font-medium text-ink hover:bg-surface"
           >
-            変更する
+            {t("orgPage.change")}
           </button>
         </form>
       </div>
 
       <div className="mt-6">
-        <h2 className="text-sm font-medium text-ink">組織のメンバー({(members ?? []).length}人)</h2>
+        <h2 className="text-sm font-medium text-ink">{t("orgPage.members", { n: (members ?? []).length })}</h2>
         <ul className="mt-2 space-y-1 text-sm text-ink-muted">
           {(members ?? []).map((m) => (
             <li key={m.id}>{m.display_name || m.email}</li>
@@ -211,35 +205,31 @@ export default async function OrganizationPage({ searchParams }: { searchParams:
 
       {isApprover && (
         <div className="mt-8">
-          <h2 className="text-sm font-medium text-ink">先輩のAIを広げる申請(承認待ち {pendingScopeRequests.length}件)</h2>
+          <h2 className="text-sm font-medium text-ink">{t("orgPage.scopeHeading", { n: pendingScopeRequests.length })}</h2>
           <p className="mt-1 text-xs text-ink-muted">
-            同じ学校の外(同じ自治体・連携グループ)の先生にも使えるようにする申請です。承認の前に、内容に学校名や地名が入っていないか、確かめてください。
+            {t("orgPage.scopeLead")}
           </p>
           <ul className="mt-3 space-y-3">
             {pendingScopeRequests.map((r) => (
               <li key={r.personaId} className="rounded-md border border-line px-4 py-3 text-sm">
                 <p>
-                  <span className="font-medium text-ink">{r.requesterName ?? "(不明)"}</span> さんの「{r.name}」を、
-                  <span className="font-medium text-ink">
-                    {SHARE_SCOPE_LABELS[r.requested]}{r.networkName ? `(${r.networkName})` : ""}
-                  </span>
-                  に広げる申請です。
+                  {t("orgPage.scopeReq", { who: r.requesterName ?? t("orgPage.unknown"), name: r.name, scope: shareScopeLabel(t, r.requested) + (r.networkName ? `(${r.networkName})` : "") })}
                 </p>
                 <div className="mt-2 flex gap-2">
                   <form action={decideScopeRequestAction.bind(null, r.personaId, "approved")}>
                     <button type="submit" className="rounded-md bg-accent-fill px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-fill-hover">
-                      承認する
+                      {t("orgPage.approve")}
                     </button>
                   </form>
                   <form action={decideScopeRequestAction.bind(null, r.personaId, "declined")}>
                     <button type="submit" className="rounded-md border border-line px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface">
-                      見送る
+                      {t("orgPage.decline")}
                     </button>
                   </form>
                 </div>
               </li>
             ))}
-            {pendingScopeRequests.length === 0 && <li className="text-sm text-ink-muted">承認待ちの申請はありません。</li>}
+            {pendingScopeRequests.length === 0 && <li className="text-sm text-ink-muted">{t("orgPage.noScopeReq")}</li>}
           </ul>
         </div>
       )}
@@ -247,7 +237,7 @@ export default async function OrganizationPage({ searchParams }: { searchParams:
       {isApprover && (
         <div className="mt-8">
           <h2 className="text-sm font-medium text-ink">
-            組織をまたぐ共有リクエスト(承認待ち {pendingRequests.length}件)
+            {t("orgPage.shareHeading", { n: pendingRequests.length })}
           </h2>
           <ul className="mt-3 space-y-3">
             {pendingRequests.map((request) => {
@@ -259,11 +249,7 @@ export default async function OrganizationPage({ searchParams }: { searchParams:
                   className="rounded-md border border-line px-4 py-3 text-sm"
                 >
                   <p>
-                    <span className="font-medium text-ink">
-                      {requesterNames.get(request.requester_teacher_id)}
-                    </span>{" "}
-                    さんが「{itemTitles.get(request.item_id) ?? "(不明)"}」(
-                    {ITEM_KIND_LABELS[request.item_kind]})へのアクセスをリクエストしています。
+                    {t("orgPage.accessReq", { who: requesterNames.get(request.requester_teacher_id) ?? "", item: itemTitles.get(request.item_id) ?? t("orgPage.unknown"), kind: request.item_kind === "persona" ? t("orgPage.itemPersona") : t("orgPage.itemMaterial") })}
                   </p>
                   <div className="mt-2 flex gap-2">
                     <form action={boundApprove}>
@@ -271,7 +257,7 @@ export default async function OrganizationPage({ searchParams }: { searchParams:
                         type="submit"
                         className="rounded-md bg-accent-fill px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-fill-hover"
                       >
-                        承認する
+                        {t("orgPage.approve")}
                       </button>
                     </form>
                     <form action={boundDecline}>
@@ -279,7 +265,7 @@ export default async function OrganizationPage({ searchParams }: { searchParams:
                         type="submit"
                         className="rounded-md border border-line px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface"
                       >
-                        見送る
+                        {t("orgPage.decline")}
                       </button>
                     </form>
                   </div>
@@ -287,7 +273,7 @@ export default async function OrganizationPage({ searchParams }: { searchParams:
               );
             })}
             {pendingRequests.length === 0 && (
-              <li className="text-sm text-ink-muted">承認待ちのリクエストはありません。</li>
+              <li className="text-sm text-ink-muted">{t("orgPage.noShareReq")}</li>
             )}
           </ul>
         </div>

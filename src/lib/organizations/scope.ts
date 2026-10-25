@@ -1,3 +1,4 @@
+import type { Translator } from "@/lib/i18n/translate";
 // 先輩のAI(先輩型・集約型)の「公開範囲」の決まり(「他校型」の代わりの設計、0049)。誰が見て使えるか、広げる申請が通るかを、ここにまとめる(テストあり)。
 //   private = 作った先生だけ / school = 同じ学校(組織)の先生(今までどおり) / municipality = 同じ自治体の学校 / network = 連携グループの学校
 // 広い範囲(municipality / network)は、(1)所属の確かな組織(verified)どうし、(2)組織の承認者の承認、(3)材料の学習者全員の別の同意
@@ -11,6 +12,11 @@ export const SHARE_SCOPE_LABELS: Record<ShareScope, string> = {
   municipality: "同じ自治体の学校",
   network: "連携グループの学校",
 };
+
+/** 画面の言語に合わせた公開範囲の名前。 */
+export function shareScopeLabel(t: Translator, scope: ShareScope): string {
+  return t(`orgEnums.scope_${scope}`);
+}
 
 export const SHARE_SCOPES: ShareScope[] = ["private", "school", "municipality", "network"];
 

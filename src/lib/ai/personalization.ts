@@ -8,6 +8,8 @@
 import { z } from "zod";
 import { zodTextFormat } from "openai/helpers/zod";
 import { openai, MODEL_JUDGE } from "./openai";
+import { languageDirective } from "./language";
+import type { Lang } from "@/lib/i18n/config";
 
 const PersonalizationSchema = z.object({
   avoidMisconceptionQuestion: z
@@ -30,11 +32,12 @@ export async function generatePersonalizationSuggestions(params: {
   strengths: string;
   challenges: string;
   summary: string;
+  lang?: Lang;
 }): Promise<PersonalizationSuggestion> {
   const systemPrompt = `あなたは、学習者プロファイルをもとに次回以降の学習を個別最適化するための
 提案を作るアシスタントです。これはあくまで案であり、採用するかどうかは教師と学習者が決めます。
 学習内容や評価を一方的に固定するような断定的な書き方はせず、「〜してみる」「〜という手もある」
-のような提案の形で書いてください。`;
+のような提案の形で書いてください。${languageDirective(params.lang)}`;
 
   const response = await openai.responses.parse({
     model: MODEL_JUDGE,

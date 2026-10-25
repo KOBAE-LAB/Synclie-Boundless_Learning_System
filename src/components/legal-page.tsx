@@ -1,9 +1,10 @@
+import { getT } from "@/lib/i18n/server";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
 // プライバシーポリシー・利用規約に共通の枠。ログインしていなくても読めるようにする
 // (Googleのアプリ公開の審査でも、誰でも開ける公開ページであることが求められる)。
-export function LegalPage({
+export async function LegalPage({
   title,
   updatedAt,
   children,
@@ -12,20 +13,21 @@ export function LegalPage({
   updatedAt: string;
   children: ReactNode;
 }) {
+  const { t } = await getT();
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
       <h1 className="text-2xl font-semibold text-ink">{title}</h1>
-      <p className="mt-1 text-xs text-ink-faint">最終更新日: {updatedAt}</p>
+      <p className="mt-1 text-xs text-ink-faint">{t("legalFrame.updated", { d: updatedAt })}</p>
       <div className="mt-8 space-y-8 text-sm leading-7 text-ink-muted">{children}</div>
       <nav className="mt-12 flex flex-wrap gap-x-4 gap-y-2 border-t border-line-soft pt-6 text-sm text-ink-muted">
         <Link href="/privacy" className="underline underline-offset-2">
-          プライバシーポリシー
+          {t("legalFrame.privacy")}
         </Link>
         <Link href="/terms" className="underline underline-offset-2">
-          利用規約
+          {t("legalFrame.terms")}
         </Link>
         <Link href="/" className="underline underline-offset-2">
-          トップへ戻る
+          {t("legalFrame.top")}
         </Link>
       </nav>
     </div>

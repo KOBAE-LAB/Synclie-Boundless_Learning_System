@@ -1,3 +1,4 @@
+import { getT } from "@/lib/i18n/server";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -31,6 +32,7 @@ type ShareStatus = "none" | "pending" | "approved" | "declined";
 
 export default async function LibraryPage() {
   const { user } = await requireRole("teacher");
+  const { t, lang } = await getT();
   const admin = createAdminClient();
 
   const { data: myProfile } = await admin
@@ -45,7 +47,7 @@ export default async function LibraryPage() {
     .select("id")
     .eq("owner_teacher_id", user.id)
     .order("created_at", { ascending: false });
-  const myLessonLabels = await loadLessonLabels(admin, (myCourseRows ?? []).map((c) => c.id));
+  const myLessonLabels = await loadLessonLabels(admin, (myCourseRows ?? []).map((c) => c.id), lang);
   const myCourses = (myCourseRows ?? []).map((c) => ({ id: c.id, title: myLessonLabels.get(c.id) ?? "" }));
 
   const { data: sharedPersonas } = await admin
@@ -68,7 +70,7 @@ export default async function LibraryPage() {
       .from("courses")
       .select("id, owner_teacher_id")
       .in("id", allCourseIds);
-    const labels = await loadLessonLabels(admin, allCourseIds);
+    const labels = await loadLessonLabels(admin, allCourseIds, lang);
     for (const c of courses ?? []) {
       courseOwner.set(c.id, c.owner_teacher_id);
       courseTitle.set(c.id, labels.get(c.id) ?? "");
@@ -83,9 +85,9 @@ export default async function LibraryPage() {
       .from("profiles")
       .select("id, display_name, email, organization_id")
       .in("id", ownerTeacherIds);
-    for (const t of teachers ?? []) {
-      teacherOrg.set(t.id, t.organization_id);
-      teacherName.set(t.id, t.display_name || t.email || "(不明)");
+    for (const tc of teachers ?? []) {
+      teacherOrg.set(tc.id, tc.organization_id);
+      teacherName.set(tc.id, tc.display_name || tc.email || t("libraryPage.unknown"));
     }
   }
 
@@ -111,35 +113,26 @@ export default async function LibraryPage() {
 
   const SHARE_STATUS_LABELS: Record<ShareStatus, string> = {
     none: "",
-    pending: "承認待ち",
-    approved: "承認済み(複製できます)",
-    declined: "見送られました",
+    pending: t("libraryPage.st_pending"),
+    approved: t("libraryPage.st_approved"),
+    declined: t("libraryPage.st_declined"),
   };
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <Breadcrumbs trail={[{ label: "教科・科目一覧", href: "/courses" }]} current="共有ライブラリ" />
-      <h1 className="mt-3 text-2xl font-semibold text-ink">共有ライブラリ</h1>
+      <Breadcrumbs trail={[{ label: t("lessonCrumbs.courseList"), href: "/courses" }]} current={t("libraryPage.title")} />
+      <h1 className="mt-3 text-2xl font-semibold text-ink">{t("libraryPage.title")}</h1>
       <p className="mt-1 text-sm text-ink-muted">
-        他の教師が公開したペルソナ・教材(単元の対応表)を自分の授業に複製できる。同じ組織なら
-        即時複製、他組織なら
-        <Link href="/organization" className="mx-1 underline">
-          組織の承認者
-        </Link>
-        の承認が必要。
+        {t("libraryPage.lead")}
       </p>
       {!myOrgId && (
         <p className="mt-2 rounded-md border border-warn bg-warn-soft px-4 py-3 text-sm text-warn">
-          まだ組織に参加していません。
-          <Link href="/organization" className="ml-1 underline">
-            組織に参加する
-          </Link>
-          と、同じ組織の共有アイテムを承認不要で複製できるようになります。
+          {t("libraryPage.noOrg")} <Link href="/organization" className="underline">{t("libraryPage.joinOrg")}</Link>
         </p>
       )}
 
       <h2 className="mt-8 text-sm font-medium text-ink">
-        共有されているペルソナ({personaRows.length}件)
+        {t("libraryPage.personasHeading", { n: personaRows.length })}
       </h2>
       <ul className="mt-3 space-y-3">
         {personaRows.map((persona) => {
@@ -157,11 +150,10 @@ export default async function LibraryPage() {
                   {persona.name}
                   {persona.profile?.role && <span className="ml-2 text-ink-muted">({persona.profile.role})</span>}
                 </span>
-                {isOwn && <span className="text-xs text-ink-faint">自分の共有</span>}
+                {isOwn && <span className="text-xs text-ink-faint">{t("libraryPage.mine")}</span>}
               </div>
               <p className="mt-1 text-xs text-ink-muted">
-                公開元: {ownerId ? teacherName.get(ownerId) : "(不明)"} ・ {courseTitle.get(persona.course_id)}
-                {!isOwn && (sameOrg ? "(同じ組織)" : "(他組織)")}
+                {t("libraryPage.from", { who: ownerId ? (teacherName.get(ownerId) ?? "") : t("libraryPage.unknown"), course: courseTitle.get(persona.course_id) ?? "", org: !isOwn ? (sameOrg ? t("libraryPage.sameOrg") : t("libraryPage.otherOrg")) : "" })}
               </p>
 
               {!isOwn && canDuplicate && (
@@ -170,11 +162,11 @@ export default async function LibraryPage() {
                     name="targetCourseId"
                     required
                     defaultValue=""
-                    aria-label="複製先の授業"
+                    aria-label={t("libraryPage.targetLesson")}
                     className="rounded-md border border-line px-2 py-1 text-xs bg-surface-raised"
                   >
                     <option value="" disabled>
-                      複製先の授業
+                      {t("libraryPage.targetLesson")}
                     </option>
                     {(myCourses ?? []).map((c) => (
                       <option key={c.id} value={c.id}>
@@ -183,10 +175,10 @@ export default async function LibraryPage() {
                     ))}
                   </select>
                   <SubmitButton
-                    pendingText="複製中…"
+                    pendingText={t("libraryPage.copying")}
                     className="rounded-md bg-accent-fill px-2.5 py-1 text-xs font-medium text-white hover:bg-accent-fill-hover disabled:opacity-50"
                   >
-                    複製する
+                    {t("libraryPage.copy")}
                   </SubmitButton>
                 </form>
               )}
@@ -196,7 +188,7 @@ export default async function LibraryPage() {
                     type="submit"
                     className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface"
                   >
-                    共有をリクエストする
+                    {t("libraryPage.request")}
                   </button>
                 </form>
               )}
@@ -206,11 +198,11 @@ export default async function LibraryPage() {
             </li>
           );
         })}
-        {personaRows.length === 0 && <li className="text-sm text-ink-muted">共有されているペルソナはありません。</li>}
+        {personaRows.length === 0 && <li className="text-sm text-ink-muted">{t("libraryPage.noPersonas")}</li>}
       </ul>
 
       <h2 className="mt-8 text-sm font-medium text-ink">
-        共有されている教材・単元の対応表({materialRows.length}件)
+        {t("libraryPage.materialsHeading", { n: materialRows.length })}
       </h2>
       <ul className="mt-3 space-y-3">
         {materialRows.map((material) => {
@@ -225,11 +217,10 @@ export default async function LibraryPage() {
             <li key={material.id} className="rounded-md border border-line px-4 py-3 text-sm">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <span className="font-medium text-ink">{material.title}</span>
-                {isOwn && <span className="text-xs text-ink-faint">自分の共有</span>}
+                {isOwn && <span className="text-xs text-ink-faint">{t("libraryPage.mine")}</span>}
               </div>
               <p className="mt-1 text-xs text-ink-muted">
-                公開元: {ownerId ? teacherName.get(ownerId) : "(不明)"} ・ {courseTitle.get(material.course_id)}
-                {!isOwn && (sameOrg ? "(同じ組織)" : "(他組織)")}
+                {t("libraryPage.from", { who: ownerId ? (teacherName.get(ownerId) ?? "") : t("libraryPage.unknown"), course: courseTitle.get(material.course_id) ?? "", org: !isOwn ? (sameOrg ? t("libraryPage.sameOrg") : t("libraryPage.otherOrg")) : "" })}
               </p>
 
               {!isOwn && canDuplicate && (
@@ -238,11 +229,11 @@ export default async function LibraryPage() {
                     name="targetCourseId"
                     required
                     defaultValue=""
-                    aria-label="複製先の授業"
+                    aria-label={t("libraryPage.targetLesson")}
                     className="rounded-md border border-line px-2 py-1 text-xs bg-surface-raised"
                   >
                     <option value="" disabled>
-                      複製先の授業
+                      {t("libraryPage.targetLesson")}
                     </option>
                     {(myCourses ?? []).map((c) => (
                       <option key={c.id} value={c.id}>
@@ -251,10 +242,10 @@ export default async function LibraryPage() {
                     ))}
                   </select>
                   <SubmitButton
-                    pendingText="複製中…"
+                    pendingText={t("libraryPage.copying")}
                     className="rounded-md bg-accent-fill px-2.5 py-1 text-xs font-medium text-white hover:bg-accent-fill-hover disabled:opacity-50"
                   >
-                    複製する
+                    {t("libraryPage.copy")}
                   </SubmitButton>
                 </form>
               )}
@@ -264,7 +255,7 @@ export default async function LibraryPage() {
                     type="submit"
                     className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface"
                   >
-                    共有をリクエストする
+                    {t("libraryPage.request")}
                   </button>
                 </form>
               )}
@@ -274,7 +265,7 @@ export default async function LibraryPage() {
             </li>
           );
         })}
-        {materialRows.length === 0 && <li className="text-sm text-ink-muted">共有されている教材はありません。</li>}
+        {materialRows.length === 0 && <li className="text-sm text-ink-muted">{t("libraryPage.noMaterials")}</li>}
       </ul>
     </div>
   );

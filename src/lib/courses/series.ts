@@ -1,3 +1,6 @@
+import { translatorFor } from "@/lib/i18n/translate";
+import { getLang } from "@/lib/i18n/server";
+import type { Lang } from "@/lib/i18n/config";
 import { createAdminClient } from "@/lib/supabase/server";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
@@ -15,13 +18,13 @@ export async function assertOwnsSeries(admin: AdminClient, seriesId: string, tea
 }
 
 /** 授業回の表示名。「第3回 光の強さ」。 */
-export function lessonName(lessonNo: number, title: string): string {
-  return `第${lessonNo}回 ${title}`;
+export function lessonName(lessonNo: number, title: string, lang: Lang = "ja"): string {
+  return translatorFor(lang)("series.lessonName", { n: lessonNo, title });
 }
 
 /** 「理科1年 第3回 光の強さ」のように、教科・科目名つきの表示名(ポートフォリオ・一覧など、文脈が無い所用)。 */
-export function lessonFullName(seriesTitle: string, lessonNo: number, title: string): string {
-  return `${seriesTitle} ${lessonName(lessonNo, title)}`;
+export function lessonFullName(seriesTitle: string, lessonNo: number, title: string, lang: Lang = "ja"): string {
+  return `${seriesTitle} ${lessonName(lessonNo, title, lang)}`;
 }
 
 export interface LessonCrumbs {
@@ -42,7 +45,8 @@ export interface LessonCrumbs {
  * 授業回の画面の「戻る」「パンくず」に使う、親(教科・科目)の情報。
  * 教師の trail は「教科・科目一覧 › 教科・科目 › 第N回」まで、学習者の trail は「授業一覧 › 教科・科目」まで。
  */
-export async function loadLessonCrumbs(admin: AdminClient, courseId: string): Promise<LessonCrumbs | null> {
+export async function loadLessonCrumbs(admin: AdminClient, courseId: string, lang: Lang = "ja"): Promise<LessonCrumbs | null> {
+  const t = translatorFor(lang);
   const { data: course } = await admin
     .from("courses")
     .select("id, title, lesson_no, series_id, closed_at")
@@ -58,19 +62,19 @@ export async function loadLessonCrumbs(admin: AdminClient, courseId: string): Pr
     archived: !!series.archived_at || !!course.closed_at,
     endedBy: series.archived_at ? "series" : course.closed_at ? "lesson" : null,
     teacherTrail: [
-      { label: "教科・科目一覧", href: "/courses" },
+      { label: t("lessonCrumbs.courseList"), href: "/courses" },
       { label: series.title, href: `/series/${series.id}` },
-      { label: lessonName(course.lesson_no, course.title), href: `/courses/${courseId}` },
+      { label: lessonName(course.lesson_no, course.title, lang), href: `/courses/${courseId}` },
     ],
     learnerTrail: [
-      { label: "授業一覧", href: "/learn" },
+      { label: t("learnList.title"), href: "/learn" },
       { label: series.title, href: `/learn/series/${series.id}` },
     ],
   };
 }
 
 /** 授業回のid → 「教科・科目名 第N回 回の名前」。一覧や記録など、親の文脈が無い所で回を名指すとき用。 */
-export async function loadLessonLabels(admin: AdminClient, courseIds: string[]): Promise<Map<string, string>> {
+export async function loadLessonLabels(admin: AdminClient, courseIds: string[], lang: Lang = "ja"): Promise<Map<string, string>> {
   const labels = new Map<string, string>();
   if (courseIds.length === 0) return labels;
   const { data: courses } = await admin.from("courses").select("id, title, lesson_no, series_id").in("id", courseIds);
@@ -80,14 +84,14 @@ export async function loadLessonLabels(admin: AdminClient, courseIds: string[]):
     : { data: [] };
   const seriesTitle = new Map((series ?? []).map((s) => [s.id, s.title]));
   for (const c of courses ?? []) {
-    labels.set(c.id, lessonFullName(seriesTitle.get(c.series_id) ?? "", c.lesson_no, c.title));
+    labels.set(c.id, lessonFullName(seriesTitle.get(c.series_id) ?? "", c.lesson_no, c.title, lang));
   }
   return labels;
 }
 
 /** 「理科1年 光合成(全8回)」。予定回数が無ければ名前だけ。 */
-export function seriesLabel(title: string, plannedLessons: number | null | undefined): string {
-  return plannedLessons ? `${title}(全${plannedLessons}回)` : title;
+export function seriesLabel(title: string, plannedLessons: number | null | undefined, lang: Lang = "ja"): string {
+  return plannedLessons ? translatorFor(lang)("series.lessonsTotal", { title, n: plannedLessons }) : title;
 }
 
 /** 日本の年度(4月始まり、日本時間)。 */
@@ -138,7 +142,7 @@ export const LESSON_CLOSED_MESSAGE = "この授業回は終了しています(�
 export async function assertLessonOpen(admin: AdminClient, courseId: string): Promise<void> {
   const { data: course } = await admin.from("courses").select("series_id, closed_at").eq("id", courseId).maybeSingle();
   if (!course) return;
-  if (course.closed_at) throw new Error(LESSON_CLOSED_MESSAGE);
+  if (course.closed_at) throw new Error(translatorFor(await getLang())("lessonCrumbs.closedMessage"));
   const { data: series } = await admin.from("course_series").select("archived_at").eq("id", course.series_id).maybeSingle();
-  if (series?.archived_at) throw new Error(ARCHIVED_MESSAGE);
+  if (series?.archived_at) throw new Error(translatorFor(await getLang())("lessonCrumbs.archivedMessage"));
 }

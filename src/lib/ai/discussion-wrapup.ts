@@ -11,6 +11,9 @@
 import { z } from "zod";
 import { zodTextFormat } from "openai/helpers/zod";
 import { openai, MODEL_JUDGE } from "./openai";
+import { languageDirective } from "./language";
+import type { Lang } from "@/lib/i18n/config";
+import { translatorFor } from "@/lib/i18n/translate";
 
 const StateSchema = z.object({
   state: z
@@ -26,7 +29,7 @@ export interface DiscussionStateJudgment {
   reason: string;
 }
 
-export function buildStatePrompt(objective: string | null | undefined): string {
+export function buildStatePrompt(objective: string | null | undefined, lang?: Lang): string {
   return `あなたは、学習者と複数のAI擬似メンバーによる議論を見守る進行役です。次の議論の状態を判定してください。
 
 授業のねらい・議題: ${objective || "(未設定。やり取りの内容から推測する)"}
@@ -36,17 +39,18 @@ export function buildStatePrompt(objective: string | null | undefined): string {
 - converged: 議題について、一定の結論や、お互いの理解の到達点が見えてきた。
 - stalled: 同じ主張・同じ問いの繰り返しで、新しい根拠や論点が出なくなっている。
 - off_topic: 議題からずれたやり取りが続いている。
-議論を止めるべきかどうかは、人間が決めます。あなたは、状態と理由を述べるだけにしてください。`;
+議論を止めるべきかどうかは、人間が決めます。あなたは、状態と理由を述べるだけにしてください。${languageDirective(lang)}`;
 }
 
 export async function judgeDiscussionState(
   transcript: string,
   objective: string | null | undefined,
+  lang?: Lang,
 ): Promise<DiscussionStateJudgment> {
   const response = await openai.responses.parse({
     model: MODEL_JUDGE,
     input: [
-      { role: "system", content: buildStatePrompt(objective) },
+      { role: "system", content: buildStatePrompt(objective, lang) },
       { role: "user", content: `次の議論の記録を見て、いまの状態を判定してください。\n\n${transcript}` },
     ],
     text: { format: zodTextFormat(StateSchema, "discussion_state") },
@@ -68,6 +72,7 @@ export function buildSummaryPrompt(params: {
   objective: string | null | undefined;
   learnerLevel: string | null | undefined;
   materialText: string;
+  lang?: Lang;
 }): string {
   return `あなたは、学習者と複数のAI擬似メンバーによる議論を、最後にまとめる進行役です。
 議論の記録をもとに、学習者が自分の考えを整理して、成果(レポートや意見)にまとめられるように手伝ってください。
@@ -81,7 +86,7 @@ export function buildSummaryPrompt(params: {
 - 次に考える問いには、答えを書かない(自分で考えるための問いにする)。
 
 # 参考資料(抜粋)
-${params.materialText.slice(0, 4000) || "(なし)"}`;
+${params.materialText.slice(0, 4000) || "(なし)"}${languageDirective(params.lang)}`;
 }
 
 export async function summarizeDiscussion(params: {
@@ -89,6 +94,7 @@ export async function summarizeDiscussion(params: {
   objective: string | null | undefined;
   learnerLevel: string | null | undefined;
   materialText: string;
+  lang?: Lang;
 }): Promise<DiscussionSummary> {
   const response = await openai.responses.parse({
     model: MODEL_JUDGE,
@@ -99,6 +105,6 @@ export async function summarizeDiscussion(params: {
     text: { format: zodTextFormat(SummarySchema, "discussion_summary") },
   });
   const parsed = response.output_parsed as DiscussionSummary | null;
-  if (!parsed) throw new Error("議論のまとめを作れませんでした。もう一度お試しください。");
+  if (!parsed) throw new Error(translatorFor(params.lang ?? "ja")("apiErrors.summaryEmpty"));
   return parsed;
 }

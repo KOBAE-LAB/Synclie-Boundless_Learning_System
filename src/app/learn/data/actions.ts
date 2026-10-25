@@ -1,5 +1,6 @@
 "use server";
 
+import { getT } from "@/lib/i18n/server";
 import { revalidatePath } from "next/cache";
 import { forgetStudentInGroups } from "@/lib/inquiry/forget";
 import { invalidateAggregatesForStudent } from "@/lib/inquiry/aggregate";
@@ -14,13 +15,14 @@ import { createAdminClient } from "@/lib/supabase/server";
 export async function withdrawConsentAction() {
   const { user } = await requireRole("student");
   const admin = createAdminClient();
+  const { t } = await getT();
 
   const { error } = await admin
     .from("consent_records")
     .update({ withdrawn_at: new Date().toISOString() })
     .eq("student_id", user.id);
   if (error) {
-    throw new Error(`同意の撤回に失敗しました: ${error.message}`);
+    throw new Error(t("myData.errWithdraw", { message: error.message }));
   }
   // データの利用を止めたら、他の学校で使う先輩のAIの材料からも外す
   await invalidateWideScopeForStudent(admin, user.id);
@@ -32,14 +34,15 @@ export async function withdrawConsentAction() {
 export async function grantWideConsentAction() {
   const { user } = await requireRole("student");
   const admin = createAdminClient();
+  const { t } = await getT();
   if (!(await hasConsent(admin, user.id))) {
-    throw new Error("先に、データの利用に同意してください。");
+    throw new Error(t("myData.errNeedConsent"));
   }
   const { error } = await admin.from("consent_records").upsert(
     { student_id: user.id, scope: WIDE_CONSENT_SCOPE, granted_at: new Date().toISOString(), withdrawn_at: null },
     { onConflict: "student_id,scope" },
   );
-  if (error) throw new Error(`同意の記録に失敗しました: ${error.message}`);
+  if (error) throw new Error(t("myData.errRecord", { message: error.message }));
   revalidatePath("/learn/data");
 }
 
@@ -48,12 +51,13 @@ export async function grantWideConsentAction() {
 export async function withdrawWideConsentAction() {
   const { user } = await requireRole("student");
   const admin = createAdminClient();
+  const { t } = await getT();
   const { error } = await admin
     .from("consent_records")
     .update({ withdrawn_at: new Date().toISOString() })
     .eq("student_id", user.id)
     .eq("scope", WIDE_CONSENT_SCOPE);
-  if (error) throw new Error(`同意の撤回に失敗しました: ${error.message}`);
+  if (error) throw new Error(t("myData.errWithdraw", { message: error.message }));
   await invalidateWideScopeForStudent(admin, user.id);
   revalidatePath("/learn/data");
 }

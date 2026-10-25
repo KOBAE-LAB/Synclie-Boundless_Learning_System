@@ -1,4 +1,5 @@
 import { getEffectiveStudent } from "@/lib/auth/session";
+import { getT } from "@/lib/i18n/server";
 import { hasConsent } from "@/lib/consent";
 import { isEnrolled } from "@/lib/courses/enrollment";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -10,12 +11,13 @@ export const dynamic = "force-dynamic";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ courseId: string }> }) {
   const { courseId } = await params;
+  const { t } = await getT();
   const user = await getEffectiveStudent();
-  if (!user) return Response.json({ error: "ログインしてください。" }, { status: 401 });
+  if (!user) return Response.json({ error: t("apiErrors.login") }, { status: 401 });
 
   const admin = createAdminClient();
   if (!(await hasConsent(admin, user.id)) || !(await isEnrolled(admin, courseId, user.id))) {
-    return Response.json({ error: "この授業の記録は見られません。" }, { status: 403 });
+    return Response.json({ error: t("apiErrors.noAccess") }, { status: 403 });
   }
 
   const scope = await resolveSessionScope(admin, courseId, user.id);

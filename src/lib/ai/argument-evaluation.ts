@@ -13,6 +13,8 @@
 import { z } from "zod";
 import { zodTextFormat } from "openai/helpers/zod";
 import { openai, MODEL_JUDGE } from "./openai";
+import { languageDirective } from "./language";
+import type { Lang } from "@/lib/i18n/config";
 
 export const ArgumentEvaluationSchema = z.object({
   論理構成: z.number().int().min(0).max(5).describe("主張と理由のつながりが明確か"),
@@ -72,6 +74,7 @@ ${materialText}`;
 export async function judgeDiscussion(
   materialText: string,
   transcriptText: string,
+  lang?: Lang,
 ): Promise<ArgumentEvaluation> {
   const judgeSystemPrompt = `あなたは討論を通しての学習者の発言をジャッジする採点者です。次の資料の範囲で、
 学習者が議論の最初から最後までを通じて、論理構成・根拠の質・反論への応答をどれだけ
@@ -79,7 +82,7 @@ export async function judgeDiscussion(
 点数はあくまで学習者の自己評価と教師の評価の材料であり、最終評価ではありません。
 
 【資料】
-${materialText}`;
+${materialText}${languageDirective(lang)}`;
 
   const response = await openai.responses.parse({
     model: MODEL_JUDGE,

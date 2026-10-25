@@ -1,5 +1,7 @@
 "use server";
 
+import { getT } from "@/lib/i18n/server";
+import type { DictKey, Vars } from "@/lib/i18n/translate";
 import { revalidatePath } from "next/cache";
 import { isStageKey } from "@/lib/inquiry/stages";
 import { cookies } from "next/headers";
@@ -10,6 +12,11 @@ import { parseCourseSettingsInput } from "@/lib/courses/settings";
 import { createAdminClient } from "@/lib/supabase/server";
 import { generateMaterialRag } from "@/lib/rag/generate";
 import { assertOwnsCourse } from "@/lib/courses/ownership";
+
+// 画面の言語でのメッセージ(エラーなど)。
+async function msg(key: DictKey, vars?: Vars): Promise<string> {
+  return (await getT()).t(key, vars);
+}
 
 const MATERIAL_KINDS = ["syllabus", "pdf", "word", "ppt", "text", "video_subtitle", "url"] as const;
 type MaterialKind = (typeof MATERIAL_KINDS)[number];
@@ -26,12 +33,12 @@ export async function uploadMaterialAction(courseId: string, formData: FormData)
 
   const kindRaw = formData.get("kind");
   if (!isMaterialKind(kindRaw)) {
-    throw new Error("資料の種類を選択してください。");
+    throw new Error((await msg("lessonActions2.pickKind")));
   }
   const kind = kindRaw;
   const title = String(formData.get("title") ?? "").trim();
   if (!title) {
-    throw new Error("資料のタイトルを入力してください。");
+    throw new Error((await msg("lessonActions2.needTitle")));
   }
 
   const admin = createAdminClient();
@@ -43,12 +50,12 @@ export async function uploadMaterialAction(courseId: string, formData: FormData)
   if (kind === "url") {
     sourceUrl = String(formData.get("url") ?? "").trim();
     if (!sourceUrl) {
-      throw new Error("URLを入力してください。");
+      throw new Error((await msg("lessonActions2.needUrl")));
     }
   } else {
     const file = formData.get("file");
     if (!(file instanceof File) || file.size === 0) {
-      throw new Error("ファイルを選択してください。");
+      throw new Error((await msg("lessonActions2.needFile")));
     }
     const safeName = file.name.replace(/[^\w.\-]/g, "_");
     const path = `${courseId}/${crypto.randomUUID()}-${safeName}`;
@@ -57,7 +64,7 @@ export async function uploadMaterialAction(courseId: string, formData: FormData)
       .from("materials")
       .upload(path, file, { contentType: file.type || undefined });
     if (uploadError) {
-      throw new Error(`アップロードに失敗しました: ${uploadError.message}`);
+      throw new Error(await msg("lessonActions2.uploadFailed", { message: uploadError.message }));
     }
     storagePath = path;
   }
@@ -72,7 +79,7 @@ export async function uploadMaterialAction(courseId: string, formData: FormData)
   });
 
   if (insertError) {
-    throw new Error(`資料の登録に失敗しました: ${insertError.message}`);
+    throw new Error(await msg("lessonActions2.registerFailed", { message: insertError.message }));
   }
 
   revalidatePath(`/courses/${courseId}`);
@@ -92,7 +99,7 @@ export async function generateMaterialRagAction(courseId: string, materialId: st
     .eq("id", materialId)
     .maybeSingle();
   if (!material || material.course_id !== courseId) {
-    throw new Error("資料が見つかりません。");
+    throw new Error((await msg("lessonActions2.materialNotFound")));
   }
 
   try {
@@ -119,10 +126,10 @@ export async function shareMaterialAction(courseId: string, materialId: string) 
     .eq("id", materialId)
     .maybeSingle();
   if (!material || material.course_id !== courseId) {
-    throw new Error("資料が見つかりません。");
+    throw new Error((await msg("lessonActions2.materialNotFound")));
   }
   if (material.kind !== "syllabus") {
-    throw new Error("単元の対応表(シラバス)以外は共有できません。");
+    throw new Error((await msg("lessonActions2.onlySyllabus")));
   }
 
   const { error } = await admin
@@ -130,7 +137,7 @@ export async function shareMaterialAction(courseId: string, materialId: string) 
     .update({ shared_at: new Date().toISOString() })
     .eq("id", materialId);
   if (error) {
-    throw new Error(`共有に失敗しました: ${error.message}`);
+    throw new Error(await msg("lessonActions2.shareFailed", { message: error.message }));
   }
 
   revalidatePath(`/courses/${courseId}`);
@@ -147,12 +154,12 @@ export async function unshareMaterialAction(courseId: string, materialId: string
     .eq("id", materialId)
     .maybeSingle();
   if (!material || material.course_id !== courseId) {
-    throw new Error("資料が見つかりません。");
+    throw new Error((await msg("lessonActions2.materialNotFound")));
   }
 
   const { error } = await admin.from("course_materials").update({ shared_at: null }).eq("id", materialId);
   if (error) {
-    throw new Error(`共有の取り消しに失敗しました: ${error.message}`);
+    throw new Error(await msg("lessonActions2.unshareFailed", { message: error.message }));
   }
 
   revalidatePath(`/courses/${courseId}`);
@@ -190,7 +197,7 @@ export async function updateCourseSettingsAction(courseId: string, formData: For
     .update({ ...settings, expected_stage_key: isStageKey(expectedStage) ? expectedStage : null })
     .eq("id", courseId);
   if (error) {
-    throw new Error(`授業設定の保存に失敗しました: ${error.message}`);
+    throw new Error(await msg("lessonActions2.saveSettingsFailed", { message: error.message }));
   }
 
   revalidatePath(`/courses/${courseId}`);
@@ -214,7 +221,7 @@ export async function updateAutoDiscussionSettingsAction(courseId: string, formD
     })
     .eq("id", courseId);
   if (error) {
-    throw new Error(`設定の保存に失敗しました: ${error.message}`);
+    throw new Error(await msg("lessonActions2.saveFailed", { message: error.message }));
   }
 
   revalidatePath(`/courses/${courseId}`);
@@ -271,7 +278,7 @@ export async function setLessonReleasedAction(courseId: string, released: boolea
 
   const { error } = await admin.from("courses").update({ released }).eq("id", courseId);
   if (error) {
-    throw new Error(`公開状態の変更に失敗しました: ${error.message}`);
+    throw new Error(await msg("lessonActions2.releaseFailed", { message: error.message }));
   }
   revalidatePath(`/courses/${courseId}`);
 }
@@ -285,14 +292,14 @@ export async function setLessonClosedAction(courseId: string, closed: boolean) {
 
   if (closed) {
     const { data: course } = await admin.from("courses").select("released").eq("id", courseId).maybeSingle();
-    if (!course?.released) throw new Error("公開していない授業回は、終了できません。");
+    if (!course?.released) throw new Error((await msg("lessonActions2.notReleased")));
   }
   const { error } = await admin
     .from("courses")
     .update({ closed_at: closed ? new Date().toISOString() : null })
     .eq("id", courseId);
   if (error) {
-    throw new Error(`授業回の状態の変更に失敗しました: ${error.message}`);
+    throw new Error(await msg("lessonActions2.statusFailed", { message: error.message }));
   }
   revalidatePath(`/courses/${courseId}`);
   revalidatePath(`/learn/${courseId}`);
@@ -306,11 +313,11 @@ export async function renameLessonAction(courseId: string, formData: FormData) {
 
   const title = String(formData.get("title") ?? "").trim().slice(0, 80);
   if (!title) {
-    throw new Error("授業回の名前を入力してください。");
+    throw new Error((await msg("lessonActions2.needLessonName")));
   }
   const { error } = await admin.from("courses").update({ title }).eq("id", courseId);
   if (error) {
-    throw new Error(`名前の変更に失敗しました: ${error.message}`);
+    throw new Error(await msg("lessonActions2.renameFailed", { message: error.message }));
   }
   revalidatePath(`/courses/${courseId}`);
 }

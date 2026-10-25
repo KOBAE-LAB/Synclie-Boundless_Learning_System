@@ -1,17 +1,21 @@
 // サインアップ・パスワード変更で共通に使う入力チェック(DBに触れない純粋な関数)。
 // 自己登録を公開すると第三者に推測されやすいパスワードが使われうるため、最低限の長さを課す。
 
+import { translatorFor } from "@/lib/i18n/translate";
+import type { Lang } from "@/lib/i18n/config";
+
 export const MIN_PASSWORD_LENGTH = 10;
 export const MAX_NAME_LENGTH = 50;
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export function validatePassword(password: string): string | null {
+export function validatePassword(password: string, lang: Lang = "ja"): string | null {
+  const t = translatorFor(lang);
   if (password.length < MIN_PASSWORD_LENGTH) {
-    return `パスワードは${MIN_PASSWORD_LENGTH}文字以上にしてください。`;
+    return t("signup.errPasswordShort", { n: MIN_PASSWORD_LENGTH });
   }
   if (password.length > 200) {
-    return "パスワードが長すぎます。";
+    return t("signup.errPasswordLong");
   }
   return null;
 }
@@ -24,12 +28,13 @@ export interface SignupFields {
 
 // 問題があればエラーメッセージ、無ければ null を返す。email は小文字・前後空白除去の上で使うこと
 // (normalizeEmail)。
-export function validateSignupFields(fields: SignupFields): string | null {
+export function validateSignupFields(fields: SignupFields, lang: Lang = "ja"): string | null {
+  const t = translatorFor(lang);
   const name = fields.name.trim();
-  if (!name) return "お名前を入力してください。";
-  if (name.length > MAX_NAME_LENGTH) return `お名前は${MAX_NAME_LENGTH}文字以内にしてください。`;
-  if (!EMAIL_PATTERN.test(fields.email)) return "メールアドレスの形式が正しくありません。";
-  return validatePassword(fields.password);
+  if (!name) return t("signup.errName");
+  if (name.length > MAX_NAME_LENGTH) return t("signup.errNameLong", { n: MAX_NAME_LENGTH });
+  if (!EMAIL_PATTERN.test(fields.email)) return t("signup.errEmail");
+  return validatePassword(fields.password, lang);
 }
 
 export function normalizeEmail(raw: string): string {

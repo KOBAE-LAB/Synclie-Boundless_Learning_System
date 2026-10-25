@@ -1,3 +1,5 @@
+import type { Translator } from "@/lib/i18n/translate";
+
 // 探究の段階(要件定義書14章ステップ2の決定)。既定は学習指導要領の4段階。
 // プロジェクトが独自の段階(inquiry_projects.stage_set)を持つ場合も、canonical で既定の4段階に対応づけるので、
 // 当時モードの絞り込み(「この段階まで」)は、いつも既定の4段階の順序で比べる。
@@ -14,6 +16,11 @@ export const FIRST_STAGE: StageKey = "problem_setting";
 
 export function isStageKey(value: unknown): value is StageKey {
   return typeof value === "string" && CANONICAL_STAGES.some((s) => s.key === value);
+}
+
+/** 画面の言語に合わせた段階の名前。 */
+export function stageLabelT(t: Translator, key: string | null | undefined): string {
+  return isStageKey(key) ? t(`stages.${key}`) : t("stages.unset");
 }
 
 export function stageLabel(key: string | null | undefined): string {

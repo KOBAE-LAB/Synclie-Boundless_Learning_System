@@ -9,6 +9,8 @@
 import { z } from "zod";
 import { zodTextFormat } from "openai/helpers/zod";
 import { openai, MODEL_JUDGE } from "./openai";
+import { languageDirective } from "./language";
+import type { Lang } from "@/lib/i18n/config";
 
 const LearnerSuggestionSchema = z.object({
   avoidMisconceptionQuestion: z
@@ -31,6 +33,7 @@ export async function generateLearnerSuggestions(params: {
   strengths: string;
   challenges: string;
   summary: string;
+  lang?: Lang;
 }): Promise<LearnerSuggestion> {
   const systemPrompt = `あなたは、学習者が複数の授業にわたって積み重ねてきた学びの記録をもとに、
 学習者自身が「次の学びに向けて、どのように努力すればよいか」を提案するアシスタントです。
@@ -39,7 +42,7 @@ export async function generateLearnerSuggestions(params: {
 - すでにできていることを認めたうえで、次の一歩を、今日から始められる小さく具体的な行動にする。
 - 点数や他の人との比較で励まさない。AIジャッジなどの数値は材料で、学習者の力を決めるものではない。
 - 学習者自身の自己評価や教師のコメントがあれば、それを尊重し、AIの見方で上書きしない。
-- 特定の授業の教師や擬似メンバーの設定を変えるための提案ではありません。`;
+- 特定の授業の教師や擬似メンバーの設定を変えるための提案ではありません。${languageDirective(params.lang)}`;
 
   const response = await openai.responses.parse({
     model: MODEL_JUDGE,

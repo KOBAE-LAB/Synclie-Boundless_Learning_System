@@ -9,6 +9,8 @@
 import { z } from "zod";
 import { zodTextFormat } from "openai/helpers/zod";
 import { openai, MODEL_JUDGE } from "./openai";
+import { languageDirective } from "./language";
+import type { Lang } from "@/lib/i18n/config";
 
 const FeedbackItemSchema = z.object({
   criteriaLabel: z.string().describe("対応する評価観点のラベル(入力と同じ表記で返す)"),
@@ -34,6 +36,7 @@ export async function generateOutcomeFeedback(params: {
   criteria: EvaluationCriterionInput[];
   submissionContent: string;
   materialText: string;
+  lang?: Lang;
 }): Promise<FeedbackItem[]> {
   const criteriaList = params.criteria
     .map((c, i) => `${i + 1}. ${c.label}${c.description ? `: ${c.description}` : ""}`)
@@ -47,7 +50,7 @@ export async function generateOutcomeFeedback(params: {
 ${criteriaList}
 
 # 資料(この範囲でのみ「参照すべき資料の箇所」を答える。範囲外の内容なら「該当なし」とする)
-${params.materialText}`;
+${params.materialText}${languageDirective(params.lang)}`;
 
   const response = await openai.responses.parse({
     model: MODEL_JUDGE,

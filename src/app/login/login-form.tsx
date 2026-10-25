@@ -2,8 +2,10 @@
 
 import { useActionState } from "react";
 import { loginAction, type LoginState } from "./actions";
+import { useT } from "@/lib/i18n/client";
 
 export function LoginForm() {
+  const t = useT();
   const [state, formAction, pending] = useActionState<LoginState, FormData>(
     loginAction,
     undefined,
@@ -13,7 +15,7 @@ export function LoginForm() {
     <form action={formAction} className="space-y-4">
       <div className="space-y-1">
         <label htmlFor="email" className="text-sm font-medium text-ink">
-          メールアドレス
+          {t("login.email")}
         </label>
         <input
           id="email"
@@ -27,7 +29,7 @@ export function LoginForm() {
 
       <div className="space-y-1">
         <label htmlFor="password" className="text-sm font-medium text-ink">
-          パスワード
+          {t("login.password")}
         </label>
         <input
           id="password"
@@ -50,7 +52,7 @@ export function LoginForm() {
         disabled={pending}
         className="w-full rounded-md bg-accent-fill px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-fill-hover disabled:opacity-50"
       >
-        {pending ? "ログイン中…" : "ログイン"}
+        {pending ? t("login.submitting") : t("login.submit")}
       </button>
     </form>
   );

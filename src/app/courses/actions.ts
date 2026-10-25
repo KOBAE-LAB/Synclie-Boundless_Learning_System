@@ -1,11 +1,18 @@
 "use server";
 
+import { getT } from "@/lib/i18n/server";
+import type { DictKey, Vars } from "@/lib/i18n/translate";
 import { revalidatePath } from "next/cache";
 import { closeInquiryForSeries } from "@/lib/inquiry/project-stage";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { fiscalYearOfDate } from "@/lib/courses/series";
+
+// 画面の言語でのメッセージ(エラーなど)。
+async function msg(key: DictKey, vars?: Vars): Promise<string> {
+  return (await getT()).t(key, vars);
+}
 
 // 教科・科目(科目・講座)の作成。履修登録(参加コード)の単位で、その中に授業回を重ねていく。
 // RLSが未整備の段階1では、role確認をアプリ側(requireRole)で行い、
@@ -20,7 +27,7 @@ export async function createSeriesAction(formData: FormData) {
   const kind = formData.get("kind") === "inquiry" ? "inquiry" : "standard";
 
   if (!title) {
-    throw new Error("教科・科目の名前を入力してください。");
+    throw new Error((await msg("teacherActions.needSeriesName")));
   }
 
   const admin = createAdminClient();
@@ -38,7 +45,7 @@ export async function createSeriesAction(formData: FormData) {
     .single();
 
   if (error) {
-    throw new Error(`教科・科目の作成に失敗しました: ${error.message}`);
+    throw new Error(await msg("teacherActions.createSeriesFailed", { message: error.message }));
   }
 
   revalidatePath("/courses");
@@ -50,7 +57,7 @@ export async function archiveYearAction(formData: FormData) {
   const session = await requireRole("teacher");
   const year = Number.parseInt(String(formData.get("fiscalYear") ?? ""), 10);
   if (!Number.isInteger(year)) {
-    throw new Error("年度を選んでください。");
+    throw new Error((await msg("teacherActions.pickYear")));
   }
   const admin = createAdminClient();
   const { data: archived, error } = await admin
@@ -61,7 +68,7 @@ export async function archiveYearAction(formData: FormData) {
     .is("archived_at", null)
     .select("id");
   if (error) {
-    throw new Error(`一括終了に失敗しました: ${error.message}`);
+    throw new Error(await msg("teacherActions.endYearFailed", { message: error.message }));
   }
   // 探究の終了(要件定義書14章ステップ5): 最後の段階の物語と、振り返り版を作る(後処理)。
   await closeInquiryForSeries(admin, (archived ?? []).map((s) => s.id as string));

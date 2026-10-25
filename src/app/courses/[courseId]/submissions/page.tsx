@@ -2,7 +2,8 @@ import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { updateFeedbackAction, sendGradeToLmsAction, saveTeacherAssessmentAction } from "./actions";
-import { RATING_LABELS, readAssessment } from "@/lib/portfolio/assessment";
+import { ratingLabel, readAssessment } from "@/lib/portfolio/assessment";
+import { formatDateTime, getT } from "@/lib/i18n/server";
 import { SubmitButton } from "@/components/submit-button";
 import { loadLessonCrumbs } from "@/lib/courses/series";
 import { Breadcrumbs, BackLink } from "@/components/breadcrumbs";
@@ -50,6 +51,7 @@ export default async function SubmissionsReviewPage({
 }) {
   const { courseId } = await params;
   const { user } = await requireRole("teacher");
+  const { t, lang } = await getT();
 
   const admin = createAdminClient();
   const { data: course } = await admin
@@ -81,7 +83,7 @@ export default async function SubmissionsReviewPage({
       .select("id, display_name, email")
       .in("id", studentIds);
     for (const profile of profiles ?? []) {
-      studentNames.set(profile.id, profile.display_name || profile.email || "(名称未設定)");
+      studentNames.set(profile.id, profile.display_name || profile.email || t("teacherSubs.unnamed"));
     }
 
     const { data: feedbackRows } = await admin
@@ -138,12 +140,12 @@ export default async function SubmissionsReviewPage({
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <Breadcrumbs trail={[...((await loadLessonCrumbs(admin, courseId))?.teacherTrail ?? [])]} current="提出物とフィードバック" />
+      <Breadcrumbs trail={[...((await loadLessonCrumbs(admin, courseId, lang))?.teacherTrail ?? [])]} current={t("teacherSubs.title")} />
       <h1 className="mt-2 text-2xl font-semibold text-ink">
-        提出物とフィードバック
+        {t("teacherSubs.title")}
       </h1>
       <p className="mt-1 text-sm text-ink-muted">
-        学習者の提出物とAIフィードバックを確認し、必要であれば文面を修正できる。
+        {t("teacherSubs.lead")}
       </p>
 
       <ul className="mt-8 space-y-4">
@@ -158,14 +160,14 @@ export default async function SubmissionsReviewPage({
               className="rounded-md border border-line px-4 py-3 text-sm"
             >
               <p className="text-xs font-medium text-ink-muted">
-                {studentNames.get(submission.student_id) ?? "(不明な学習者)"} ・
-                {new Date(submission.created_at).toLocaleString("ja-JP")}
+                {studentNames.get(submission.student_id) ?? t("teacherSubs.unknownLearner")} ・
+                {formatDateTime(submission.created_at, lang)}
               </p>
               <p className="mt-2 whitespace-pre-wrap">{submission.content}</p>
 
               {submission.feedback_status === "failed" && submission.feedback_error && (
                 <p className="mt-2 text-xs text-danger">
-                  フィードバック生成エラー: {submission.feedback_error}
+                  {t("teacherSubs.feedbackError", { e: submission.feedback_error })}
                 </p>
               )}
 
@@ -179,7 +181,7 @@ export default async function SubmissionsReviewPage({
                           {item.criteria_label}
                         </p>
                         <label className="block text-xs text-ink-muted">
-                          良い点
+                          {t("teacherSubs.good")}
                           <textarea
                             name="goodPoints"
                             required
@@ -189,7 +191,7 @@ export default async function SubmissionsReviewPage({
                           />
                         </label>
                         <label className="block text-xs text-ink-muted">
-                          次に考える問い
+                          {t("teacherSubs.nextQ")}
                           <textarea
                             name="nextQuestion"
                             required
@@ -199,7 +201,7 @@ export default async function SubmissionsReviewPage({
                           />
                         </label>
                         <label className="block text-xs text-ink-muted">
-                          参照すべき資料の箇所
+                          {t("teacherSubs.ref")}
                           <textarea
                             name="materialReference"
                             required
@@ -212,7 +214,7 @@ export default async function SubmissionsReviewPage({
                           type="submit"
                           className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface"
                         >
-                          この観点のフィードバックを保存
+                          {t("teacherSubs.saveCriterion")}
                         </button>
                       </form>
                     );
@@ -224,25 +226,23 @@ export default async function SubmissionsReviewPage({
                 <div className="mt-4 space-y-1 border-t border-line-soft pt-3 text-xs">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <p className="font-medium text-ink">
-                      AIジャッジ: 議論全体を通しての評価
+                      {t("teacherSubs.judgeHeading")}
                     </p>
                     <form action={sendGradeToLmsAction.bind(null, courseId, submission.id)}>
                       <SubmitButton
-                        pendingText="送信中…"
+                        pendingText={t("teacherSubs.sending")}
                         className="shrink-0 rounded-md border border-line px-2 py-0.5 text-xs text-ink hover:bg-surface disabled:opacity-50"
                       >
-                        LMSに成績を送信する
+                        {t("teacherSubs.sendGrade")}
                       </SubmitButton>
                     </form>
                   </div>
                   <p className="text-ink-muted">
-                    論理構成 {judgment.logic_structure}/5 ・ 根拠の質 {judgment.evidence_quality}/5 ・
-                    反論への応答 {judgment.rebuttal_response}/5
+                    {t("teacherSubs.scores", { logic: judgment.logic_structure, evidence: judgment.evidence_quality, rebuttal: judgment.rebuttal_response })}
                   </p>
                   <p>{judgment.summary_comment}</p>
                   <p className="text-ink-faint">
-                    この評価は最終ではありません。学習評価の参考にしてください。
-                    「LMSに成績を送信する」は、この成果がLTI経由の活動に紐づく場合のみ機能します。
+                    {t("teacherSubs.judgeNote")}
                   </p>
                 </div>
               )}
@@ -250,18 +250,18 @@ export default async function SubmissionsReviewPage({
               {reflection && (
                 <div className="mt-4 space-y-1 border-t border-line-soft pt-3 text-xs">
                   <p className="font-medium text-ink">
-                    振り返り(学習者が共有)
+                    {t("teacherSubs.reflection")}
                   </p>
                   <p>
-                    <span className="text-ink-muted">学んだこと: </span>
+                    <span className="text-ink-muted">{t("portfolioEntry.learned")}</span>
                     {reflection.what_learned}
                   </p>
                   <p>
-                    <span className="text-ink-muted">迷ったこと: </span>
+                    <span className="text-ink-muted">{t("portfolioEntry.confused")}</span>
                     {reflection.what_confused}
                   </p>
                   <p>
-                    <span className="text-ink-muted">次にやりたいこと: </span>
+                    <span className="text-ink-muted">{t("portfolioEntry.nextGoal")}</span>
                     {reflection.next_goal}
                   </p>
                 </div>
@@ -271,39 +271,39 @@ export default async function SubmissionsReviewPage({
                 action={saveTeacherAssessmentAction.bind(null, courseId, submission.id)}
                 className="mt-4 space-y-2 border-t border-line-soft pt-3 text-xs"
               >
-                <p className="font-medium text-ink">教師の評価(学習者のポートフォリオに表示されます)</p>
-                <p className="text-ink-faint">AIの評価は材料です。最終的な評価は先生が決めます。</p>
+                <p className="font-medium text-ink">{t("teacherSubs.assessHeading")}</p>
+                <p className="text-ink-faint">{t("teacherSubs.assessNote")}</p>
                 <fieldset className="flex flex-wrap gap-3">
-                  <legend className="sr-only">評価の段階</legend>
+                  <legend className="sr-only">{t("teacherSubs.ratingLegend")}</legend>
                   {[4, 3, 2, 1].map((r) => (
                     <label key={r} className="flex items-center gap-1">
                       <input type="radio" name="rating" value={r} defaultChecked={teacherAssessment?.rating === r} />
-                      {RATING_LABELS[r]}
+                      {ratingLabel(t, r)}
                     </label>
                   ))}
                 </fieldset>
-                <label htmlFor={`ta-${submission.id}`} className="sr-only">教師のコメント</label>
+                <label htmlFor={`ta-${submission.id}`} className="sr-only">{t("teacherSubs.commentLabel")}</label>
                 <textarea
                   id={`ta-${submission.id}`}
                   name="comment"
                   rows={2}
                   maxLength={1000}
                   defaultValue={teacherAssessment?.comment ?? ""}
-                  placeholder="学習者へのコメント"
+                  placeholder={t("teacherSubs.commentPlaceholder")}
                   className={inputClassName}
                 />
                 <SubmitButton
-                  pendingText="保存中…"
+                  pendingText={t("teacherSubs.saving")}
                   className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface"
                 >
-                  教師の評価を保存
+                  {t("teacherSubs.saveAssess")}
                 </SubmitButton>
               </form>
             </li>
           );
         })}
         {submissions.length === 0 && (
-          <li className="text-sm text-ink-muted">まだ提出物がありません。</li>
+          <li className="text-sm text-ink-muted">{t("teacherSubs.none")}</li>
         )}
       </ul>
 

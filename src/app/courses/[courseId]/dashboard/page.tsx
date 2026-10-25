@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatDateTime, getT } from "@/lib/i18n/server";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -37,6 +38,7 @@ export default async function CourseDashboardPage({
 }) {
   const { courseId } = await params;
   const { user } = await requireRole("teacher");
+  const { t, lang } = await getT();
 
   const admin = createAdminClient();
   const { data: course } = await admin
@@ -85,29 +87,29 @@ export default async function CourseDashboardPage({
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <Breadcrumbs trail={[...((await loadLessonCrumbs(admin, courseId))?.teacherTrail ?? [])]} current="教師ダッシュボード" />
+      <Breadcrumbs trail={[...((await loadLessonCrumbs(admin, courseId, lang))?.teacherTrail ?? [])]} current={t("teacherDash.title")} />
       <h1 className="mt-2 text-2xl font-semibold text-ink">
-        教師ダッシュボード
+        {t("teacherDash.title")}
       </h1>
       <p className="mt-1 text-sm text-ink-muted">
-        参加状況・つまずき・擬似メンバーの挙動を確認し、指導に活かします。
+        {t("teacherDash.lead")}
       </p>
 
       <section className="mt-6 rounded-lg border border-line p-5">
-        <h2 className="text-sm font-medium text-ink">指導のヒント(AIの提案)</h2>
+        <h2 className="text-sm font-medium text-ink">{t("teacherDash.hintsHeading")}</h2>
         <p className="mt-1 text-xs text-ink-muted">
-          学習の様子から、次のファシリテーションと指導を提案します。氏名はAIに送りません。提案は材料で、判断は先生です。
+          {t("teacherDash.hintsLead")}
         </p>
         <form action={generateTeacherGuidanceAction.bind(null, courseId)} className="mt-3 flex flex-wrap items-center gap-3">
           <SubmitButton
-            pendingText="生成中…"
+            pendingText={t("teacherDash.generating")}
             className="rounded-md bg-accent-fill px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-fill-hover disabled:opacity-50"
           >
-            {guidance ? "ヒントを再生成する" : "指導のヒントを生成する"}
+            {guidance ? t("teacherDash.regenHints") : t("teacherDash.genHints")}
           </SubmitButton>
           {guidanceRow?.generated_at && guidance && (
             <span className="text-xs text-ink-faint">
-              {new Date(guidanceRow.generated_at).toLocaleString("ja-JP")}に生成(同意済み{guidance.studentCount}人分)
+              {t("teacherDash.generatedAt", { date: formatDateTime(guidanceRow.generated_at, lang), n: guidance.studentCount })}
             </span>
           )}
         </form>
@@ -117,11 +119,11 @@ export default async function CourseDashboardPage({
         {guidance && (
           <div className="mt-4 space-y-4 border-t border-line-soft pt-4 text-sm">
             <div>
-              <p className="text-xs font-medium text-ink-muted">授業全体の様子</p>
+              <p className="text-xs font-medium text-ink-muted">{t("teacherDash.overview")}</p>
               <p className="mt-1">{guidance.classOverview}</p>
             </div>
             <div>
-              <p className="text-xs font-medium text-ink-muted">次の授業でのファシリテーション</p>
+              <p className="text-xs font-medium text-ink-muted">{t("teacherDash.facilitation")}</p>
               <ul className="mt-1 list-disc space-y-1 pl-5">
                 {guidance.facilitation.map((f, i) => (
                   <li key={i}>{f}</li>
@@ -129,19 +131,19 @@ export default async function CourseDashboardPage({
               </ul>
             </div>
             <div>
-              <p className="text-xs font-medium text-ink-muted">次の活動・投げかけたい問い</p>
+              <p className="text-xs font-medium text-ink-muted">{t("teacherDash.nextActivity")}</p>
               <p className="mt-1">{guidance.nextActivity}</p>
             </div>
             {guidance.individuals.length > 0 && (
               <div>
-                <p className="text-xs font-medium text-ink-muted">個別に声をかけるとよい学習者</p>
+                <p className="text-xs font-medium text-ink-muted">{t("teacherDash.individuals")}</p>
                 <ul className="mt-1 space-y-2">
                   {guidance.individuals.map((item) => (
                     <li key={item.studentId} className="rounded-md border border-line px-3 py-2">
                       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-                        <span className="font-medium text-ink">{studentNames.get(item.studentId) ?? "(不明な学習者)"}</span>
+                        <span className="font-medium text-ink">{studentNames.get(item.studentId) ?? t("teacherDash.unknownLearner")}</span>
                         <Link href={`/courses/${courseId}/students#${item.studentId}`} className="text-xs text-ink-muted underline underline-offset-2">
-                          プロファイル・提案を見る →
+                          {t("teacherDash.viewProfile")}
                         </Link>
                       </div>
                       <p className="mt-1 text-xs text-ink-muted">{item.observation}</p>
@@ -152,15 +154,14 @@ export default async function CourseDashboardPage({
               </div>
             )}
             <p className="text-xs text-ink-faint">
-              AIが記録から作った提案です。学習者の様子の最終的な判断は、先生が行ってください。擬似メンバーの設定を
-              変えたいときは「ペルソナ設定」へ。
+              {t("teacherDash.hintsNote")}
             </p>
           </div>
         )}
       </section>
 
       <h2 className="mt-8 text-sm font-medium text-ink">
-        学習者の参加状況とつまずき
+        {t("teacherDash.participation")}
       </h2>
       <ul className="mt-3 space-y-2">
         {statList.map((stat) => {
@@ -178,69 +179,68 @@ export default async function CourseDashboardPage({
             >
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <span className="font-medium text-ink">
-                  {studentNames.get(stat.studentId) ?? "(不明な学習者)"}
+                  {studentNames.get(stat.studentId) ?? t("teacherDash.unknownLearner")}
                 </span>
                 <Link
                   href={`/courses/${courseId}/students#${stat.studentId}`}
                   className="shrink-0 text-xs text-ink-muted underline underline-offset-2"
                 >
-                  プロファイル・提案を見る→
+                  {t("teacherDash.viewProfile2")}
                 </Link>
               </div>
               <p className="mt-1 text-xs text-ink-muted">
-                {stepsTotal > 0 && `学習の流れ${stat.stepsDone}/${stepsTotal}ステップ・`}発言{stat.turnCount}件・提出{stat.submissionCount}件
-                {stat.avgScore !== null && `・論証評価平均${stat.avgScore.toFixed(1)}点`}
+                {t("teacherDash.statsLine", { steps: stepsTotal > 0 ? t("teacherDash.stepsPart", { done: stat.stepsDone, total: stepsTotal }) : "", turns: stat.turnCount, subs: stat.submissionCount })}
+                {stat.avgScore !== null && t("teacherDash.avgPart", { n: stat.avgScore.toFixed(1) })}
                 {stat.lastActivityAt &&
-                  `・最終活動 ${new Date(stat.lastActivityAt).toLocaleString("ja-JP")}`}
+                  t("teacherDash.lastActive", { date: formatDateTime(stat.lastActivityAt, lang) })}
               </p>
               {stat.turnCount > 0 && stat.submissionCount === 0 && (
                 <p className="mt-1 text-xs text-warn">
-                  対話はあるが、まだ成果を提出していない。
+                  {t("teacherDash.noSubmit")}
                 </p>
               )}
               {stat.avgScore !== null && stat.avgScore < STRUGGLE_SCORE_THRESHOLD && (
                 <p className="mt-1 text-xs text-warn">
-                  論証評価の平均が低め(根拠・論理構成・反論への応答)。
+                  {t("teacherDash.lowScore")}
                 </p>
               )}
               {stat.challenges && (
-                <p className="mt-1 text-xs text-ink-muted">課題: {stat.challenges}</p>
+                <p className="mt-1 text-xs text-ink-muted">{t("teacherDash.challenge", { c: stat.challenges })}</p>
               )}
             </li>
           );
         })}
         {statList.length === 0 && (
-          <li className="text-sm text-ink-muted">まだ活動記録のある学習者がいません。</li>
+          <li className="text-sm text-ink-muted">{t("teacherDash.noActive")}</li>
         )}
       </ul>
 
       <h2 className="mt-8 text-sm font-medium text-ink">
-        擬似メンバーの挙動
+        {t("teacherDash.behavior")}
       </h2>
       <ul className="mt-3 space-y-2">
         {[...personaStats.entries()].map(([personaId, stat]) => (
           <li key={personaId} className="flex flex-wrap items-center justify-between text-sm">
-            <span>{personaNames.get(personaId) ?? "(承認待ち等)"}</span>
+            <span>{personaNames.get(personaId) ?? t("teacherDash.pendingEtc")}</span>
             <span className="text-ink-muted">
-              根拠なく同調 {stat.unwarranted}/{stat.total}件(
-              {Math.round((stat.unwarranted / stat.total) * 100)}%)
+              {t("teacherDash.conform", { u: stat.unwarranted, n: stat.total, p: Math.round((stat.unwarranted / stat.total) * 100) })}
             </span>
           </li>
         ))}
-        {personaStats.size === 0 && <li className="text-sm text-ink-muted">まだ評価データがありません。</li>}
+        {personaStats.size === 0 && <li className="text-sm text-ink-muted">{t("teacherDash.noEval")}</li>}
       </ul>
       <Link
         href={`/courses/${courseId}/conformity`}
         className="mt-2 inline-block text-xs text-ink-muted underline underline-offset-2"
       >
-        発言単位の詳細を見る→
+        {t("teacherDash.detail")}
       </Link>
       <br />
       <Link
         href={`/courses/${courseId}/audit`}
         className="mt-1 inline-block text-xs text-ink-muted underline underline-offset-2"
       >
-        発言を確認・修正する→
+        {t("teacherDash.review")}
       </Link>
 
       <InquiryRecordsPanel admin={admin} courseId={courseId} />

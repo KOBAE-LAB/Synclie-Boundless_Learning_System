@@ -1,8 +1,10 @@
 import Link from "next/link";
 import videos from "@/app/guide/videos.json";
+import { getT } from "@/lib/i18n/server";
 
 /** システムの機能PR動画(トップ画面・ログイン画面に置く)。再生するまで読み込まない。字幕つき。 */
-export function PrVideo({ className = "" }: { className?: string }) {
+export async function PrVideo({ className = "" }: { className?: string }) {
+  const { t } = await getT();
   const v = videos.find((x) => x.slug === "feature-pr");
   if (!v) return null;
   const minutes = Math.max(1, Math.round(v.seconds / 60));
@@ -14,19 +16,19 @@ export function PrVideo({ className = "" }: { className?: string }) {
         preload="none"
         playsInline
         poster="/guide/feature-pr.jpg"
-        aria-label={`システムの機能PR動画(約${minutes}分)`}
+        aria-label={t("prVideo.aria", { minutes })}
       >
         <source src="/guide/feature-pr.mp4" type="video/mp4" />
         <track kind="captions" src="/guide/feature-pr.ja.vtt" srcLang="ja" label="日本語" />
-        お使いのブラウザは動画に対応していません。
+        {t("prVideo.unsupported")}
       </video>
       <figcaption className="mt-1 text-xs text-ink-muted">
-        システムの機能PR動画(約{minutes}分・字幕つき){" "}
+        {t("prVideo.caption", { minutes })}{" "}
         <Link href="/guide#feature-pr" className="underline underline-offset-2">
-          文字起こしを読む
+          {t("prVideo.transcript")}
         </Link>
         <span className="ml-2">
-          音声: Open JTalk「Mei」(
+          {t("prVideo.voice")}: Open JTalk「Mei」(
           <Link href="/guide#credit" className="underline underline-offset-2">
             CC BY 3.0
           </Link>

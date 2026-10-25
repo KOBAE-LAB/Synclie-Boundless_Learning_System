@@ -7,6 +7,8 @@
 import { z } from "zod";
 import { zodTextFormat } from "openai/helpers/zod";
 import { openai, MODEL_JUDGE } from "./openai";
+import { languageDirective } from "./language";
+import type { Lang } from "@/lib/i18n/config";
 
 const CheckSchema = z.object({
   questions: z
@@ -26,12 +28,13 @@ export async function generateCheckQuestions(params: {
   materialText: string;
   stepInstruction: string;
   count: number;
+  lang?: Lang;
 }): Promise<GeneratedCheckQuestions> {
   const systemPrompt = `あなたは、動画や資料で学んだあとに、学習者が自分の理解を確かめるための問いを作るアシスタントです。
 - 問いは、渡された資料の内容に基づくものだけにする。資料に無いことは問わない。
 - 暗記の確認だけでなく、「なぜ」「どう違う」など、自分の言葉で説明させる問いを含める。
 - 答えの目安は、学習者が自分の答えと見比べるための要点にする(模範解答の丸写しにしない)。
-- 問いは${params.count}個。やさしいものから順に並べる。`;
+- 問いは${params.count}個。やさしいものから順に並べる。${languageDirective(params.lang)}`;
 
   const response = await openai.responses.parse({
     model: MODEL_JUDGE,

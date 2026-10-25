@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useFormStatus } from "react-dom";
+import { useT } from "@/lib/i18n/client";
 
 /**
  * AI呼び出しなど数秒かかるサーバーアクションの送信ボタン。
@@ -11,7 +12,7 @@ import { useFormStatus } from "react-dom";
  */
 export function SubmitButton({
   children,
-  pendingText = "処理中…",
+  pendingText,
   className,
 }: {
   children: ReactNode;
@@ -19,9 +20,10 @@ export function SubmitButton({
   className?: string;
 }) {
   const { pending } = useFormStatus();
+  const t = useT();
   return (
     <button type="submit" disabled={pending} aria-busy={pending} className={className}>
-      {pending ? pendingText : children}
+      {pending ? (pendingText ?? t("common2.processing")) : children}
     </button>
   );
 }

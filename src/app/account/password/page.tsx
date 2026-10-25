@@ -1,3 +1,4 @@
+import { getT } from "@/lib/i18n/server";
 import { requireLogin } from "@/lib/auth/session";
 import { changePasswordAction } from "./actions";
 import { Breadcrumbs } from "@/components/breadcrumbs";
@@ -9,17 +10,18 @@ export default async function ChangePasswordPage({
 }) {
   const { user } = await requireLogin();
   const { error, done } = await searchParams;
+  const { t } = await getT();
   const home = user.role === "teacher" ? "/courses" : "/learn";
 
   return (
     <div className="mx-auto max-w-md px-6 py-12">
-      <Breadcrumbs trail={[{ label: "授業一覧", href: home }]} current="パスワード変更" />
-      <h1 className="mt-3 text-2xl font-semibold text-ink">パスワード変更</h1>
+      <Breadcrumbs trail={[{ label: t("learnList.title"), href: home }]} current={t("account.title")} />
+      <h1 className="mt-3 text-2xl font-semibold text-ink">{t("account.title")}</h1>
       <p className="mt-1 text-sm text-ink-muted">{user.name ?? user.email}</p>
 
       {done && (
         <p className="mt-4 rounded-md border border-line bg-surface px-4 py-3 text-sm text-ink-muted" role="status">
-          パスワードを変更しました。
+          {t("account.done")}
         </p>
       )}
       {error && (
@@ -31,7 +33,7 @@ export default async function ChangePasswordPage({
       <form action={changePasswordAction} className="mt-6 space-y-4">
         <div className="space-y-1">
           <label htmlFor="current" className="text-sm font-medium text-ink">
-            現在のパスワード
+            {t("account.current")}
           </label>
           <input
             id="current"
@@ -44,7 +46,7 @@ export default async function ChangePasswordPage({
         </div>
         <div className="space-y-1">
           <label htmlFor="next" className="text-sm font-medium text-ink">
-            新しいパスワード(10文字以上)
+            {t("account.next")}
           </label>
           <input
             id="next"
@@ -60,7 +62,7 @@ export default async function ChangePasswordPage({
           type="submit"
           className="rounded-md bg-accent-fill px-4 py-2 text-sm font-medium text-white hover:bg-accent-fill-hover"
         >
-          変更する
+          {t("account.change")}
         </button>
       </form>
 

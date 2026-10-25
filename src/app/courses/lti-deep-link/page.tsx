@@ -1,3 +1,4 @@
+import { getT } from "@/lib/i18n/server";
 import { loadLessonLabels } from "@/lib/courses/series";
 import Link from "next/link";
 import { requireRole } from "@/lib/auth/session";
@@ -16,6 +17,7 @@ export default async function LtiDeepLinkPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const { user } = await requireRole("teacher");
+  const { t, lang } = await getT();
   const params = await searchParams;
   const issuer = params.issuer ?? "";
   const deploymentId = params.deploymentId ?? "";
@@ -29,18 +31,18 @@ export default async function LtiDeepLinkPage({
     .select("id, subject")
     .eq("owner_teacher_id", user.id)
     .order("created_at", { ascending: false });
-  const lessonLabels = await loadLessonLabels(admin, (courseRows ?? []).map((c) => c.id));
+  const lessonLabels = await loadLessonLabels(admin, (courseRows ?? []).map((c) => c.id), lang);
   const courses = (courseRows ?? []).map((c) => ({ id: c.id, subject: c.subject, title: lessonLabels.get(c.id) ?? "" }));
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
       <h1 className="text-2xl font-semibold text-ink">
-        LMSにリンクする授業を選ぶ
+        {t("lti.title")}
       </h1>
       <p className="mt-1 text-sm text-ink-muted">
         {returnUrl
-          ? "LMSの課題にリンクするSynclieの授業を選んでください。選ぶとLMSの画面に戻ります。"
-          : "この課題(リソースリンク)にリンクするSynclieの授業を選んでください。"}
+          ? t("lti.leadDeep")
+          : t("lti.leadDirect")}
       </p>
 
       <ul className="mt-8 space-y-2">
@@ -65,7 +67,7 @@ export default async function LtiDeepLinkPage({
                     href={`/courses/lti-deep-link/submit?${submitParams.toString()}`}
                     className="shrink-0 rounded-md bg-accent-fill px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-fill-hover"
                   >
-                    この授業を選ぶ
+                    {t("lti.choose")}
                   </Link>
                 ) : (
                   <form action={linkResourceDirectlyAction}>
@@ -77,7 +79,7 @@ export default async function LtiDeepLinkPage({
                       type="submit"
                       className="shrink-0 rounded-md bg-accent-fill px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-fill-hover"
                     >
-                      この授業を選ぶ
+                      {t("lti.choose")}
                     </button>
                   </form>
                 )}
@@ -86,7 +88,7 @@ export default async function LtiDeepLinkPage({
           );
         })}
         {(!courses || courses.length === 0) && (
-          <li className="text-sm text-ink-muted">まだ授業がありません。先に授業を作成してください。</li>
+          <li className="text-sm text-ink-muted">{t("lti.none")}</li>
         )}
       </ul>
     </div>

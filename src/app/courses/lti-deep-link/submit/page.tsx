@@ -1,3 +1,4 @@
+import { getT } from "@/lib/i18n/server";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -43,14 +44,15 @@ export default async function LtiDeepLinkSubmitPage({
     targetLinkUri: `${config.toolBaseUrl}/api/lti/login?course_id=${courseId}`,
   });
 
+  const { t } = await getT();
   return (
     <div className="mx-auto max-w-md px-6 py-12 text-center text-sm text-ink-muted">
-      <p>LMSへ戻っています…</p>
+      <p>{t("lti.returning")}</p>
       <form id="lti-deep-link-response-form" method="POST" action={returnUrl}>
         <input type="hidden" name="JWT" value={responseJwt} />
         <noscript>
           <button type="submit" className="mt-4 rounded-md bg-accent-fill px-4 py-2 text-sm text-white">
-            続ける
+            {t("lti.continue")}
           </button>
         </noscript>
       </form>

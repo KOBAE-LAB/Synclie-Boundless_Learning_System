@@ -1,5 +1,7 @@
 "use server";
 
+import { getT } from "@/lib/i18n/server";
+import type { DictKey, Vars } from "@/lib/i18n/translate";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -7,6 +9,11 @@ import { assertOwnsCourse } from "@/lib/courses/ownership";
 import { loadLatestCorrections } from "@/lib/records/corrections";
 import { addMarker, removeMarker } from "@/lib/inquiry/markers";
 import { enqueueJob, scheduleJobRun } from "@/lib/inquiry/queue";
+
+// 画面の言語でのメッセージ(エラーなど)。
+async function msg(key: DictKey, vars?: Vars): Promise<string> {
+  return (await getT()).t(key, vars);
+}
 
 // F15: 教師は擬似メンバーの発言ログを確認し、不適切・不正確な挙動を修正できる。
 // 元の発言(dialogue_turns.content)は書き換えず、修正版を dialogue_turn_corrections に積む
@@ -24,7 +31,7 @@ export async function updateTurnAction(courseId: string, turnId: string, formDat
     .eq("id", turnId)
     .maybeSingle();
   if (!turn || turn.speaker_type !== "persona") {
-    throw new Error("発言が見つかりません。");
+    throw new Error((await msg("auditActions.turnNotFound")));
   }
 
   const { data: session } = await admin
@@ -33,12 +40,12 @@ export async function updateTurnAction(courseId: string, turnId: string, formDat
     .eq("id", turn.session_id)
     .maybeSingle();
   if (!session || session.course_id !== courseId) {
-    throw new Error("発言が見つかりません。");
+    throw new Error((await msg("auditActions.turnNotFound")));
   }
 
   const content = String(formData.get("content") ?? "").trim();
   if (!content) {
-    throw new Error("発言の内容を入力してください。");
+    throw new Error((await msg("auditActions.needContent")));
   }
   const teacherNote = String(formData.get("teacherNote") ?? "").trim();
   const flagged = formData.get("flagged") === "on";
@@ -55,7 +62,7 @@ export async function updateTurnAction(courseId: string, turnId: string, formDat
       corrected_by: user.id,
     });
     if (correctionError) {
-      throw new Error(`発言の修正の保存に失敗しました: ${correctionError.message}`);
+      throw new Error(await msg("auditActions.correctionFailed", { message: correctionError.message }));
     }
   }
 
@@ -64,7 +71,7 @@ export async function updateTurnAction(courseId: string, turnId: string, formDat
     .update({ teacher_note: teacherNote || null, flagged_by_teacher: flagged })
     .eq("id", turnId);
   if (error) {
-    throw new Error(`発言の更新に失敗しました: ${error.message}`);
+    throw new Error(await msg("auditActions.updateFailed", { message: error.message }));
   }
 
   // 教師の印(要件定義書14章ステップ5): 探究の大事な場面として、エピソードの抽出で優先させる。

@@ -10,6 +10,8 @@ import { zodTextFormat } from "openai/helpers/zod";
 import { openai, MODEL_PERSONA } from "./openai";
 import { DISCUSSION_STYLES, isDiscussionStyle, type CourseSettings } from "@/lib/courses/settings";
 import { THINKING_DEPTHS, REPLY_TEMPOS } from "@/lib/persona-traits";
+import { languageDirective } from "./language";
+import type { Lang } from "@/lib/i18n/config";
 
 export const MAX_RECOMMEND_COUNT = 5;
 const MAX_MATERIAL_CHARS = 6000;
@@ -54,6 +56,8 @@ export interface RecommendInput {
   existing: Array<{ name: string; role: string; position: string }>;
   // 教師からの任意のヒント(例: 「反対派の中学生」)
   hint?: string;
+  // 画面の言語(en のときだけ、英語で作らせる)。
+  lang?: Lang;
 }
 
 export function buildRecommendationPrompt(input: RecommendInput): string {
@@ -93,7 +97,7 @@ ${material || "(資料はまだ登録されていない)"}
 - 名前は『ミライさん』『田中さん』のような短い呼び名だけにする。『〜派の』のような説明的な接頭辞は付けない。
 - 学習者の考えを代わりに出したり、答えを教えてしまう設計にしない(問い返し・ヒント中心)。
 - 既有知識・立場・目標には、「資料が未登録」「授業設定が未入力」など、この提案作業の事情を書かない。ペルソナ本人の設定として自然な文にする(資料が無い場合の既有知識は、学年相応の基本的な知識にとどめる)。
-- 立場(stancePosition)・目標(stanceGoal)は、それぞれ1〜2文で簡潔に書く。${input.hint ? `\n\n# 教師からのヒント(できるだけ反映する)\n${input.hint}` : ""}`;
+- 立場(stancePosition)・目標(stanceGoal)は、それぞれ1〜2文で簡潔に書く。${input.hint ? `\n\n# 教師からのヒント(できるだけ反映する)\n${input.hint}` : ""}${languageDirective(input.lang)}`;
 }
 
 export async function recommendPersonaDrafts(input: RecommendInput): Promise<Array<PersonaDraft>> {

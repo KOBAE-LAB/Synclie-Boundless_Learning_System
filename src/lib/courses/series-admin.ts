@@ -1,5 +1,10 @@
+import { getT } from "@/lib/i18n/server";
+import type { DictKey, Vars } from "@/lib/i18n/translate";
 import { createAdminClient } from "@/lib/supabase/server";
 import { assertRawLogProtection, stampSeriesRecordContext } from "@/lib/records/context";
+
+// 画面の言語でのメッセージ(エラーなど)。
+const rt = async (key: DictKey, vars?: Vars): Promise<string> => (await getT()).t(key, vars);
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -125,7 +130,7 @@ export async function deleteSeries(admin: AdminClient, seriesId: string) {
   // 学習者の手書き画像・音声は記録の一部なので残す。消すのは授業の構成のファイル(資料・動画)だけ。
   const { materials } = await collectSeriesFiles(admin, seriesId);
   const { error } = await admin.from("course_series").delete().eq("id", seriesId);
-  if (error) throw new Error(`削除に失敗しました: ${error.message}`);
+  if (error) throw new Error(await rt("libErrors.p11", { message: error.message }));
   await removeSeriesFiles(admin, { materials, handwriting: [], audio: [] });
 }
 
@@ -166,16 +171,16 @@ export async function summarizeSeriesRecords(admin: AdminClient, seriesId: strin
  */
 export async function forceDeleteSeries(admin: AdminClient, seriesId: string, confirmTitle: string) {
   const { data: series } = await admin.from("course_series").select("title, archived_at").eq("id", seriesId).maybeSingle();
-  if (!series) throw new Error("教科・科目が見つかりません。");
-  if (!series.archived_at) throw new Error("強制削除するには、先に教科・科目を終了してください。");
+  if (!series) throw new Error(await rt("libErrors.s0"));
+  if (!series.archived_at) throw new Error(await rt("libErrors.s16"));
   if (confirmTitle.trim() !== series.title.trim()) {
-    throw new Error("入力した教科・科目名が一致しません。削除する場合は、教科・科目名を正確に入力してください。");
+    throw new Error(await rt("libErrors.s17"));
   }
 
   const files = await collectSeriesFiles(admin, seriesId);
   await deleteLearnerRecords(admin, seriesId);
   const { error } = await admin.from("course_series").delete().eq("id", seriesId);
-  if (error) throw new Error(`削除に失敗しました: ${error.message}`);
+  if (error) throw new Error(await rt("libErrors.p11", { message: error.message }));
   await removeSeriesFiles(admin, files);
 }
 
@@ -197,7 +202,7 @@ export async function carryOverSeries(
     .eq("id", seriesId)
     .maybeSingle();
   if (!source || source.owner_teacher_id !== teacherId) {
-    throw new Error("この教科・科目を操作する権限がありません。");
+    throw new Error(await rt("libErrors.s18"));
   }
 
   const { data: created, error } = await admin
@@ -211,7 +216,7 @@ export async function carryOverSeries(
     })
     .select("id")
     .single();
-  if (error || !created) throw new Error(`新しい教科・科目の作成に失敗しました: ${error?.message ?? "不明なエラー"}`);
+  if (error || !created) throw new Error(await rt("libErrors.p12", { message: error?.message ?? "不明なエラー" }));
   const newSeriesId = created.id as string;
 
   const copiedPaths: string[] = [];
@@ -230,14 +235,14 @@ export async function carryOverSeries(
         .insert({ ...settings, series_id: newSeriesId, released: false })
         .select("id")
         .single();
-      if (courseError || !newCourse) throw new Error(`授業回の複製に失敗しました: ${courseError?.message}`);
+      if (courseError || !newCourse) throw new Error(await rt("libErrors.p13", { message: courseError?.message }));
       const newCourseId = newCourse.id as string;
 
       const copyFile = async (path: string, folder: string): Promise<string> => {
         const name = path.split("/").pop() ?? "file";
         const dest = `${newCourseId}/${folder}${crypto.randomUUID()}-${name.replace(/^[0-9a-f-]{36}-/, "")}`;
         const { error: copyError } = await admin.storage.from("materials").copy(path, dest);
-        if (copyError) throw new Error(`ファイルの複製に失敗しました: ${copyError.message}`);
+        if (copyError) throw new Error(await rt("libErrors.p14", { message: copyError.message }));
         copiedPaths.push(dest);
         return dest;
       };
@@ -255,7 +260,7 @@ export async function carryOverSeries(
           .insert({ course_id: newCourseId, uploaded_by: teacherId, kind: m.kind, title: m.title, storage_path: storagePath, source_url: m.source_url })
           .select("id")
           .single();
-        if (mError || !newMaterial) throw new Error(`資料の複製に失敗しました: ${mError?.message}`);
+        if (mError || !newMaterial) throw new Error(await rt("libErrors.p15", { message: mError?.message }));
         materialIdMap.set(m.id, newMaterial.id as string);
       }
 
@@ -270,8 +275,8 @@ export async function carryOverSeries(
         void _pid; void _pc; void _pcid; void _ps;
         const { error: pError } = await admin
           .from("personas")
-          .insert({ ...rest, course_id: newCourseId, shared_at: null, origin_note: `${fiscalYear - 1}年度から引き継ぎ` });
-        if (pError) throw new Error(`擬似メンバーの複製に失敗しました: ${pError.message}`);
+          .insert({ ...rest, course_id: newCourseId, shared_at: null, origin_note: await rt("libErrors.carriedOver", { y: fiscalYear - 1 }) });
+        if (pError) throw new Error(await rt("libErrors.p16", { message: pError.message }));
       }
 
       // 評価の観点
@@ -283,7 +288,7 @@ export async function carryOverSeries(
         const { error: cError } = await admin
           .from("evaluation_criteria")
           .insert((criteria ?? []).map((c) => ({ ...c, course_id: newCourseId })));
-        if (cError) throw new Error(`評価の観点の複製に失敗しました: ${cError.message}`);
+        if (cError) throw new Error(await rt("libErrors.p17", { message: cError.message }));
       }
 
       // 学習の流れ(資料は複製先の資料に付け替え、動画ファイルも複製)
@@ -306,7 +311,7 @@ export async function carryOverSeries(
           minutes: st.minutes,
           check_questions: st.check_questions,
         });
-        if (sError) throw new Error(`学習の流れの複製に失敗しました: ${sError.message}`);
+        if (sError) throw new Error(await rt("libErrors.p18", { message: sError.message }));
       }
     }
   } catch (err) {

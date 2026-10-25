@@ -1,3 +1,5 @@
+import { getT } from "@/lib/i18n/server";
+import type { DictKey, Vars } from "@/lib/i18n/translate";
 // 探究の教科・科目の人間のグループ(0044)。グループの作成・メンバーの出入り・参加コード・テーマの更新の決まりを、ここにまとめる。
 //  - グループに入れるのは、その教科・科目の「承認済みの履修者」だけ。
 //  - 1つの教科・科目で、同時に入れるグループは1つだけ(別のグループに入ると、前のグループからは抜ける)。
@@ -5,6 +7,9 @@
 //  - テーマはグループのメンバーが決めて更新し、変更の履歴を残す(問いの変化も探究の一部)。
 //  - アーカイブした教科・科目では、グループの出入り・テーマの変更を受け付けない。
 import type { createAdminClient } from "@/lib/supabase/server";
+
+// 画面の言語でのメッセージ(エラーなど)。
+const rt = async (key: DictKey, vars?: Vars): Promise<string> => (await getT()).t(key, vars);
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -42,9 +47,9 @@ async function loadInquirySeries(admin: AdminClient, seriesId: string): Promise<
     .select("id, title, kind, archived_at, fiscal_year, owner_teacher_id")
     .eq("id", seriesId)
     .maybeSingle();
-  if (!data) throw new GroupRuleError("教科・科目が見つかりません。");
-  if (data.kind !== "inquiry") throw new GroupRuleError("グループは、探究の教科・科目でだけ作れます。");
-  if (data.archived_at) throw new GroupRuleError("この教科・科目は終了しています。グループの変更はできません。");
+  if (!data) throw new GroupRuleError(await rt("libErrors.s0"));
+  if (data.kind !== "inquiry") throw new GroupRuleError(await rt("libErrors.s1"));
+  if (data.archived_at) throw new GroupRuleError(await rt("libErrors.s2"));
   return data as SeriesRow;
 }
 
@@ -56,7 +61,7 @@ async function assertApprovedEnrollee(admin: AdminClient, seriesId: string, stud
     .eq("student_id", studentId)
     .eq("status", "approved")
     .maybeSingle();
-  if (!data) throw new GroupRuleError("この教科・科目を履修している(承認済みの)学習者だけが、グループに入れます。");
+  if (!data) throw new GroupRuleError(await rt("libErrors.s3"));
 }
 
 interface GroupRow {
@@ -75,7 +80,7 @@ export async function loadGroupInSeries(admin: AdminClient, projectId: string, s
     .eq("id", projectId)
     .maybeSingle();
   if (!data || data.kind !== "group" || data.series_id !== seriesId) {
-    throw new GroupRuleError("グループが見つかりません。");
+    throw new GroupRuleError(await rt("libErrors.s4"));
   }
   return data as GroupRow;
 }
@@ -85,7 +90,7 @@ export async function createGroup(
   input: { seriesId: string; teacherId: string; title: string },
 ): Promise<{ id: string; joinCode: string }> {
   const title = input.title.trim().slice(0, MAX_GROUP_TITLE);
-  if (!title) throw new GroupRuleError("グループの名前を入力してください。");
+  if (!title) throw new GroupRuleError(await rt("libErrors.s5"));
   const series = await loadInquirySeries(admin, input.seriesId);
   const { count } = await admin
     .from("inquiry_projects")
@@ -93,7 +98,7 @@ export async function createGroup(
     .eq("series_id", input.seriesId)
     .eq("kind", "group");
   if ((count ?? 0) >= MAX_GROUPS_PER_SERIES) {
-    throw new GroupRuleError(`グループは1つの教科・科目に最大${MAX_GROUPS_PER_SERIES}個までです。`);
+    throw new GroupRuleError(await rt("libErrors.maxGroups", { n: MAX_GROUPS_PER_SERIES }));
   }
   // コードが偶然ほかのグループと重なったら、作り直す。
   for (let attempt = 0; attempt < 4; attempt++) {
@@ -112,9 +117,9 @@ export async function createGroup(
       .select("id")
       .single();
     if (!error && data) return { id: data.id as string, joinCode };
-    if (error?.code !== "23505") throw new Error(`グループの作成に失敗しました: ${error?.message}`);
+    if (error?.code !== "23505") throw new Error(await rt("libErrors.p0", { message: error?.message }));
   }
-  throw new Error("グループの参加コードを作れませんでした。もう一度試してください。");
+  throw new Error(await rt("libErrors.s6"));
 }
 
 /** 同じ教科・科目で、ほかに入っているグループから抜ける(1教科・科目1グループ)。 */
@@ -140,7 +145,7 @@ async function leaveOtherGroups(admin: AdminClient, seriesId: string, studentId:
     .eq("student_id", studentId)
     .in("project_id", ids)
     .is("left_at", null);
-  if (error) throw new Error(`前のグループから抜けられませんでした: ${error.message}`);
+  if (error) throw new Error(await rt("libErrors.p1", { message: error.message }));
 }
 
 async function addMember(admin: AdminClient, group: GroupRow, studentId: string) {
@@ -160,7 +165,7 @@ async function addMember(admin: AdminClient, group: GroupRow, studentId: string)
       { project_id: group.id, student_id: studentId, joined_at: new Date().toISOString(), left_at: null },
       { onConflict: "project_id,student_id" },
     );
-  if (error) throw new Error(`グループに入れませんでした: ${error.message}`);
+  if (error) throw new Error(await rt("libErrors.p2", { message: error.message }));
 }
 
 /** 教師がメンバーを割り当てる。 */
@@ -180,7 +185,7 @@ export async function removeMember(admin: AdminClient, input: { seriesId: string
     .eq("project_id", input.projectId)
     .eq("student_id", input.studentId)
     .is("left_at", null);
-  if (error) throw new Error(`メンバーを外せませんでした: ${error.message}`);
+  if (error) throw new Error(await rt("libErrors.p3", { message: error.message }));
 }
 
 /** 学習者が参加コードでグループに入る。入ったグループを返す。 */
@@ -189,14 +194,14 @@ export async function joinByCode(
   input: { code: string; studentId: string },
 ): Promise<{ projectId: string; seriesId: string; title: string }> {
   const code = normalizeGroupCode(input.code);
-  if (!code) throw new GroupRuleError("グループの参加コードを入力してください。");
+  if (!code) throw new GroupRuleError(await rt("libErrors.s7"));
   const { data } = await admin
     .from("inquiry_projects")
     .select("id, series_id, kind, title, theme")
     .eq("join_code", code)
     .maybeSingle();
   if (!data || data.kind !== "group" || !data.series_id) {
-    throw new GroupRuleError("そのコードのグループは見つかりません。");
+    throw new GroupRuleError(await rt("libErrors.s8"));
   }
   const group = data as GroupRow;
   await loadInquirySeries(admin, group.series_id as string);
@@ -207,7 +212,7 @@ export async function joinByCode(
 /** 学習者が自分でグループを抜ける。 */
 export async function leaveGroup(admin: AdminClient, input: { projectId: string; studentId: string }) {
   const { data: group } = await admin.from("inquiry_projects").select("series_id, kind").eq("id", input.projectId).maybeSingle();
-  if (!group || group.kind !== "group" || !group.series_id) throw new GroupRuleError("グループが見つかりません。");
+  if (!group || group.kind !== "group" || !group.series_id) throw new GroupRuleError(await rt("libErrors.s4"));
   await loadInquirySeries(admin, group.series_id as string);
   const { error } = await admin
     .from("inquiry_project_members")
@@ -215,7 +220,7 @@ export async function leaveGroup(admin: AdminClient, input: { projectId: string;
     .eq("project_id", input.projectId)
     .eq("student_id", input.studentId)
     .is("left_at", null);
-  if (error) throw new Error(`グループを抜けられませんでした: ${error.message}`);
+  if (error) throw new Error(await rt("libErrors.p4", { message: error.message }));
 }
 
 /** いまのメンバーか。 */
@@ -236,24 +241,24 @@ export async function setGroupTheme(
   input: { projectId: string; studentId: string; theme: string },
 ): Promise<{ changed: boolean }> {
   const theme = input.theme.trim().replace(/\s+/g, " ").slice(0, MAX_THEME);
-  if (!theme) throw new GroupRuleError("テーマを入力してください。");
+  if (!theme) throw new GroupRuleError(await rt("libErrors.s9"));
   const { data: group } = await admin
     .from("inquiry_projects")
     .select("id, series_id, kind, theme")
     .eq("id", input.projectId)
     .maybeSingle();
-  if (!group || group.kind !== "group" || !group.series_id) throw new GroupRuleError("グループが見つかりません。");
+  if (!group || group.kind !== "group" || !group.series_id) throw new GroupRuleError(await rt("libErrors.s4"));
   await loadInquirySeries(admin, group.series_id as string);
   if (!(await isActiveMember(admin, input.projectId, input.studentId))) {
-    throw new GroupRuleError("テーマを変えられるのは、このグループのメンバーだけです。");
+    throw new GroupRuleError(await rt("libErrors.s10"));
   }
   if ((group.theme ?? "") === theme) return { changed: false };
   const { error } = await admin.from("inquiry_projects").update({ theme }).eq("id", input.projectId);
-  if (error) throw new Error(`テーマを保存できませんでした: ${error.message}`);
+  if (error) throw new Error(await rt("libErrors.p5", { message: error.message }));
   const { error: historyError } = await admin
     .from("inquiry_theme_changes")
     .insert({ project_id: input.projectId, theme, changed_by: input.studentId });
-  if (historyError) throw new Error(`テーマの履歴を保存できませんでした: ${historyError.message}`);
+  if (historyError) throw new Error(await rt("libErrors.p6", { message: historyError.message }));
   return { changed: true };
 }
 
@@ -264,18 +269,18 @@ export async function regenerateGroupCode(admin: AdminClient, input: { seriesId:
     const joinCode = generateGroupCode();
     const { error } = await admin.from("inquiry_projects").update({ join_code: joinCode }).eq("id", input.projectId);
     if (!error) return joinCode;
-    if (error.code !== "23505") throw new Error(`コードの再発行に失敗しました: ${error.message}`);
+    if (error.code !== "23505") throw new Error(await rt("libErrors.p7", { message: error.message }));
   }
-  throw new Error("コードを作り直せませんでした。もう一度試してください。");
+  throw new Error(await rt("libErrors.s11"));
 }
 
 /** 教師がグループの名前を変える。 */
 export async function renameGroup(admin: AdminClient, input: { seriesId: string; projectId: string; title: string }) {
   const title = input.title.trim().slice(0, MAX_GROUP_TITLE);
-  if (!title) throw new GroupRuleError("グループの名前を入力してください。");
+  if (!title) throw new GroupRuleError(await rt("libErrors.s5"));
   await loadGroupInSeries(admin, input.projectId, input.seriesId);
   const { error } = await admin.from("inquiry_projects").update({ title }).eq("id", input.projectId);
-  if (error) throw new Error(`名前を変えられませんでした: ${error.message}`);
+  if (error) throw new Error(await rt("libErrors.p8", { message: error.message }));
 }
 
 /**
@@ -287,11 +292,11 @@ export async function deleteEmptyGroup(admin: AdminClient, input: { seriesId: st
   for (const table of ["learning_sessions", "submissions"] as const) {
     const { count } = await admin.from(table).select("id", { count: "exact", head: true }).eq("project_id", input.projectId);
     if ((count ?? 0) > 0) {
-      throw new GroupRuleError("議論や提出の記録があるグループは消せません(記録として残ります)。メンバーを外して使わないようにしてください。");
+      throw new GroupRuleError(await rt("libErrors.s12"));
     }
   }
   const { error } = await admin.from("inquiry_projects").delete().eq("id", input.projectId);
-  if (error) throw new Error(`グループを消せませんでした: ${error.message}`);
+  if (error) throw new Error(await rt("libErrors.p9", { message: error.message }));
 }
 
 export interface GroupOverview {
@@ -355,5 +360,5 @@ export async function leaveSeriesGroups(admin: AdminClient, seriesId: string, st
     .is("left_at", null);
   if (studentIds) query = query.in("student_id", studentIds);
   const { error } = await query;
-  if (error) throw new Error(`グループからの脱退に失敗しました: ${error.message}`);
+  if (error) throw new Error(await rt("libErrors.p10", { message: error.message }));
 }

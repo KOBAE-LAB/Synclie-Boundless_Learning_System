@@ -1,5 +1,7 @@
 "use server";
 
+import { getT } from "@/lib/i18n/server";
+import type { DictKey, Vars } from "@/lib/i18n/translate";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/session";
 import { redirect } from "next/navigation";
@@ -8,6 +10,11 @@ import { decideScopeRequest } from "@/lib/inquiry/share-scope";
 import { scheduleJobRun } from "@/lib/inquiry/queue";
 import { SeniorRuleError } from "@/lib/inquiry/senior";
 
+// 画面の言語でのメッセージ(エラーなど)。
+async function msg(key: DictKey, vars?: Vars): Promise<string> {
+  return (await getT()).t(key, vars);
+}
+
 // F21: 組織への参加・作成。SSO(F22)導入前の段階1〜2では、教師が組織名を入力して
 // 自己申告で参加・作成する(既存に同名の組織があれば参加、無ければ新規作成して
 // 自分を承認者にする)。SSO導入後は実際のテナントに置き換わる想定。
@@ -15,7 +22,7 @@ export async function joinOrCreateOrganizationAction(formData: FormData) {
   const { user } = await requireRole("teacher");
   const name = String(formData.get("name") ?? "").trim();
   if (!name) {
-    throw new Error("組織名を入力してください。");
+    throw new Error((await msg("orgActions.needName")));
   }
 
   const admin = createAdminClient();
@@ -40,7 +47,7 @@ export async function joinOrCreateOrganizationAction(formData: FormData) {
       .select("id")
       .single();
     if (error || !created) {
-      throw new Error(`組織の作成に失敗しました: ${error?.message ?? "不明なエラー"}`);
+      throw new Error(await msg("orgActions.createFailed", { message: error?.message ?? (await msg("dialogue.unknownError")) }));
     }
     organizationId = created.id;
   }
@@ -50,7 +57,7 @@ export async function joinOrCreateOrganizationAction(formData: FormData) {
     .update({ organization_id: organizationId })
     .eq("id", user.id);
   if (updateError) {
-    throw new Error(`組織への参加に失敗しました: ${updateError.message}`);
+    throw new Error(await msg("orgActions.joinFailed", { message: updateError.message }));
   }
 
   revalidatePath("/organization");
@@ -63,7 +70,7 @@ export async function setApproverAction(formData: FormData) {
   const { user } = await requireRole("teacher");
   const newApproverId = String(formData.get("approverId") ?? "").trim();
   if (!newApproverId) {
-    throw new Error("承認者を選択してください。");
+    throw new Error((await msg("orgActions.pickApprover")));
   }
 
   const admin = createAdminClient();
@@ -73,7 +80,7 @@ export async function setApproverAction(formData: FormData) {
     .eq("id", user.id)
     .maybeSingle();
   if (!profile?.organization_id) {
-    throw new Error("組織に参加していません。");
+    throw new Error((await msg("orgActions.notJoined")));
   }
 
   const { data: candidate } = await admin
@@ -84,7 +91,7 @@ export async function setApproverAction(formData: FormData) {
     .eq("role", "teacher")
     .maybeSingle();
   if (!candidate) {
-    throw new Error("同じ組織に所属する教師のみ承認者に指定できます。");
+    throw new Error((await msg("orgActions.sameOrgOnly")));
   }
 
   const { error } = await admin
@@ -92,7 +99,7 @@ export async function setApproverAction(formData: FormData) {
     .update({ approver_teacher_id: newApproverId })
     .eq("id", profile.organization_id);
   if (error) {
-    throw new Error(`承認者の変更に失敗しました: ${error.message}`);
+    throw new Error(await msg("orgActions.approverFailed", { message: error.message }));
   }
 
   revalidatePath("/organization");
@@ -112,7 +119,7 @@ export async function decideShareRequestAction(
     .eq("id", requestId)
     .maybeSingle();
   if (!request) {
-    throw new Error("リクエストが見つかりません。");
+    throw new Error((await msg("orgActions.reqNotFound")));
   }
 
   const { data: org } = await admin
@@ -121,10 +128,10 @@ export async function decideShareRequestAction(
     .eq("id", request.owner_organization_id)
     .maybeSingle();
   if (!org || org.approver_teacher_id !== user.id) {
-    throw new Error("このリクエストを判断する権限がありません(組織の承認者のみ判断できます)。");
+    throw new Error((await msg("orgActions.noPermission")));
   }
   if (request.status !== "pending") {
-    throw new Error("このリクエストは既に判断済みです。");
+    throw new Error((await msg("orgActions.alreadyDecided")));
   }
 
   const { error } = await admin
@@ -132,7 +139,7 @@ export async function decideShareRequestAction(
     .update({ status: decision, decided_by: user.id, decided_at: new Date().toISOString() })
     .eq("id", requestId);
   if (error) {
-    throw new Error(`判断の保存に失敗しました: ${error.message}`);
+    throw new Error(await msg("orgActions.decideFailed", { message: error.message }));
   }
 
   revalidatePath("/organization");
@@ -150,5 +157,5 @@ export async function decideScopeRequestAction(personaId: string, decision: "app
   // 承認したら、他の学校向けに特定されにくくした場面を作る(レスポンスのあとに、処理待ちを実行する)
   if (decision === "approved") scheduleJobRun();
   revalidatePath("/organization");
-  redirect(`/organization?notice=${encodeURIComponent(decision === "approved" ? "承認しました。他の学校の先生が使えるようになります。" : "見送りました。")}`);
+  redirect(`/organization?notice=${encodeURIComponent(decision === "approved" ? (await msg("orgActions.approvedNotice")) : (await msg("orgActions.declinedNotice")))}`);
 }

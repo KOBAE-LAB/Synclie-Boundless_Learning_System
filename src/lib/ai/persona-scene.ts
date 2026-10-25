@@ -17,6 +17,8 @@ import { openai, MODEL_PERSONA } from "./openai";
 import { extractPartialSceneMessages } from "./partial-json";
 import { isPersonaMentioned } from "@/lib/persona-mention";
 import type { ChatTurn } from "./persona";
+import { languageDirective } from "./language";
+import type { Lang } from "@/lib/i18n/config";
 import { THINKING_DEPTH_GUIDANCE, type ThinkingDepth } from "@/lib/persona-traits";
 
 export const LIVELINESS = {
@@ -65,6 +67,8 @@ export interface SceneParams {
   silence?: boolean;
   // 授業の設定(推論の深さ)。未指定ならモデルの既定。
   reasoningEffort?: "low" | "high";
+  // 画面の言語(en のときだけ、英語で話させる)。
+  lang?: Lang;
 }
 
 export function buildSceneSystemPrompt(params: SceneParams): string {
@@ -127,7 +131,7 @@ ${params.turnGuidance ? `\n# 今回の発言に対する補足\n${params.turnGui
 # 出力
 - speaker: 上の「参加している擬似メンバー」の名前そのまま
 - reply: その発言の本文
-- conceded: その発言で、そのメンバーが自分の立場を譲歩・変更したか(していなければ false)`;
+- conceded: その発言で、そのメンバーが自分の立場を譲歩・変更したか(していなければ false)${languageDirective(params.lang)}`;
 }
 
 /**

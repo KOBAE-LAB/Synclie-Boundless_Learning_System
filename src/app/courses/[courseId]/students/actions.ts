@@ -1,11 +1,18 @@
 "use server";
 
+import { getT } from "@/lib/i18n/server";
+import type { DictKey, Vars } from "@/lib/i18n/translate";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { assertOwnsCourse } from "@/lib/courses/ownership";
 import { generateStudentProfileSummary } from "@/lib/ai/student-profile";
 import { generatePersonalizationSuggestions } from "@/lib/ai/personalization";
+
+// 画面の言語でのメッセージ(エラーなど)。
+async function msg(key: DictKey, vars?: Vars): Promise<string> {
+  return (await getT()).t(key, vars);
+}
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -85,10 +92,10 @@ export async function generateStudentProfileAction(courseId: string, studentId: 
   try {
     const activityLog = await buildActivityLog(admin, courseId, studentId);
     if (!activityLog) {
-      throw new Error("この学習者の活動記録(提出物)がまだありません。");
+      throw new Error((await msg("studentActions.noRecords")));
     }
 
-    const { strengths, challenges, summary } = await generateStudentProfileSummary(activityLog);
+    const { strengths, challenges, summary } = await generateStudentProfileSummary(activityLog, (await getT()).lang);
 
     const { error } = await admin.from("student_profiles").upsert(
       {
@@ -104,12 +111,12 @@ export async function generateStudentProfileAction(courseId: string, studentId: 
       { onConflict: "student_id,course_id" },
     );
     if (error) {
-      throw new Error(`学習者プロファイルの保存に失敗しました: ${error.message}`);
+      throw new Error(await msg("studentActions.saveProfileFailed", { message: error.message }));
     }
   } catch (err) {
     // 失敗理由を保存する。ここでは投げ直さず、教師が画面上で理由を見て
     // 「再生成」できるようにする(F02/F07と同じ方針)。
-    const message = err instanceof Error ? err.message : "不明なエラーが発生しました。";
+    const message = err instanceof Error ? err.message : await msg("studentActions.unknown");
     await admin.from("student_profiles").upsert(
       { student_id: studentId, course_id: courseId, status: "failed", error: message },
       { onConflict: "student_id,course_id" },
@@ -134,10 +141,11 @@ export async function generatePersonalizationAction(courseId: string, studentId:
     .maybeSingle();
 
   if (!profile || profile.status !== "done" || !profile.strengths || !profile.challenges || !profile.summary) {
-    throw new Error("先に学習者プロファイル(F09)を生成してください。");
+    throw new Error((await msg("studentActions.needProfile")));
   }
 
   const suggestion = await generatePersonalizationSuggestions({
+    lang: (await getT()).lang,
     strengths: profile.strengths,
     challenges: profile.challenges,
     summary: profile.summary,
@@ -158,7 +166,7 @@ export async function generatePersonalizationAction(courseId: string, studentId:
     { onConflict: "student_id,course_id" },
   );
   if (error) {
-    throw new Error(`個別最適化の提案の保存に失敗しました: ${error.message}`);
+    throw new Error(await msg("studentActions.saveSuggestFailed", { message: error.message }));
   }
 
   revalidatePath(`/courses/${courseId}/students`);
@@ -182,7 +190,7 @@ export async function decidePersonalizationAction(
     .eq("student_id", studentId)
     .eq("course_id", courseId);
   if (error) {
-    throw new Error(`更新に失敗しました: ${error.message}`);
+    throw new Error(await msg("studentActions.updateFailed", { message: error.message }));
   }
 
   revalidatePath(`/courses/${courseId}/students`);

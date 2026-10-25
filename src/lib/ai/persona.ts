@@ -17,6 +17,8 @@ import { z } from "zod";
 import { zodTextFormat } from "openai/helpers/zod";
 import { openai, MODEL_PERSONA } from "./openai";
 import { extractPartialJsonString } from "./partial-json";
+import { languageDirective } from "./language";
+import type { Lang } from "@/lib/i18n/config";
 
 export interface PersonaProfile {
   name: string;
@@ -39,6 +41,8 @@ export interface PersonaProfile {
   courseContext?: string;
   // 先輩型(0045): 先輩の探究の記録(軌跡・近い場面)と、先輩としてのルール(@/lib/inquiry/senior-memory)。
   memory?: string;
+  // 画面の言語(en のときだけ、英語で話させる)。
+  lang?: Lang;
 }
 
 export const COMMON_GUARDRAILS = `
@@ -68,7 +72,7 @@ ${persona.materialText}
 
 # 立場と目標
 ${persona.stance}
-${persona.memory ? `\n${persona.memory}\n` : ""}${persona.otherParticipants ? `\n# この対話にいる他の擬似メンバー\n${persona.otherParticipants}\n(会話履歴では、あなた以外のメンバーの発言も同じ役割で渡ってくるため、\n発言の先頭に付いている名前で誰の発言かを見分けること。名前が無ければ学習者の発言。)\n` : ""}${persona.behaviorNotes ? `\n# このペルソナ固有の行動ルール\n${persona.behaviorNotes}\n` : ""}${persona.turnGuidance ? `\n# 今回の発言に対する補足\n${persona.turnGuidance}\n` : ""}${COMMON_GUARDRAILS}`;
+${persona.memory ? `\n${persona.memory}\n` : ""}${persona.otherParticipants ? `\n# この対話にいる他の擬似メンバー\n${persona.otherParticipants}\n(会話履歴では、あなた以外のメンバーの発言も同じ役割で渡ってくるため、\n発言の先頭に付いている名前で誰の発言かを見分けること。名前が無ければ学習者の発言。)\n` : ""}${persona.behaviorNotes ? `\n# このペルソナ固有の行動ルール\n${persona.behaviorNotes}\n` : ""}${persona.turnGuidance ? `\n# 今回の発言に対する補足\n${persona.turnGuidance}\n` : ""}${COMMON_GUARDRAILS}${languageDirective(persona.lang)}`;
 }
 
 export type ChatTurn = { role: "user" | "assistant"; content: string };

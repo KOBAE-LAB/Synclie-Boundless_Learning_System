@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { getT } from "@/lib/i18n/server";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -22,6 +23,7 @@ import { assignPersonaTones, toneClass, personaInitial } from "@/lib/persona-ton
 import { loadLessonCrumbs, loadSiblingLessons } from "@/lib/courses/series";
 import { LessonCopyForm } from "@/components/lesson-copy-form";
 import { copyPersonasFromLessonAction } from "../lesson-copy-actions";
+import type { DictKey } from "@/lib/i18n/translate";
 import { SeniorLoansSection } from "./senior-loans-section";
 import { Breadcrumbs, BackLink } from "@/components/breadcrumbs";
 
@@ -47,30 +49,12 @@ interface AvatarOptionRow {
   label: string;
 }
 
-const AVATAR_STATUS_LABELS: Record<AvatarStatus, string> = {
-  pending: "未推薦",
-  done: "推薦済み",
-  failed: "推薦に失敗",
-};
-
 interface CorpusEntryRow {
   id: string;
   topic: string;
   misconception: string | null;
   effective_question: string | null;
 }
-
-const TIER_LABELS: Record<string, string> = {
-  teacher_defined: "教師設定型",
-  rag_initial: "RAG初期型",
-  evolved: "学習進化型",
-};
-
-const STATUS_LABELS: Record<PersonaStatus, string> = {
-  draft: "下書き",
-  approved: "承認済み",
-  active: "使用中",
-};
 
 const STATUS_STYLES: Record<PersonaStatus, string> = {
   draft: "bg-surface text-ink-muted",
@@ -88,6 +72,7 @@ export default async function PersonasPage({
   const { courseId } = await params;
   const { copied: copiedParam, skipped: skippedParam, senior_error: seniorError } = await searchParams;
   const { user } = await requireRole("teacher");
+  const { t, lang } = await getT();
 
   const admin = createAdminClient();
   const { data: course } = await admin
@@ -137,49 +122,49 @@ export default async function PersonasPage({
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <Breadcrumbs trail={[...((await loadLessonCrumbs(admin, courseId))?.teacherTrail ?? [])]} current="ペルソナ設定" />
+      <Breadcrumbs trail={[...((await loadLessonCrumbs(admin, courseId, lang))?.teacherTrail ?? [])]} current={t("personasPage.title")} />
       <h1 className="mt-2 text-2xl font-semibold text-ink">
-        ペルソナ設定
+        {t("personasPage.title")}
       </h1>
       <p className="mt-1 text-sm text-ink-muted">
-        擬似メンバーを作り、承認して「使用中」にすると授業で使われます。
+        {t("personasPage.lead")}
       </p>
       <p className="mt-1 text-sm text-ink-muted">
-        この授業で使用中のペルソナ: <span className="font-medium">{activeCount}体</span>
+        {t("personasPage.activeLabel")}<span className="font-medium">{activeCount}</span>
       </p>
 
       {targetCount !== null && (
         <p
           className={`mt-1 text-sm ${activeCount === targetCount ? "text-ink-muted" : "text-warn"}`}
         >
-          授業設定のAIメンバー目標: {targetCount}人
+          {t("personasPage.targetLine", { n: targetCount })}
           {activeCount === targetCount
-            ? "(使用中の人数と一致しています)"
+            ? t("personasPage.targetMatch")
             : activeCount < targetCount
-              ? `(あと${targetCount - activeCount}人を「使用中」にすると、目標に届きます)`
-              : `(使用中が目標より${activeCount - targetCount}人多くなっています)`}
+              ? t("personasPage.targetShort", { n: targetCount - activeCount })
+              : t("personasPage.targetOver", { n: activeCount - targetCount })}
         </p>
       )}
 
       <LessonCopyForm
         lessons={siblingLessons}
         action={copyPersonasFromLessonAction.bind(null, courseId)}
-        title="前の回から擬似メンバーを複製する"
-        description="同じ教科・科目の別の回から、擬似メンバーを複製します(同じ名前は複製しません)。"
+        title={t("personasPage.copyTitle")}
+        description={t("personasPage.copyDesc")}
         copied={copiedParam}
         skipped={skippedParam}
       />
 
       <div className="mt-8 rounded-lg border border-line p-5">
-        <h2 className="text-sm font-medium text-ink">AIにペルソナ案を作ってもらう</h2>
+        <h2 className="text-sm font-medium text-ink">{t("personasPage.aiTitle")}</h2>
         <p className="mt-1 text-sm text-ink-muted">
-          授業設定と資料をもとに、案を<strong>下書き</strong>として作ります。承認して「使用中」にすると使われます。
+          {t("personasPage.aiLeadA")}<strong>{t("personasPage.aiLeadStrong")}</strong>{t("personasPage.aiLeadB")}
         </p>
         {!course.objective && (
           <p className="mt-2 rounded-md border border-warn bg-warn-soft px-3 py-2 text-sm text-warn">
-            授業のねらい・議題が未入力です。入力すると、案が授業の目的に沿ったものになります。
+            {t("personasPage.noObjective")}
             <Link href={`/courses/${courseId}`} className="ml-1 underline">
-              授業の設定へ
+              {t("personasPage.toSettings")}
             </Link>
           </p>
         )}
@@ -187,7 +172,7 @@ export default async function PersonasPage({
           <div className="flex flex-wrap items-end gap-3">
             <div className="space-y-1">
               <label htmlFor="recommend-count" className="text-xs font-medium text-ink-muted">
-                作る人数
+                {t("personasPage.countLabel")}
               </label>
               <select
                 id="recommend-count"
@@ -197,14 +182,14 @@ export default async function PersonasPage({
               >
                 {[1, 2, 3, 4, 5].map((n) => (
                   <option key={n} value={n}>
-                    {n}人分
+                    {t("personasPage.nPeople", { n })}
                   </option>
                 ))}
               </select>
             </div>
             <div className="min-w-[14rem] flex-1 space-y-1">
               <label htmlFor="recommend-hint" className="text-xs font-medium text-ink-muted">
-                ヒント(任意。例: 反対意見の中学生、慎重な先輩)
+                {t("personasPage.hint")}
               </label>
               <input
                 id="recommend-hint"
@@ -215,19 +200,19 @@ export default async function PersonasPage({
             </div>
           </div>
           <SubmitButton
-            pendingText="案を作っています…"
+            pendingText={t("personasPage.makingDrafts")}
             className="rounded-md bg-accent-fill px-4 py-2 text-sm font-medium text-white hover:bg-accent-fill-hover disabled:opacity-50"
           >
-            ペルソナ案を作る
+            {t("personasPage.makeDrafts")}
           </SubmitButton>
           <p className="text-xs text-ink-faint">
-            AIを1回呼びます(数秒かかります)。人数を1にすると、ヒントつきで1体ずつ作れます。
+            {t("personasPage.aiNote")}
           </p>
         </form>
       </div>
 
       <h2 className="mt-8 text-sm font-medium text-ink">
-        この授業のペルソナ({rows.length}体)
+        {t("personasPage.listHeading", { n: rows.length })}
       </h2>
       <ul className="mt-3 space-y-2">
         {rows.map((persona) => {
@@ -278,13 +263,13 @@ export default async function PersonasPage({
                       <span className="ml-2 text-ink-muted">({persona.profile.role})</span>
                     )}
                     <span className="ml-2 text-xs text-ink-faint">
-                      [{TIER_LABELS[persona.tier] ?? persona.tier}]
+                      [{["teacher_defined", "rag_initial", "evolved", "senior", "aggregate"].includes(persona.tier) ? t(`personaEnums.tier_${persona.tier}` as DictKey) : persona.tier}]
                     </span>
                   </span>
                 </Link>
 
                 <div className="flex shrink-0 items-center gap-2">
-                  <ol className="flex items-center gap-1 text-xs" aria-label={`状態: ${STATUS_LABELS[persona.status]}`}>
+                  <ol className="flex items-center gap-1 text-xs" aria-label={t("personasPage.statusAria", { s: t(`personaEnums.status_${persona.status}`) })}>
                     {(["draft", "approved", "active"] as const).map((st, idx) => {
                       const order = { draft: 0, approved: 1, active: 2 } as const;
                       const reached = order[persona.status] >= idx;
@@ -297,7 +282,7 @@ export default async function PersonasPage({
                             isNow ? STATUS_STYLES[st] + " font-semibold" : reached ? "bg-surface text-ink-muted" : "text-ink-faint"
                           }`}
                         >
-                          {idx + 1} {STATUS_LABELS[st]}
+                          {idx + 1} {t(`personaEnums.status_${st}`)}
                         </li>
                       );
                     })}
@@ -309,7 +294,7 @@ export default async function PersonasPage({
                         type="submit"
                         className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface"
                       >
-                        次へ: 承認する
+                        {t("personasPage.nextApprove")}
                       </button>
                     </form>
                   )}
@@ -319,7 +304,7 @@ export default async function PersonasPage({
                         type="submit"
                         className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface"
                       >
-                        次へ: 授業で使う
+                        {t("personasPage.nextUse")}
                       </button>
                     </form>
                   )}
@@ -329,7 +314,7 @@ export default async function PersonasPage({
                         type="submit"
                         className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface"
                       >
-                        使用をやめる
+                        {t("personasPage.stopUse")}
                       </button>
                     </form>
                   )}
@@ -339,24 +324,24 @@ export default async function PersonasPage({
                       type="submit"
                       className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface"
                     >
-                      削除
+                      {t("personasPage.delete")}
                     </button>
                   </form>
                 </div>
               </div>
               {persona.origin_note && (
-                <p className="mt-2 text-xs text-ink-faint">生成理由: {persona.origin_note}</p>
+                <p className="mt-2 text-xs text-ink-faint">{t("personasPage.origin", { note: persona.origin_note })}</p>
               )}
               <div className="mt-2 flex items-center gap-2">
                 {persona.shared_at ? (
                   <>
-                    <span className="text-xs text-accent">共有ライブラリに公開中</span>
+                    <span className="text-xs text-accent">{t("personasPage.sharedNow")}</span>
                     <form action={boundUnshareAction}>
                       <button
                         type="submit"
                         className="rounded-md border border-line px-2 py-0.5 text-xs text-ink hover:bg-surface"
                       >
-                        共有を取り消す
+                        {t("personasPage.unshare")}
                       </button>
                     </form>
                   </>
@@ -367,7 +352,7 @@ export default async function PersonasPage({
                         type="submit"
                         className="rounded-md border border-line px-2 py-0.5 text-xs text-ink hover:bg-surface"
                       >
-                        共有ライブラリに公開する
+                        {t("personasPage.share")}
                       </button>
                     </form>
                   )
@@ -375,20 +360,20 @@ export default async function PersonasPage({
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-line-soft pt-2">
                 <span className="text-xs text-ink-faint">
-                  アバター: {AVATAR_STATUS_LABELS[persona.avatar_status]}
+                  {t("personasPage.avatarLine", { s: t(`personaEnums.avatar_${persona.avatar_status}`) })}
                   {avatar && ` — ${avatar.label}`}
                 </span>
                 <form action={boundRecommendAvatarAction}>
                   <SubmitButton
-                    pendingText="推薦中…"
+                    pendingText={t("personasPage.recommending")}
                     className="rounded-md border border-line px-2 py-0.5 text-xs text-ink hover:bg-surface disabled:opacity-50"
                   >
-                    {persona.avatar_id ? "AIに再推薦させる" : "AIに推薦させる"}
+                    {persona.avatar_id ? t("personasPage.reRecommend") : t("personasPage.recommend")}
                   </SubmitButton>
                 </form>
                 <form action={boundSetAvatarAction} className="flex items-center gap-1">
                   <label className="sr-only" htmlFor={`avatar-select-${persona.id}`}>
-                    アバターを手動で選択
+                    {t("personasPage.pickManual")}
                   </label>
                   <select
                     id={`avatar-select-${persona.id}`}
@@ -397,7 +382,7 @@ export default async function PersonasPage({
                     className="rounded-md border border-line px-2 py-0.5 text-xs bg-surface-raised"
                   >
                     <option value="" disabled>
-                      手動で選ぶ
+                      {t("personasPage.manual")}
                     </option>
                     {avatarOptionRows.map((option) => (
                       <option key={option.id} value={option.id}>
@@ -409,7 +394,7 @@ export default async function PersonasPage({
                     type="submit"
                     className="rounded-md border border-line px-2 py-0.5 text-xs text-ink hover:bg-surface"
                   >
-                    変更する
+                    {t("personasPage.change")}
                   </button>
                 </form>
               </div>
@@ -420,7 +405,7 @@ export default async function PersonasPage({
           );
         })}
         {rows.length === 0 && (
-          <li className="text-sm text-ink-muted">まだペルソナがありません。上のフォームから作成してください。</li>
+          <li className="text-sm text-ink-muted">{t("personasPage.none")}</li>
         )}
       </ul>
 
@@ -428,40 +413,40 @@ export default async function PersonasPage({
 
       <details className="mt-6 rounded-lg border border-line p-5">
         <summary className="cursor-pointer text-sm font-medium text-ink">
-          ペルソナを手動で作成する
+          {t("personasPage.manualSummary")}
         </summary>
         <div className="mt-4">
-          <PersonaForm action={boundCreateAction} submitLabel="作成する" />
+          <PersonaForm action={boundCreateAction} submitLabel={t("personasPage.create")} />
         </div>
       </details>
 
       <details className="mt-3 rounded-lg border border-line p-5">
         <summary className="cursor-pointer text-sm font-medium text-ink">
-          学習進化型ペルソナ
+          {t("personasPage.evolvedSummary")}
         </summary>
         <p className="mt-1 text-sm text-ink-muted">
-          同意済みの学習者の記録から、3〜5個の下書きを作ります(同意済みが3人以上のとき)。
+          {t("personasPage.evolvedLead")}
         </p>
         <form action={boundGenerateEvolvedAction} className="mt-3">
           <SubmitButton
-            pendingText="生成中…"
+            pendingText={t("personasPage.generating")}
             className="rounded-md border border-line px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface disabled:opacity-50"
           >
-            学習進化型ペルソナを生成する
+            {t("personasPage.generateEvolved")}
           </SubmitButton>
         </form>
 
         {corpusEntries && corpusEntries.length > 0 && (
           <details className="mt-4">
             <summary className="cursor-pointer text-xs text-ink-muted">
-              抽出された論点・誤概念・有効な問い({corpusEntries.length}件)
+              {t("personasPage.extracted", { n: corpusEntries.length })}
             </summary>
             <ul className="mt-2 space-y-2 text-xs text-ink-muted">
               {(corpusEntries as CorpusEntryRow[]).map((entry) => (
                 <li key={entry.id} className="rounded-md border border-line p-2">
-                  <p>論点: {entry.topic}</p>
-                  {entry.misconception && <p>誤概念: {entry.misconception}</p>}
-                  {entry.effective_question && <p>有効な問い: {entry.effective_question}</p>}
+                  <p>{t("personasPage.topic", { t: entry.topic })}</p>
+                  {entry.misconception && <p>{t("personasPage.misconception", { t: entry.misconception })}</p>}
+                  {entry.effective_question && <p>{t("personasPage.effectiveQuestion", { t: entry.effective_question })}</p>}
                 </li>
               ))}
             </ul>

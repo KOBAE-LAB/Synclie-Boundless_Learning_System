@@ -1,4 +1,6 @@
 import { THINKING_DEPTHS, REPLY_TEMPOS } from "@/lib/persona-traits";
+import { getT } from "@/lib/i18n/server";
+import type { DictKey } from "@/lib/i18n/translate";
 
 // F03: ペルソナ設定フォーム。作成・編集の両方で使う共通コンポーネント。
 // 要件定義書5章「擬似メンバーの構造」の4要素のうち、知識源(授業RAG)は
@@ -22,7 +24,7 @@ export interface PersonaFormValues {
 const inputClassName =
   "w-full rounded-md border border-line px-3 py-2 text-sm bg-surface-raised";
 
-export function PersonaForm({
+export async function PersonaForm({
   action,
   submitLabel,
   defaultValues,
@@ -32,62 +34,63 @@ export function PersonaForm({
   defaultValues?: Partial<PersonaFormValues>;
 }) {
   const v = defaultValues ?? {};
+  const { t } = await getT();
 
   return (
     <form action={action} className="space-y-6">
       <fieldset className="space-y-3">
         <legend className="text-sm font-medium text-ink">
-          プロフィール
+          {t("personaForm.profile")}
         </legend>
         <label htmlFor="persona-name" className="sr-only">
-          名前
+          {t("personaForm.name")}
         </label>
         <input
           id="persona-name"
           name="name"
-          placeholder="名前(例: ミライさん)"
+          placeholder={t("personaForm.namePlaceholder")}
           required
           defaultValue={v.name}
           className={inputClassName}
         />
         <label htmlFor="persona-role" className="sr-only">
-          役割
+          {t("personaForm.role")}
         </label>
         <input
           id="persona-role"
           name="role"
-          placeholder="役割(例: クラスメイト、先輩)"
+          placeholder={t("personaForm.rolePlaceholder")}
           defaultValue={v.role}
           className={inputClassName}
         />
         <label htmlFor="persona-developmental-stage" className="sr-only">
-          発達段階
+          {t("personaForm.stage")}
         </label>
         <input
           id="persona-developmental-stage"
           name="developmentalStage"
-          placeholder="発達段階(例: 小学5年生相当)"
+          placeholder={t("personaForm.stagePlaceholder")}
           defaultValue={v.developmentalStage}
           className={inputClassName}
         />
         <label htmlFor="persona-existing-knowledge" className="sr-only">
-          既有知識
+          {t("personaForm.knowledge")}
         </label>
         <textarea
           id="persona-existing-knowledge"
           name="existingKnowledge"
-          placeholder="既有知識(このペルソナが既に知っている前提)"
+          placeholder={t("personaForm.knowledgePlaceholder")}
           rows={2}
           defaultValue={v.existingKnowledge}
           className={inputClassName}
         />
         <label htmlFor="persona-tone" className="sr-only">
-          口調
+          {t("personaForm.tone")}
         </label>
         <input
           id="persona-tone"
           name="tone"
-          placeholder="口調(例: 友達言葉、丁寧語)"
+          placeholder={t("personaForm.tonePlaceholder")}
           defaultValue={v.tone}
           className={inputClassName}
         />
@@ -95,26 +98,26 @@ export function PersonaForm({
 
       <fieldset className="space-y-3">
         <legend className="text-sm font-medium text-ink">
-          立場と目標
+          {t("personaForm.stanceGoal")}
         </legend>
         <label htmlFor="persona-stance-position" className="sr-only">
-          立場
+          {t("personaForm.position")}
         </label>
         <textarea
           id="persona-stance-position"
           name="stancePosition"
-          placeholder="立場(例: 現場の見取りを重んじる視点。対立する立場を代表させたい場合はここに書く)"
+          placeholder={t("personaForm.positionPlaceholder")}
           rows={2}
           defaultValue={v.stancePosition}
           className={inputClassName}
         />
         <label htmlFor="persona-stance-goal" className="sr-only">
-          目標
+          {t("personaForm.goal")}
         </label>
         <input
           id="persona-stance-goal"
           name="stanceGoal"
-          placeholder="目標(例: 学習者に具体例を求め続ける)"
+          placeholder={t("personaForm.goalPlaceholder")}
           defaultValue={v.stanceGoal}
           className={inputClassName}
         />
@@ -122,14 +125,13 @@ export function PersonaForm({
 
       <fieldset className="space-y-3">
         <legend className="text-sm font-medium text-ink">
-          行動ルール
+          {t("personaForm.rules")}
         </legend>
         <p className="text-xs text-ink-muted">
-          AI明示・資料限定・同調禁止・問い返しなどの共通ガードレールは全ペルソナに常に適用される
-          (src/lib/ai/persona.ts の COMMON_GUARDRAILS)。ここではこのペルソナ固有の調整のみ設定する。
+          {t("personaForm.rulesNote")}
         </p>
         <label htmlFor="persona-speaking-frequency" className="sr-only">
-          発言頻度
+          {t("personaForm.freq")}
         </label>
         <select
           id="persona-speaking-frequency"
@@ -137,12 +139,12 @@ export function PersonaForm({
           defaultValue={v.speakingFrequency ?? "普通"}
           className={inputClassName}
         >
-          <option value="控えめ">発言頻度: 控えめ</option>
-          <option value="普通">発言頻度: 普通</option>
-          <option value="積極的">発言頻度: 積極的</option>
+          <option value="控えめ">{t("personaForm.freqQuiet")}</option>
+          <option value="普通">{t("personaForm.freqNormal")}</option>
+          <option value="積極的">{t("personaForm.freqActive")}</option>
         </select>
         <label htmlFor="persona-teaching-degree" className="sr-only">
-          教える度合い
+          {t("personaForm.teach")}
         </label>
         <select
           id="persona-teaching-degree"
@@ -150,12 +152,12 @@ export function PersonaForm({
           defaultValue={v.teachingDegree ?? "問い返す"}
           className={inputClassName}
         >
-          <option value="問い返すのみ">教える度合い: 問い返すのみ(答えを直接教えない)</option>
-          <option value="ヒントを出す">教える度合い: ヒントを出す</option>
-          <option value="直接説明する">教える度合い: 直接説明する</option>
+          <option value="問い返すのみ">{t("personaForm.teachAsk")}</option>
+          <option value="ヒントを出す">{t("personaForm.teachHint")}</option>
+          <option value="直接説明する">{t("personaForm.teachDirect")}</option>
         </select>
         <label htmlFor="persona-thinking-depth" className="sr-only">
-          考え方の深さ
+          {t("personaForm.depth")}
         </label>
         <select
           id="persona-thinking-depth"
@@ -163,15 +165,14 @@ export function PersonaForm({
           defaultValue={v.thinkingDepth ?? "標準"}
           className={inputClassName}
         >
-          {THINKING_DEPTHS.map((d) => (
+          {THINKING_DEPTHS.map((d, i) => (
             <option key={d} value={d}>
-              考え方の深さ: {d}
-              {d === "直感的" ? "(印象や経験から、短く素早く)" : d === "じっくり論理的" ? "(前提・根拠・反例を分けて、筋道立てて)" : ""}
+              {t(`personaForm.depth${i}` as DictKey)}
             </option>
           ))}
         </select>
         <label htmlFor="persona-reply-tempo" className="sr-only">
-          返答のテンポ
+          {t("personaForm.tempo")}
         </label>
         <select
           id="persona-reply-tempo"
@@ -179,23 +180,22 @@ export function PersonaForm({
           defaultValue={v.replyTempo ?? "ふつう"}
           className={inputClassName}
         >
-          {REPLY_TEMPOS.map((t) => (
-            <option key={t} value={t}>
-              返答のテンポ: {t}
-              {t === "すばやい" ? "(すぐ答える)" : t === "ゆっくり" ? "(間をおいて、ゆっくり答える)" : ""}
+          {REPLY_TEMPOS.map((tempo, i) => (
+            <option key={tempo} value={tempo}>
+              {t(`personaForm.tempo${i}` as DictKey)}
             </option>
           ))}
         </select>
         <p className="text-xs text-ink-muted">
-          「返答のテンポ」は、返答が画面に出るまでの間と、文字の出る速さの個性です(AIの実際の生成速度は変わりません)。
+          {t("personaForm.tempoNote")}
         </p>
         <label htmlFor="persona-intervention-condition" className="sr-only">
-          介入の条件
+          {t("personaForm.intervene")}
         </label>
         <textarea
           id="persona-intervention-condition"
           name="interventionCondition"
-          placeholder="介入の条件(例: 学習者が5分以上行き詰まったときのみ発言する)"
+          placeholder={t("personaForm.intervenePlaceholder")}
           rows={2}
           defaultValue={v.interventionCondition}
           className={inputClassName}

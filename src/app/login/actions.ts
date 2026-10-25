@@ -2,6 +2,7 @@
 
 import { AuthError } from "next-auth";
 import { signIn } from "@/auth";
+import { getT } from "@/lib/i18n/server";
 
 export type LoginState = { error?: string } | undefined;
 
@@ -9,6 +10,7 @@ export async function loginAction(
   _prevState: LoginState,
   formData: FormData,
 ): Promise<LoginState> {
+  const { t } = await getT();
   const email = formData.get("email");
   const password = formData.get("password");
 
@@ -23,12 +25,12 @@ export async function loginAction(
     if (error instanceof AuthError) {
       const code = (error as { code?: string }).code;
       if (code === "pending_approval") {
-        return { error: "このアカウントは管理者の承認待ちです。承認されるまでログインできません。" };
+        return { error: t("login.errPending") };
       }
       if (code === "rejected") {
-        return { error: "このアカウントの登録は承認されませんでした。" };
+        return { error: t("login.errRejected") };
       }
-      return { error: "メールアドレスまたはパスワードが正しくありません。" };
+      return { error: t("login.errInvalid") };
     }
     // NextAuth はリダイレクト成功時に例外を投げて遷移させる実装のため、再送出する。
     throw error;

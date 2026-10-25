@@ -2,6 +2,8 @@
 
 import { hasRecentIdenticalSubmission, tryAcquireSubmissionLock } from "@/lib/learn/duplicate-guard";
 import { revalidatePath } from "next/cache";
+import { getLang, getT } from "@/lib/i18n/server";
+import type { DictKey, Vars } from "@/lib/i18n/translate";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
 import { recordRetrievals, retrieveForTurn } from "@/lib/learn/members";
@@ -35,6 +37,11 @@ import {
   postStudentMessageAndRespond,
 } from "@/lib/learn/dialogue";
 
+// 画面の言語でのメッセージ(エラーなど)。
+async function msg(key: DictKey, vars?: Vars): Promise<string> {
+  return (await getT()).t(key, vars);
+}
+
 // 「テンポ」設定: 学習者が何秒か発言しない状態が続いたら、擬似メンバー同士で
 // 会話を1ターンだけ自動的に継続する(学習者本人の発言を待たない)。クライアント側の
 // 沈黙タイマー(AutoDiscussionTimer)から呼ばれる。無効化されている・上限に達している・
@@ -42,6 +49,7 @@ import {
 // 操作ではないため、失敗しても対話画面は静かに元のまま)。
 export async function autoContinueDiscussionAction(courseId: string) {
   const { user } = await requireRole("student");
+  const lang = await getLang();
   const admin = createAdminClient();
 
   // 探究学習モード(0044、時間差が基本)では、グループでも個人でも、沈黙は自然なことなので、AI同士の自動継続はしない。
@@ -150,6 +158,7 @@ export async function autoContinueDiscussionAction(courseId: string) {
     otherParticipants,
     memory: memories.get(persona.id)?.memory.text,
     courseContext: withStepContext(buildCourseContext(course), stepContextFor(flow)),
+    lang,
   };
 
   // 擬似メンバーが2人以上いる授業では、沈黙時の継続も、メンバー同士が自然にやり取りする
@@ -171,6 +180,7 @@ export async function autoContinueDiscussionAction(courseId: string) {
           calledOut: [],
           silence: true,
           reasoningEffort: reasoningEffortFor(course.reasoning_depth),
+          lang,
         },
         history,
         toScenePersona(persona, memories.get(persona.id)?.memory.text),
@@ -228,7 +238,7 @@ export async function updateSessionTempoAction(courseId: string, formData: FormD
     .update({ auto_discussion_tempo_seconds: value })
     .eq("id", sessionId);
   if (error) {
-    throw new Error(`テンポ設定の保存に失敗しました: ${error.message}`);
+    throw new Error(await msg("lessonActions.saveTempoFailed", { detail: error.message }));
   }
 
   revalidatePath(`/learn/${courseId}`);
@@ -277,10 +287,10 @@ export async function uploadHandwritingAction(courseId: string, formData: FormDa
 
   const file = formData.get("image");
   if (!(file instanceof File) || file.size === 0) {
-    throw new Error("画像ファイルを選択してください。");
+    throw new Error(await msg("lessonActions.pickImage"));
   }
   if (!file.type.startsWith("image/")) {
-    throw new Error("画像ファイルを選択してください。");
+    throw new Error(await msg("lessonActions.pickImage"));
   }
 
   const admin = createAdminClient();
@@ -291,7 +301,7 @@ export async function uploadHandwritingAction(courseId: string, formData: FormDa
     .eq("id", courseId)
     .maybeSingle();
   if (!course) {
-    throw new Error("授業が見つかりません。");
+    throw new Error(await msg("dialogue.lessonNotFound"));
   }
 
   const sessionId = await getOrCreateSession(admin, courseId, user.id);
@@ -304,7 +314,7 @@ export async function uploadHandwritingAction(courseId: string, formData: FormDa
     .from("handwriting")
     .upload(path, buffer, { contentType: file.type });
   if (uploadError) {
-    throw new Error(`画像のアップロードに失敗しました: ${uploadError.message}`);
+    throw new Error(await msg("lessonActions.imageUploadFailed", { detail: uploadError.message }));
   }
 
   const { data: uploadRow, error: insertError } = await admin
@@ -313,7 +323,7 @@ export async function uploadHandwritingAction(courseId: string, formData: FormDa
     .select("id")
     .single();
   if (insertError || !uploadRow) {
-    throw new Error(`アップロード記録の作成に失敗しました: ${insertError?.message ?? "不明なエラー"}`);
+    throw new Error(await msg("lessonActions.createUploadFailed", { detail: insertError?.message ?? (await msg("dialogue.unknownError")) }));
   }
 
   try {
@@ -323,7 +333,7 @@ export async function uploadHandwritingAction(courseId: string, formData: FormDa
       .update({ recognized_text: recognizedText, status: "ready", error: null })
       .eq("id", uploadRow.id);
   } catch (err) {
-    const message = err instanceof Error ? err.message : "不明なエラーが発生しました。";
+    const message = err instanceof Error ? err.message : await msg("dashboard.errUnknown");
     await admin.from("handwriting_uploads").update({ status: "failed", error: message }).eq("id", uploadRow.id);
   }
 
@@ -341,15 +351,15 @@ export async function confirmHandwritingAction(courseId: string, uploadId: strin
     .eq("id", uploadId)
     .maybeSingle();
   if (!upload || upload.student_id !== user.id) {
-    throw new Error("アップロードが見つかりません。");
+    throw new Error(await msg("lessonActions.uploadNotFound"));
   }
   if (upload.status !== "ready") {
-    throw new Error("この画像はまだ認識結果を確認できる状態ではありません。");
+    throw new Error(await msg("lessonActions.imageNotReady"));
   }
 
   const message = String(formData.get("message") ?? "").trim();
   if (!message) {
-    throw new Error("発言を入力してください。");
+    throw new Error(await msg("lessonActions.enterMessage"));
   }
 
   await postStudentMessageAndRespond(admin, courseId, user.id, message, {
@@ -371,7 +381,7 @@ export async function discardHandwritingAction(courseId: string, uploadId: strin
     .eq("id", uploadId)
     .maybeSingle();
   if (!upload || upload.student_id !== user.id) {
-    throw new Error("アップロードが見つかりません。");
+    throw new Error(await msg("lessonActions.uploadNotFound"));
   }
 
   await admin.storage.from("handwriting").remove([upload.image_path]);
@@ -388,10 +398,10 @@ export async function uploadAudioAction(courseId: string, formData: FormData) {
 
   const file = formData.get("audio");
   if (!(file instanceof File) || file.size === 0) {
-    throw new Error("音声ファイルを選択してください。");
+    throw new Error(await msg("lessonActions.pickAudio"));
   }
   if (!file.type.startsWith("audio/")) {
-    throw new Error("音声ファイルを選択してください。");
+    throw new Error(await msg("lessonActions.pickAudio"));
   }
 
   const admin = createAdminClient();
@@ -402,7 +412,7 @@ export async function uploadAudioAction(courseId: string, formData: FormData) {
     .eq("id", courseId)
     .maybeSingle();
   if (!course) {
-    throw new Error("授業が見つかりません。");
+    throw new Error(await msg("dialogue.lessonNotFound"));
   }
 
   const sessionId = await getOrCreateSession(admin, courseId, user.id);
@@ -415,7 +425,7 @@ export async function uploadAudioAction(courseId: string, formData: FormData) {
     .from("audio")
     .upload(path, buffer, { contentType: file.type });
   if (uploadError) {
-    throw new Error(`音声のアップロードに失敗しました: ${uploadError.message}`);
+    throw new Error(await msg("lessonActions.audioUploadFailed", { detail: uploadError.message }));
   }
 
   const { data: uploadRow, error: insertError } = await admin
@@ -424,7 +434,7 @@ export async function uploadAudioAction(courseId: string, formData: FormData) {
     .select("id")
     .single();
   if (insertError || !uploadRow) {
-    throw new Error(`アップロード記録の作成に失敗しました: ${insertError?.message ?? "不明なエラー"}`);
+    throw new Error(await msg("lessonActions.createUploadFailed", { detail: insertError?.message ?? (await msg("dialogue.unknownError")) }));
   }
 
   try {
@@ -434,7 +444,7 @@ export async function uploadAudioAction(courseId: string, formData: FormData) {
       .update({ transcribed_text: transcribedText, status: "ready", error: null })
       .eq("id", uploadRow.id);
   } catch (err) {
-    const message = err instanceof Error ? err.message : "不明なエラーが発生しました。";
+    const message = err instanceof Error ? err.message : await msg("dashboard.errUnknown");
     await admin.from("audio_uploads").update({ status: "failed", error: message }).eq("id", uploadRow.id);
   }
 
@@ -452,15 +462,15 @@ export async function confirmAudioAction(courseId: string, uploadId: string, for
     .eq("id", uploadId)
     .maybeSingle();
   if (!upload || upload.student_id !== user.id) {
-    throw new Error("アップロードが見つかりません。");
+    throw new Error(await msg("lessonActions.uploadNotFound"));
   }
   if (upload.status !== "ready") {
-    throw new Error("この音声はまだ文字起こし結果を確認できる状態ではありません。");
+    throw new Error(await msg("lessonActions.audioNotReady"));
   }
 
   const message = String(formData.get("message") ?? "").trim();
   if (!message) {
-    throw new Error("発言を入力してください。");
+    throw new Error(await msg("lessonActions.enterMessage"));
   }
 
   await postStudentMessageAndRespond(admin, courseId, user.id, message, {
@@ -482,7 +492,7 @@ export async function discardAudioAction(courseId: string, uploadId: string) {
     .eq("id", uploadId)
     .maybeSingle();
   if (!upload || upload.student_id !== user.id) {
-    throw new Error("アップロードが見つかりません。");
+    throw new Error(await msg("lessonActions.uploadNotFound"));
   }
 
   await admin.storage.from("audio").remove([upload.audio_path]);
@@ -500,7 +510,7 @@ export async function submitOutcomeAction(courseId: string, formData: FormData) 
 
   const content = String(formData.get("content") ?? "").trim();
   if (!content) {
-    throw new Error("成果の内容を入力してください。");
+    throw new Error(await msg("lessonActions.enterOutcome"));
   }
 
   const admin = createAdminClient();
@@ -511,7 +521,7 @@ export async function submitOutcomeAction(courseId: string, formData: FormData) 
     .eq("id", courseId)
     .maybeSingle();
   if (!course) {
-    throw new Error("授業が見つかりません。");
+    throw new Error(await msg("dialogue.lessonNotFound"));
   }
 
   // 二重送信(ボタンの二重押し・再送)で、同じ成果が2件できないようにする。
@@ -541,7 +551,7 @@ export async function submitOutcomeAction(courseId: string, formData: FormData) 
       course_label: context.courseLabel,
     });
     if (error) {
-      throw new Error(`成果の提出に失敗しました: ${error.message}`);
+      throw new Error(await msg("lessonActions.submitFailed", { detail: error.message }));
     }
   } finally {
     release();
@@ -562,14 +572,14 @@ export async function saveReflectionAction(courseId: string, submissionId: strin
     .eq("id", submissionId)
     .maybeSingle();
   if (!submission || submission.course_id !== courseId || submission.student_id !== user.id) {
-    throw new Error("成果が見つかりません。");
+    throw new Error(await msg("lessonActions.submissionNotFound"));
   }
 
   const whatLearned = String(formData.get("whatLearned") ?? "").trim();
   const whatConfused = String(formData.get("whatConfused") ?? "").trim();
   const nextGoal = String(formData.get("nextGoal") ?? "").trim();
   if (!whatLearned || !whatConfused || !nextGoal) {
-    throw new Error("学んだこと・迷ったこと・次にやりたいことを、すべて入力してください。");
+    throw new Error(await msg("lessonActions.enterReflection"));
   }
   const sharedWithTeacher = formData.get("sharedWithTeacher") === "on";
 
@@ -586,7 +596,7 @@ export async function saveReflectionAction(courseId: string, submissionId: strin
     { onConflict: "submission_id" },
   );
   if (error) {
-    throw new Error(`振り返りの保存に失敗しました: ${error.message}`);
+    throw new Error(await msg("lessonActions.saveReflectionFailed", { detail: error.message }));
   }
 
   revalidatePath(`/learn/${courseId}`);
@@ -606,7 +616,7 @@ export async function generateFeedbackAction(courseId: string, submissionId: str
     .eq("id", submissionId)
     .maybeSingle();
   if (!submission || submission.course_id !== courseId || submission.student_id !== user.id) {
-    throw new Error("成果が見つかりません。");
+    throw new Error(await msg("lessonActions.submissionNotFound"));
   }
 
   await admin
@@ -622,7 +632,7 @@ export async function generateFeedbackAction(courseId: string, submissionId: str
       .order("position", { ascending: true });
 
     if (!criteria || criteria.length === 0) {
-      throw new Error("この授業には評価の観点がまだ設定されていません。教師に設定を依頼してください。");
+      throw new Error(await msg("lessonActions.noCriteria"));
     }
 
     const materialChunks = await searchMaterialChunks(courseId, submission.content);
@@ -635,6 +645,7 @@ export async function generateFeedbackAction(courseId: string, submissionId: str
       criteria: criteria.map((c) => ({ label: c.label, description: c.description })),
       submissionContent: submission.content,
       materialText,
+      lang: await getLang(),
     });
 
     const { error: deleteError } = await admin
@@ -642,7 +653,7 @@ export async function generateFeedbackAction(courseId: string, submissionId: str
       .delete()
       .eq("submission_id", submissionId);
     if (deleteError) {
-      throw new Error(`既存フィードバックの削除に失敗しました: ${deleteError.message}`);
+      throw new Error(await msg("lessonActions.deleteFeedbackFailed", { detail: deleteError.message }));
     }
 
     const criteriaByLabel = new Map(criteria.map((c) => [c.label, c.id]));
@@ -658,7 +669,7 @@ export async function generateFeedbackAction(courseId: string, submissionId: str
     if (rows.length > 0) {
       const { error: insertError } = await admin.from("submission_feedback").insert(rows);
       if (insertError) {
-        throw new Error(`フィードバックの保存に失敗しました: ${insertError.message}`);
+        throw new Error(await msg("lessonActions.saveFeedbackFailed", { detail: insertError.message }));
       }
     }
 
@@ -669,7 +680,7 @@ export async function generateFeedbackAction(courseId: string, submissionId: str
   } catch (err) {
     // ステータスを failed にして理由を保存する。ここでは投げ直さず、
     // 学習者が画面上でエラー内容を見て「再生成」できるようにする(F02と同じ方針)。
-    const message = err instanceof Error ? err.message : "不明なエラーが発生しました。";
+    const message = err instanceof Error ? err.message : await msg("dashboard.errUnknown");
     await admin
       .from("submissions")
       .update({ feedback_status: "failed", feedback_error: message })
@@ -695,7 +706,7 @@ export async function judgeDiscussionAction(courseId: string, submissionId: stri
     .eq("id", submissionId)
     .maybeSingle();
   if (!submission || submission.course_id !== courseId || submission.student_id !== user.id) {
-    throw new Error("成果が見つかりません。");
+    throw new Error(await msg("lessonActions.submissionNotFound"));
   }
 
   await admin
@@ -705,7 +716,7 @@ export async function judgeDiscussionAction(courseId: string, submissionId: stri
 
   try {
     if (!submission.session_id) {
-      throw new Error("この成果に紐づく対話セッションが見つかりません。");
+      throw new Error(await msg("lessonActions.noSession"));
     }
 
     const { data: rawTurnRows } = await admin
@@ -716,7 +727,7 @@ export async function judgeDiscussionAction(courseId: string, submissionId: stri
     // 教師が監査で直した発言は、直した内容でジャッジする。
     const turnRows = await applyTurnCorrections(admin, rawTurnRows ?? []);
     if (turnRows.length === 0) {
-      throw new Error("議論の記録がまだありません。擬似メンバーと議論してから提出してください。");
+      throw new Error(await msg("lessonActions.noDiscussion"));
     }
 
     const transcriptText = turnRows
@@ -729,14 +740,14 @@ export async function judgeDiscussionAction(courseId: string, submissionId: stri
         ? materialChunks.map((chunk, i) => `[資料${i + 1}]\n${chunk}`).join("\n\n")
         : "(この議論に関連する資料は見つからなかった。)";
 
-    const judgment = await judgeDiscussion(materialText, transcriptText);
+    const judgment = await judgeDiscussion(materialText, transcriptText, await getLang());
 
     const { error: deleteError } = await admin
       .from("discussion_judgments")
       .delete()
       .eq("submission_id", submissionId);
     if (deleteError) {
-      throw new Error(`既存のジャッジの削除に失敗しました: ${deleteError.message}`);
+      throw new Error(await msg("lessonActions.deleteJudgeFailed", { detail: deleteError.message }));
     }
 
     const { error: insertError } = await admin.from("discussion_judgments").insert({
@@ -747,7 +758,7 @@ export async function judgeDiscussionAction(courseId: string, submissionId: stri
       summary_comment: judgment.総評,
     });
     if (insertError) {
-      throw new Error(`ジャッジの保存に失敗しました: ${insertError.message}`);
+      throw new Error(await msg("lessonActions.saveJudgeFailed", { detail: insertError.message }));
     }
 
     await admin
@@ -755,7 +766,7 @@ export async function judgeDiscussionAction(courseId: string, submissionId: stri
       .update({ judgment_status: "done", judgment_error: null })
       .eq("id", submissionId);
   } catch (err) {
-    const message = err instanceof Error ? err.message : "不明なエラーが発生しました。";
+    const message = err instanceof Error ? err.message : await msg("dashboard.errUnknown");
     await admin
       .from("submissions")
       .update({ judgment_status: "failed", judgment_error: message })
@@ -773,7 +784,7 @@ export async function toggleKeepForJuniorsAction(courseId: string, turnId: strin
 
   // 本人の、この授業回の議論の発言だけ(他人の議論には印を付けられない)
   const session = await loadOwnTurnSession(admin, { turnId, studentId: user.id, courseId });
-  if (!session) throw new Error("発言が見つかりません。");
+  if (!session) throw new Error(await msg("lessonActions.turnNotFound"));
   await assertLessonOpen(admin, courseId);
 
   const { data: existing } = await admin
@@ -799,14 +810,14 @@ export async function toggleKeepForJuniorsAction(courseId: string, turnId: strin
 export async function declareStageAction(courseId: string, formData: FormData) {
   const { user } = await requireRole("student");
   const admin = createAdminClient();
-  if (!(await isEnrolled(admin, courseId, user.id))) throw new Error("この授業に参加していません。");
+  if (!(await isEnrolled(admin, courseId, user.id))) throw new Error(await msg("lessonActions.notEnrolled"));
   await assertLessonOpen(admin, courseId);
 
   const stage = formData.get("stage");
-  if (!isStageKey(stage)) throw new Error("段階を選んでください。");
+  if (!isStageKey(stage)) throw new Error(await msg("lessonActions.pickStage"));
 
   const context = await recordContextFor(admin, courseId, user.id);
-  if (!context.projectId) throw new Error("探究の記録を用意できませんでした。もう一度お試しください。");
+  if (!context.projectId) throw new Error(await msg("lessonActions.stageFailed"));
   await transitionStage(admin, { projectId: context.projectId, to: stage, decidedBy: "learner", profileId: user.id, courseId });
   revalidatePath(`/learn/${courseId}`);
 }

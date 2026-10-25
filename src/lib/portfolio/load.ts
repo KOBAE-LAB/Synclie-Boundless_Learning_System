@@ -1,5 +1,6 @@
 import type { createAdminClient } from "@/lib/supabase/server";
 import { loadLessonLabels } from "@/lib/courses/series";
+import type { Lang } from "@/lib/i18n/config";
 import { fiscalYearOf, readAssessment } from "./assessment";
 import type { DiscussionSummary, Portfolio, PortfolioEntry } from "./types";
 
@@ -32,7 +33,7 @@ function readDiscussion(value: unknown): DiscussionSummary | null {
 export async function loadPortfolio(
   admin: AdminClient,
   studentId: string,
-  options: { courseId?: string } = {},
+  options: { courseId?: string; lang?: Lang } = {},
 ): Promise<Portfolio> {
   const { data: profile } = await admin.from("profiles").select("display_name").eq("id", studentId).maybeSingle();
 
@@ -56,7 +57,7 @@ export async function loadPortfolio(
   const sessionIds = [...new Set(submissions.map((s) => s.session_id).filter((id): id is string => !!id))];
 
   const [courses, feedback, judgments, reflections, entries, sessions] = await Promise.all([
-    loadLessonLabels(admin, courseIds),
+    loadLessonLabels(admin, courseIds, options.lang),
     admin.from("submission_feedback").select("submission_id, criteria_label, good_points, next_question").in("submission_id", submissionIds),
     admin.from("discussion_judgments").select("submission_id, logic_structure, evidence_quality, rebuttal_response, summary_comment").in("submission_id", submissionIds),
     admin.from("reflections").select("submission_id, what_learned, what_confused, next_goal").in("submission_id", submissionIds),

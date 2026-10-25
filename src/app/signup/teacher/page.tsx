@@ -1,3 +1,4 @@
+import { getT } from "@/lib/i18n/server";
 import Link from "next/link";
 import Image from "next/image";
 import { SubmitButton } from "@/components/submit-button";
@@ -9,15 +10,16 @@ export default async function SignupTeacherPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   const { error } = await searchParams;
+  const { t } = await getT();
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-canvas px-4">
       <div className="w-full max-w-sm space-y-4 rounded-lg border border-line bg-surface p-8 shadow-sm">
         <div>
           <Image src="/logo.png" alt="" width={56} height={56} priority className="mb-3 rounded-full" />
-          <h1 className="text-xl font-semibold text-ink">教師として登録</h1>
+          <h1 className="text-xl font-semibold text-ink">{t("signup.asTeacher")}</h1>
           <p className="mt-1 text-sm text-ink-muted">
-            登録後、管理者が承認するまでログインできません。承認されると利用できます。
+            {t("signup.teacherLead")}
           </p>
         </div>
 
@@ -30,7 +32,7 @@ export default async function SignupTeacherPage({
         <form action={signupTeacherAction} className="space-y-4">
           <div className="space-y-1">
             <label htmlFor="name" className="text-sm font-medium text-ink">
-              お名前
+              {t("signup.name")}
             </label>
             <input
               id="name"
@@ -43,7 +45,7 @@ export default async function SignupTeacherPage({
           </div>
           <div className="space-y-1">
             <label htmlFor="email" className="text-sm font-medium text-ink">
-              メールアドレス
+              {t("signup.email")}
             </label>
             <input
               id="email"
@@ -56,7 +58,7 @@ export default async function SignupTeacherPage({
           </div>
           <div className="space-y-1">
             <label htmlFor="password" className="text-sm font-medium text-ink">
-              パスワード(10文字以上)
+              {t("signup.password")}
             </label>
             <input
               id="password"
@@ -69,15 +71,15 @@ export default async function SignupTeacherPage({
             />
           </div>
           <SubmitButton
-            pendingText="登録中…"
+            pendingText={t("signup.registering")}
             className="w-full rounded-md bg-accent-fill px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-fill-hover disabled:opacity-50"
           >
-            登録する
+            {t("signup.register")}
           </SubmitButton>
         </form>
 
         <Link href="/signup" className="inline-block text-sm text-ink-muted underline underline-offset-2">
-          ← 戻る
+          {t("signup.back")}
         </Link>
       </div>
     </div>

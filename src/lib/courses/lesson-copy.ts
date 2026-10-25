@@ -1,5 +1,10 @@
+import { getT } from "@/lib/i18n/server";
+import type { DictKey, Vars } from "@/lib/i18n/translate";
 import { createAdminClient } from "@/lib/supabase/server";
 import { lessonName } from "@/lib/courses/series";
+
+// 画面の言語でのメッセージ(エラーなど)。
+const rt = async (key: DictKey, vars?: Vars): Promise<string> => (await getT()).t(key, vars);
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -13,12 +18,12 @@ export interface CopyResult {
 
 /** 同じ教科・科目の授業回どうしだけ、複製できる(他の教科・科目の授業回からは複製しない)。 */
 async function loadSameSeriesPair(admin: AdminClient, fromCourseId: string, toCourseId: string) {
-  if (fromCourseId === toCourseId) throw new Error("複製元と複製先が同じ授業回です。");
+  if (fromCourseId === toCourseId) throw new Error(await rt("libErrors.s19"));
   const { data } = await admin.from("courses").select("id, series_id, lesson_no, title").in("id", [fromCourseId, toCourseId]);
   const from = (data ?? []).find((c) => c.id === fromCourseId);
   const to = (data ?? []).find((c) => c.id === toCourseId);
-  if (!from || !to) throw new Error("授業回が見つかりません。");
-  if (from.series_id !== to.series_id) throw new Error("同じ教科・科目の授業回からだけ複製できます。");
+  if (!from || !to) throw new Error(await rt("libErrors.s20"));
+  if (from.series_id !== to.series_id) throw new Error(await rt("libErrors.s21"));
   return { from, to };
 }
 
@@ -44,13 +49,13 @@ export async function copyPersonasBetweenLessons(admin: AdminClient, fromCourseI
     }
     const { id: _id, created_at: _c, course_id: _cid, shared_at: _s, ...rest } = p as Record<string, unknown>;
     void _id; void _c; void _cid; void _s;
-    rows.push({ ...rest, course_id: toCourseId, shared_at: null, origin_note: `${lessonName(from.lesson_no, from.title)}から複製` });
+    rows.push({ ...rest, course_id: toCourseId, shared_at: null, origin_note: await rt("libErrors.copiedFrom", { name: lessonName(from.lesson_no, from.title) }) });
     names.add(p.name);
     capacity -= 1;
   }
   if (rows.length > 0) {
     const { error } = await admin.from("personas").insert(rows);
-    if (error) throw new Error(`擬似メンバーの複製に失敗しました: ${error.message}`);
+    if (error) throw new Error(await rt("libErrors.p16", { message: error.message }));
   }
   return { copied: rows.length, skipped };
 }
@@ -77,7 +82,7 @@ export async function copyCriteriaBetweenLessons(admin: AdminClient, fromCourseI
   }
   if (rows.length > 0) {
     const { error } = await admin.from("evaluation_criteria").insert(rows);
-    if (error) throw new Error(`評価の観点の複製に失敗しました: ${error.message}`);
+    if (error) throw new Error(await rt("libErrors.p17", { message: error.message }));
   }
   return { copied: rows.length, skipped };
 }

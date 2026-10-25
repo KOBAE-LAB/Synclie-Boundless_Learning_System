@@ -1,3 +1,4 @@
+import { formatDateTime, getT } from "@/lib/i18n/server";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/server";
@@ -28,6 +29,7 @@ export default async function ConformityPage({
 }) {
   const { courseId } = await params;
   const { user } = await requireRole("teacher");
+  const { t, lang } = await getT();
 
   const admin = createAdminClient();
   const { data: course } = await admin
@@ -77,7 +79,7 @@ export default async function ConformityPage({
 
   const statsByPersona = new Map<string, { total: number; unwarranted: number }>();
   for (const evaluation of evaluations) {
-    const key = evaluation.persona_id ?? "(不明)";
+    const key = evaluation.persona_id ?? t("conformityPage.unknown");
     const stat = statsByPersona.get(key) ?? { total: 0, unwarranted: 0 };
     stat.total += 1;
     if (evaluation.unwarranted_conformity) stat.unwarranted += 1;
@@ -88,28 +90,27 @@ export default async function ConformityPage({
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <Breadcrumbs trail={[...((await loadLessonCrumbs(admin, courseId))?.teacherTrail ?? [])]} current="同調の計測" />
+      <Breadcrumbs trail={[...((await loadLessonCrumbs(admin, courseId, lang))?.teacherTrail ?? [])]} current={t("conformityPage.title")} />
       <h1 className="mt-2 text-2xl font-semibold text-ink">
-        ペルソナ設計と同調の計測
+        {t("conformityPage.heading")}
       </h1>
       <p className="mt-1 text-sm text-ink-muted">
-        学習者の発言に新しい根拠・具体例が無いのに、擬似メンバーが同調(譲歩)した割合を
-        ペルソナごとに集計する。ペルソナの設定を変えて比較する材料にする。
+        {t("conformityPage.lead")}
       </p>
 
       <div className="mt-8 rounded-lg border border-line p-5 text-sm">
         <h2 className="text-sm font-medium text-ink">
-          ペルソナ別の同調率
+          {t("conformityPage.byPersona")}
         </h2>
         {statsByPersona.size === 0 && (
-          <p className="mt-2 text-ink-muted">まだ評価データがありません。</p>
+          <p className="mt-2 text-ink-muted">{t("conformityPage.noData")}</p>
         )}
         <ul className="mt-3 space-y-2">
           {[...statsByPersona.entries()].map(([personaId, stat]) => (
             <li key={personaId} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
               <span>{personaNames.get(personaId) ?? personaId}</span>
               <span className="text-ink-muted">
-                {stat.unwarranted}/{stat.total}件({Math.round((stat.unwarranted / stat.total) * 100)}%)
+                {t("conformityPage.statLine", { u: stat.unwarranted, n: stat.total, p: Math.round((stat.unwarranted / stat.total) * 100) })}
               </span>
             </li>
           ))}
@@ -118,7 +119,7 @@ export default async function ConformityPage({
 
       <div className="mt-6">
         <h2 className="text-sm font-medium text-ink">
-          根拠なく同調したと判定された発言({flagged.length}件)
+          {t("conformityPage.flaggedHeading", { n: flagged.length })}
         </h2>
         <ul className="mt-3 space-y-2">
           {flagged.map((evaluation) => (
@@ -127,15 +128,15 @@ export default async function ConformityPage({
               className="rounded-md border border-warn bg-warn-soft px-4 py-3 text-sm"
             >
               <p className="text-xs font-medium text-warn">
-                {evaluation.persona_id ? (personaNames.get(evaluation.persona_id) ?? "不明") : "不明"} ・
-                {new Date(evaluation.created_at).toLocaleString("ja-JP")}
+                {evaluation.persona_id ? (personaNames.get(evaluation.persona_id) ?? t("conformityPage.unknown")) : t("conformityPage.unknown")} ・
+                {formatDateTime(evaluation.created_at, lang)}
               </p>
               <p className="mt-1 text-warn">{evaluation.summary_comment}</p>
             </li>
           ))}
           {flagged.length === 0 && evaluations.length > 0 && (
             <li className="text-sm text-ink-muted">
-              根拠なく同調したと判定された発言はありません。
+              {t("conformityPage.flaggedNone")}
             </li>
           )}
         </ul>

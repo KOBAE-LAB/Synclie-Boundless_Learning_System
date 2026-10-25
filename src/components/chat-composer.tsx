@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { toneClass, personaInitial } from "@/lib/persona-tones";
 import { computePacing, type ReplyTempo } from "@/lib/persona-traits";
+import { useT } from "@/lib/i18n/client";
 
 /**
  * 学習画面の発言入力欄。送信した瞬間に自分の発言を画面に出し、擬似メンバーの返答を
@@ -50,6 +51,7 @@ export function ChatComposer({
   personaTempos: Record<string, ReplyTempo>;
 }) {
   const router = useRouter();
+  const t = useT();
   // ページの読み込み(ハイドレーション)が終わるまでは送信させない。終わる前にフォームが
   // 普通に送信されると、発言の内容がURL(?message=...)に載って履歴やログに残ってしまうため。
   const hydrated = useSyncExternalStore(
@@ -131,7 +133,7 @@ export function ChatComposer({
         const data = (await response.json().catch(() => null)) as { error?: string } | null;
         if (textarea) textarea.value = message;
         clearLive();
-        setError(data?.error ?? `送信に失敗しました(${response.status})。`);
+        setError(data?.error ?? t("composer.sendFailed", { status: response.status }));
         return;
       }
 
@@ -164,7 +166,7 @@ export function ChatComposer({
       setStreamDone(true);
     } catch {
       // 通信が途中で切れた場合も、サーバー側は処理を最後まで続けて保存するので、再取得して見せる。
-      setError("通信が途中で切れました。少し待つと、続きが表示されることがあります。");
+      setError(t("composer.connectionLost"));
       setStreamDone(true);
     }
   }
@@ -175,7 +177,7 @@ export function ChatComposer({
     scene.length > 0
       ? scene
       : reply !== ""
-        ? [{ personaId: persona?.id ?? "", name: persona?.name ?? "擬似メンバー", text: reply }]
+        ? [{ personaId: persona?.id ?? "", name: persona?.name ?? t("composer.member"), text: reply }]
         : [];
 
   // ペルソナごとの返答のテンポ: 順番に、「入力中…」の間をおいてから、その人の速さで文字を出す。
@@ -224,7 +226,7 @@ export function ChatComposer({
 
           {phase === "sending" && bubbles.length === 0 && (
             <p className="flex items-center gap-1.5 text-xs text-ink-muted" role="status">
-              {persona ? `${persona.name}が考えています` : "擬似メンバーが考えています"}
+              {persona ? t("composer.personaThinking", { name: persona.name }) : t("composer.membersThinking")}
               <span className="flex items-center gap-0.5" aria-hidden="true">
                 <span className="thinking-dot h-1 w-1 rounded-full bg-current" />
                 <span className="thinking-dot h-1 w-1 rounded-full bg-current" />
@@ -265,7 +267,7 @@ export function ChatComposer({
               className={`flex items-center gap-1.5 pl-11 text-xs text-ink-muted ${toneClass(personaTones[typingBubble.personaId])}`}
               role="status"
             >
-              <span className="persona-name font-semibold">{typingBubble.name}</span>が入力中
+              <span className="persona-name font-semibold">{typingBubble.name}</span>{t("composer.typingSuffix")}
               <span className="flex items-center gap-0.5" aria-hidden="true">
                 <span className="thinking-dot h-1 w-1 rounded-full bg-current" />
                 <span className="thinking-dot h-1 w-1 rounded-full bg-current" />
@@ -296,7 +298,7 @@ export function ChatComposer({
         >
           <div className="flex gap-2">
             <label htmlFor="chat-message" className="sr-only">
-              発言
+              {t("composer.messageLabel")}
             </label>
             <textarea
               id="chat-message"
@@ -304,7 +306,7 @@ export function ChatComposer({
               name="message"
               required
               rows={2}
-              placeholder="発言を入力(Ctrl+Enterで送信)"
+              placeholder={t("composer.placeholder")}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
                   event.preventDefault();
@@ -319,7 +321,7 @@ export function ChatComposer({
               aria-busy={busy}
               className="shrink-0 self-end rounded-md bg-accent-fill px-5 py-2 text-sm font-medium text-white hover:bg-accent-fill-hover disabled:opacity-50"
             >
-              {phase !== "idle" ? "送信中…" : "送信"}
+              {phase !== "idle" ? t("composer.sending") : t("composer.send")}
             </button>
           </div>
         </form>

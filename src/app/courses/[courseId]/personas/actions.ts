@@ -1,5 +1,7 @@
 "use server";
 
+import { getT } from "@/lib/i18n/server";
+import type { DictKey, Vars } from "@/lib/i18n/translate";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
@@ -8,7 +10,13 @@ import { assertOwnsCourse } from "@/lib/courses/ownership";
 import { generateEvolvedRoles } from "@/lib/ai/evolved-persona";
 import { recommendPersonaAvatar, type AvatarOption } from "@/lib/ai/persona-avatar";
 import { recommendPersonaDrafts, MAX_RECOMMEND_COUNT } from "@/lib/ai/persona-recommend";
+import type { DictKey as DictKeyP } from "@/lib/i18n/translate";
 import { normalizeReplyTempo, normalizeThinkingDepth } from "@/lib/persona-traits";
+
+// 画面の言語でのメッセージ(エラーなど)。
+async function msg(key: DictKey, vars?: Vars): Promise<string> {
+  return (await getT()).t(key, vars);
+}
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -48,15 +56,15 @@ async function getOwnedPersona(
     .eq("id", personaId)
     .maybeSingle();
   if (!persona || persona.course_id !== courseId) {
-    throw new Error("ペルソナが見つかりません。");
+    throw new Error((await msg("personaActions.notFound")));
   }
   return persona as { id: string; course_id: string; status: PersonaStatus };
 }
 
-function readPersonaFormData(formData: FormData) {
+async function readPersonaFormData(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   if (!name) {
-    throw new Error("ペルソナの名前を入力してください。");
+    throw new Error((await msg("personaActions.needName")));
   }
 
   const profile: PersonaProfileFields = {
@@ -87,7 +95,7 @@ export async function createPersonaAction(courseId: string, formData: FormData) 
   const admin = createAdminClient();
   await assertOwnsCourse(admin, courseId, user.id);
 
-  const { name, profile, stance, behaviorRules } = readPersonaFormData(formData);
+  const { name, profile, stance, behaviorRules } = await readPersonaFormData(formData);
 
   const { error } = await admin.from("personas").insert({
     course_id: courseId,
@@ -99,7 +107,7 @@ export async function createPersonaAction(courseId: string, formData: FormData) 
   });
 
   if (error) {
-    throw new Error(`ペルソナの作成に失敗しました: ${error.message}`);
+    throw new Error(await msg("personaActions.createFailed", { message: error.message }));
   }
 
   revalidatePath(`/courses/${courseId}/personas`);
@@ -116,7 +124,7 @@ export async function updatePersonaAction(
 
   await getOwnedPersona(admin, courseId, personaId);
 
-  const { name, profile, stance, behaviorRules } = readPersonaFormData(formData);
+  const { name, profile, stance, behaviorRules } = await readPersonaFormData(formData);
 
   const { error } = await admin
     .from("personas")
@@ -130,7 +138,7 @@ export async function updatePersonaAction(
     .eq("id", personaId);
 
   if (error) {
-    throw new Error(`ペルソナの更新に失敗しました: ${error.message}`);
+    throw new Error(await msg("personaActions.updateFailed", { message: error.message }));
   }
 
   revalidatePath(`/courses/${courseId}/personas`);
@@ -146,7 +154,7 @@ export async function sharePersonaAction(courseId: string, personaId: string) {
   await assertOwnsCourse(admin, courseId, user.id);
   const persona = await getOwnedPersona(admin, courseId, personaId);
   if (persona.status === "draft") {
-    throw new Error("下書きのペルソナは共有できません。承認してから共有してください。");
+    throw new Error((await msg("personaActions.noShareDraft")));
   }
 
   const { error } = await admin
@@ -154,7 +162,7 @@ export async function sharePersonaAction(courseId: string, personaId: string) {
     .update({ shared_at: new Date().toISOString() })
     .eq("id", personaId);
   if (error) {
-    throw new Error(`共有に失敗しました: ${error.message}`);
+    throw new Error(await msg("personaActions.shareFailed", { message: error.message }));
   }
 
   revalidatePath(`/courses/${courseId}/personas`);
@@ -168,7 +176,7 @@ export async function unsharePersonaAction(courseId: string, personaId: string) 
 
   const { error } = await admin.from("personas").update({ shared_at: null }).eq("id", personaId);
   if (error) {
-    throw new Error(`共有の取り消しに失敗しました: ${error.message}`);
+    throw new Error(await msg("personaActions.unshareFailed", { message: error.message }));
   }
 
   revalidatePath(`/courses/${courseId}/personas`);
@@ -182,7 +190,7 @@ export async function deletePersonaAction(courseId: string, personaId: string) {
 
   const { error } = await admin.from("personas").delete().eq("id", personaId);
   if (error) {
-    throw new Error(`ペルソナの削除に失敗しました: ${error.message}`);
+    throw new Error(await msg("personaActions.deleteFailed", { message: error.message }));
   }
 
   revalidatePath(`/courses/${courseId}/personas`);
@@ -204,7 +212,7 @@ async function setPersonaStatus(
   const persona = await getOwnedPersona(admin, courseId, personaId);
   if (persona.status !== from) {
     throw new Error(
-      `このペルソナは現在「${persona.status}」の状態のため、この操作はできません。`,
+      await msg("personaActions.badState", { status: await msg(`personaEnums.status_${persona.status}` as DictKeyP) }),
     );
   }
 
@@ -213,7 +221,7 @@ async function setPersonaStatus(
     .update({ status: to, updated_at: new Date().toISOString() })
     .eq("id", personaId);
   if (error) {
-    throw new Error(`状態の更新に失敗しました: ${error.message}`);
+    throw new Error(await msg("personaActions.stateFailed", { message: error.message }));
   }
 
   revalidatePath(`/courses/${courseId}/personas`);
@@ -245,7 +253,7 @@ export async function recommendPersonaAvatarAction(courseId: string, personaId: 
     .eq("id", personaId)
     .maybeSingle();
   if (!persona || persona.course_id !== courseId) {
-    throw new Error("ペルソナが見つかりません。");
+    throw new Error((await msg("personaActions.notFound")));
   }
 
   const { data: avatarOptionRows } = await admin.from("avatar_options").select("id, label, tags");
@@ -271,7 +279,7 @@ export async function recommendPersonaAvatarAction(courseId: string, personaId: 
       .eq("id", personaId);
     if (error) throw new Error(error.message);
   } catch (err) {
-    const message = err instanceof Error ? err.message : "不明なエラーが発生しました。";
+    const message = err instanceof Error ? err.message : await msg("dashboard.errUnknown");
     await admin
       .from("personas")
       .update({ avatar_status: "failed", avatar_error: message })
@@ -294,7 +302,7 @@ export async function setPersonaAvatarAction(
 
   const avatarId = String(formData.get("avatarId") ?? "").trim();
   if (!avatarId) {
-    throw new Error("アバターを選択してください。");
+    throw new Error((await msg("personaActions.pickAvatar")));
   }
 
   const { error } = await admin
@@ -302,7 +310,7 @@ export async function setPersonaAvatarAction(
     .update({ avatar_id: avatarId, avatar_status: "done", avatar_error: null })
     .eq("id", personaId);
   if (error) {
-    throw new Error(`アバターの設定に失敗しました: ${error.message}`);
+    throw new Error(await msg("personaActions.avatarFailed", { message: error.message }));
   }
 
   revalidatePath(`/courses/${courseId}/personas`);
@@ -420,16 +428,18 @@ export async function recommendPersonaDraftsAction(courseId: string, formData: F
       .order("chunk_index", { ascending: true })
       .limit(12),
   ]);
-  if (!course) throw new Error("授業が見つかりません。");
+  if (!course) throw new Error((await msg("personaActions.lessonNotFound")));
 
+  const { t: tr } = await getT();
   const existing = existingRows ?? [];
   if (existing.length + count > MAX_PERSONAS_PER_COURSE) {
     throw new Error(
-      `この授業のペルソナは最大${MAX_PERSONAS_PER_COURSE}体までです(現在${existing.length}体)。不要なものを削除してから、もう一度お試しください。`,
+      await msg("personaActions.maxPersonas", { max: MAX_PERSONAS_PER_COURSE, n: existing.length }),
     );
   }
 
   const drafts = await recommendPersonaDrafts({
+    lang: (await getT()).lang,
     course,
     materialText: (chunkRows ?? []).map((c) => c.content).join("\n\n"),
     count,
@@ -461,11 +471,11 @@ export async function recommendPersonaDraftsAction(courseId: string, formData: F
         thinkingDepth: d.thinkingDepth,
         replyTempo: d.replyTempo,
       },
-      origin_note: `AI推薦(授業設定と資料から生成): ${d.rationale}`,
+      origin_note: tr("personaActions.originAi", { rationale: d.rationale }),
     })),
   );
   if (error) {
-    throw new Error(`ペルソナ案の保存に失敗しました: ${error.message}`);
+    throw new Error(await msg("personaActions.draftsSaveFailed", { message: error.message }));
   }
 
   revalidatePath(`/courses/${courseId}/personas`);
@@ -480,12 +490,11 @@ export async function generateEvolvedPersonasAction(courseId: string) {
 
   if (studentCount < MIN_STUDENTS_FOR_EVOLVED) {
     throw new Error(
-      `学習進化型ペルソナの生成には、同意済みの学習者が最低${MIN_STUDENTS_FOR_EVOLVED}人分の活動記録が必要です` +
-        `(現在: ${studentCount}人。特定の学習者の発言だと推測されにくくするための下限です)。`,
+      await msg("personaActions.needStudents", { min: MIN_STUDENTS_FOR_EVOLVED, n: studentCount }),
     );
   }
   if (!log) {
-    throw new Error("学習者の活動記録がまだありません。");
+    throw new Error((await msg("personaActions.noRecords")));
   }
 
   const result = await generateEvolvedRoles(log);
@@ -500,7 +509,7 @@ export async function generateEvolvedPersonasAction(courseId: string) {
       })),
     );
     if (corpusError) {
-      throw new Error(`学習者由来コーパスの保存に失敗しました: ${corpusError.message}`);
+      throw new Error(await msg("personaActions.corpusFailed", { message: corpusError.message }));
     }
   }
 
@@ -523,7 +532,7 @@ export async function generateEvolvedPersonasAction(courseId: string) {
     })),
   );
   if (personaError) {
-    throw new Error(`学習進化型ペルソナの作成に失敗しました: ${personaError.message}`);
+    throw new Error(await msg("personaActions.evolvedFailed", { message: personaError.message }));
   }
 
   revalidatePath(`/courses/${courseId}/personas`);

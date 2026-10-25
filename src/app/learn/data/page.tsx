@@ -1,3 +1,4 @@
+import { formatDateTime, getT } from "@/lib/i18n/server";
 import Link from "next/link";
 import { isConsentCurrent, needsReconsent } from "@/lib/consent";
 import { requireRole } from "@/lib/auth/session";
@@ -49,27 +50,28 @@ export default async function MyDataPage() {
     .select("id", { count: "exact", head: true })
     .eq("student_id", user.id);
 
+  const { t, lang } = await getT();
   const isActive = isConsentCurrent(consent);
   const reconsent = needsReconsent(consent);
 
   return (
     <div className="mx-auto max-w-2xl px-6 py-12">
-      <Breadcrumbs trail={[{ label: "授業一覧", href: "/learn" }]} current="自分のデータ" />
+      <Breadcrumbs trail={[{ label: t("learnList.title"), href: "/learn" }]} current={t("myData.title")} />
       <h1 className="mt-2 text-2xl font-semibold text-ink">
-        自分のデータ
+        {t("myData.title")}
       </h1>
 
       <div className="mt-6 rounded-lg border border-line p-5 text-sm">
-        <h2 className="text-sm font-medium text-ink">同意の状況</h2>
-        {!consent && <p className="mt-2 text-ink-muted">まだ同意していません。</p>}
+        <h2 className="text-sm font-medium text-ink">{t("myData.consentStatus")}</h2>
+        {!consent && <p className="mt-2 text-ink-muted">{t("myData.notYet")}</p>}
         {consent && reconsent && (
-          <p className="mt-2 text-warn">同意の内容(AIの利用についての説明)が更新されました。内容を確認して、もう一度同意してください。</p>
+          <p className="mt-2 text-warn">{t("myData.updated")}</p>
         )}
         {consent && !reconsent && (
           <p className="mt-2 text-ink-muted">
             {isActive
-              ? `${new Date(consent.granted_at).toLocaleString("ja-JP")} に同意済みです。`
-              : `${new Date(consent.withdrawn_at!).toLocaleString("ja-JP")} に利用を停止しています。`}
+              ? t("myData.agreedAt", { date: formatDateTime(consent.granted_at, lang) })
+              : t("myData.stoppedAt", { date: formatDateTime(consent.withdrawn_at!, lang) })}
           </p>
         )}
 
@@ -79,7 +81,7 @@ export default async function MyDataPage() {
               type="submit"
               className="rounded-md border border-line px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface"
             >
-              利用を停止する(同意を撤回)
+              {t("myData.withdraw")}
             </button>
           </form>
         ) : (
@@ -87,43 +89,43 @@ export default async function MyDataPage() {
             href="/consent"
             className="mt-4 inline-block rounded-md bg-accent-fill px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-fill-hover"
           >
-            同意して利用を再開する
+            {t("myData.resume")}
           </Link>
         )}
       </div>
 
       {isActive && (
         <div className="mt-6 rounded-lg border border-line p-5 text-sm">
-          <h2 className="text-sm font-medium text-ink">他の学校でも使うことへの同意(任意)</h2>
+          <h2 className="text-sm font-medium text-ink">{t("myData.wideTitle")}</h2>
           <p className="mt-2 text-ink-muted">
-            あなたの探究の記録をもとに、先生が「先輩のAI」をつくります。同意すると、他の学校(同じ自治体など)の後輩も、そのAIと対話できます。
+            {t("myData.wideLead")}
           </p>
           <details className="mt-2 text-ink-muted">
-            <summary className="cursor-pointer underline underline-offset-2">くわしく読む</summary>
+            <summary className="cursor-pointer underline underline-offset-2">{t("myData.wideMore")}</summary>
             <ul className="mt-2 list-disc space-y-1 pl-5">
-              <li>他の学校には、学校名・地名・人の名前などをぼかした、短い語りだけが使われます。</li>
-              <li>先輩のAIは、あなた本人ではなく、記録をもとにしたAIです。</li>
-              <li>同意しなくても、授業や、同じ学校での利用には影響しません。</li>
-              <li>いつでも取り消せます。取り消すと、他の学校では使われなくなります。</li>
+              <li>{t("myData.wide1")}</li>
+              <li>{t("myData.wide2")}</li>
+              <li>{t("myData.wide3")}</li>
+              <li>{t("myData.wide4")}</li>
             </ul>
           </details>
           <p className="mt-2 text-ink-muted">
             {wideActive
-              ? `${new Date(wide!.granted_at).toLocaleString("ja-JP")} に同意済みです。`
+              ? t("myData.wideAgreedAt", { date: formatDateTime(wide!.granted_at, lang) })
               : wide?.withdrawn_at
-                ? `${new Date(wide.withdrawn_at).toLocaleString("ja-JP")} に取り消しました。`
-                : "いまは、同意していません。"}
+                ? t("myData.wideWithdrawnAt", { date: formatDateTime(wide.withdrawn_at, lang) })
+                : t("myData.wideNone")}
           </p>
           {wideActive ? (
             <form action={withdrawWideConsentAction} className="mt-3">
               <button type="submit" className="rounded-md border border-line px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface">
-                他の学校で使うことへの同意を取り消す
+                {t("myData.wideWithdraw")}
               </button>
             </form>
           ) : (
             <form action={grantWideConsentAction} className="mt-3">
               <button type="submit" className="rounded-md border border-line px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface">
-                他の学校でも使うことに同意する
+                {t("myData.wideGrant")}
               </button>
             </form>
           )}
@@ -132,25 +134,25 @@ export default async function MyDataPage() {
 
       <div className="mt-6 rounded-lg border border-line p-5 text-sm">
         <h2 className="text-sm font-medium text-ink">
-          保存されているデータ
+          {t("myData.storedHeading")}
         </h2>
         <ul className="mt-2 space-y-1 text-ink-muted">
-          <li>学習セッション: {sessionCount ?? 0}件(擬似メンバーとの対話ログを含む)</li>
-          <li>あなたの発言: {authoredTurnCount ?? 0}件(グループの議論の発言を含む。削除すると、グループの議論からはあなたの発言だけが消えます)</li>
-          <li>提出した成果: {submissionCount ?? 0}件</li>
-          <li>振り返り: {reflectionCount ?? 0}件</li>
-          <li>学習者プロファイル: {profileCount ?? 0}件</li>
+          <li>{t("myData.sessions", { n: sessionCount ?? 0 })}</li>
+          <li>{t("myData.posts", { n: authoredTurnCount ?? 0 })}</li>
+          <li>{t("myData.submissions", { n: submissionCount ?? 0 })}</li>
+          <li>{t("myData.reflections", { n: reflectionCount ?? 0 })}</li>
+          <li>{t("myData.profiles", { n: profileCount ?? 0 })}</li>
         </ul>
 
         <form action={deleteMyDataAction} className="mt-4">
           <p className="mb-2 text-xs text-danger">
-            削除すると元に戻せません。ログインアカウント自体は残ります。
+            {t("myData.deleteWarn")}
           </p>
           <button
             type="submit"
             className="rounded-md border border-danger px-3 py-1.5 text-xs font-medium text-danger hover:bg-danger-soft"
           >
-            すべてのデータを削除する
+            {t("myData.deleteAll")}
           </button>
         </form>
       </div>

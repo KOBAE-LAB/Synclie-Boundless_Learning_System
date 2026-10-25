@@ -1,4 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/server";
+import { getLang } from "@/lib/i18n/server";
+import { translatorFor } from "@/lib/i18n/translate";
+import type { Lang } from "@/lib/i18n/config";
 import { searchMaterialChunks } from "@/lib/rag/search";
 import { summarizeDiscussion, type DiscussionSummary } from "@/lib/ai/discussion-wrapup";
 import { getTimeStatus } from "@/lib/learn/session-end";
@@ -29,7 +32,10 @@ export async function closeDiscussion(
   admin: AdminClient,
   courseId: string,
   studentId: string,
+  langOverride?: Lang,
 ): Promise<{ summary: DiscussionSummary; alreadyEnded: boolean }> {
+  const lang = langOverride ?? (await getLang());
+  const t = translatorFor(lang);
   // 探究の教科・科目(0044)では、グループの共有の議論を、メンバーの誰でも終えられる。
   const scope = await resolveSessionScope(admin, courseId, studentId);
   const { data: session } = await scopeSessionQuery(
@@ -43,7 +49,7 @@ export async function closeDiscussion(
     .limit(1)
     .maybeSingle();
   if (!session) {
-    throw new Error("議論がまだ始まっていません。");
+    throw new Error(t("apiErrors.closeNotStarted"));
   }
   if (session.ended_at && session.closing_summary) {
     return { summary: session.closing_summary as DiscussionSummary, alreadyEnded: true };
@@ -66,7 +72,7 @@ export async function closeDiscussion(
       .then(({ data }) => applyTurnCorrections(admin, data ?? []))
       .then((data) => ({ data })),
   ]);
-  if (!course) throw new Error("授業が見つかりません。");
+  if (!course) throw new Error(t("dialogue.lessonNotFound"));
 
   // 話者名の取得と、参考資料の検索(埋め込みAPIを呼ぶ)も、互いに独立なので並行する。
   // 資料の検索は、失敗してもまとめ自体は作る。
@@ -86,7 +92,7 @@ export async function closeDiscussion(
     )
     .join("\n");
   if (!transcript) {
-    throw new Error("まとめる発言がまだありません。");
+    throw new Error(t("apiErrors.closeNoTurns"));
   }
 
   const summary = await summarizeDiscussion({
@@ -94,6 +100,7 @@ export async function closeDiscussion(
     objective: course.objective,
     learnerLevel: course.learner_level,
     materialText,
+    lang,
   });
 
   const timeStatus = getTimeStatus({
@@ -111,7 +118,7 @@ export async function closeDiscussion(
     .eq("id", session.id)
     .is("ended_at", null);
   if (error) {
-    throw new Error(`議論の終了の記録に失敗しました: ${error.message}`);
+    throw new Error(t("apiErrors.closeSaveFailed", { detail: error.message }));
   }
   // ②抽出層(要件定義書14章ステップ5): 議論が終わったら、印の付いた場面からエピソードを作る。
   // 学習者を待たせないよう、レスポンスを返した後(after())に実行する。印が無ければAIは呼ばれない。

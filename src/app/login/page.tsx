@@ -4,6 +4,7 @@ import Link from "next/link";
 import { LoginForm } from "./login-form";
 import { signInWithMicrosoftAction, signInWithGoogleAction } from "./actions";
 import { GoogleLogo, MicrosoftLogo } from "@/components/provider-logos";
+import { getT } from "@/lib/i18n/server";
 
 // F22: SSOのボタンは、対応する環境変数(OAuthアプリの登録情報)が設定されている時だけ
 // 表示する。サーバーコンポーネントでprocess.envを直接見て判定する
@@ -14,6 +15,7 @@ export default async function LoginPage({
   searchParams: Promise<{ registered?: string; error?: string }>;
 }) {
   const { registered, error } = await searchParams;
+  const { t } = await getT();
   // src/auth.ts と同じ条件(IDとISSUERが揃っている時だけ有効)
   const microsoftEnabled = Boolean(
     process.env.AUTH_MICROSOFT_ENTRA_ID_ID && process.env.AUTH_MICROSOFT_ENTRA_ID_ISSUER,
@@ -24,8 +26,8 @@ export default async function LoginPage({
   // SSO側で入れなかった理由(Auth.jsは ?error= で返す)。承認待ちの教師アカウントなどが該当する。
   const errorMessage = error
     ? error === "AccessDenied"
-      ? "ログインできませんでした。承認待ちの教師アカウントなどが考えられます。"
-      : "ログインに失敗しました。もう一度お試しください。"
+      ? t("login.errorAccessDenied")
+      : t("login.errorGeneric")
     : null;
 
   return (
@@ -40,18 +42,18 @@ export default async function LoginPage({
             priority
             className="mx-auto mb-3 rounded-full"
           />
-          <h1 className="text-xl font-semibold text-ink">Synclie にログイン</h1>
+          <h1 className="text-xl font-semibold text-ink">{t("login.title")}</h1>
           <p className="mt-1 text-xs tracking-wide text-ink-muted">Boundless Learning System</p>
         </div>
 
         {registered === "student" && (
           <p className="rounded-md border border-line bg-surface-raised px-3 py-2 text-sm text-ink-muted">
-            登録しました。ログインして、先生が承認するまでお待ちください(承認されると授業に入れます)。
+            {t("login.registeredStudent")}
           </p>
         )}
         {registered === "teacher" && (
           <p className="rounded-md border border-line bg-surface-raised px-3 py-2 text-sm text-ink-muted">
-            登録を受け付けました。管理者が承認するまでログインできません。
+            {t("login.registeredTeacher")}
           </p>
         )}
         {errorMessage && (
@@ -69,7 +71,7 @@ export default async function LoginPage({
                   className="flex w-full items-center justify-center gap-3 rounded-md border border-[#dadce0] bg-white shadow-sm px-4 py-2.5 text-sm font-medium text-[#1f1f1f] transition-colors hover:bg-[#f7f8f8]"
                 >
                   <GoogleLogo />
-                  Googleでログイン
+                  {t("login.google")}
                 </button>
               </form>
             )}
@@ -80,12 +82,12 @@ export default async function LoginPage({
                   className="flex w-full items-center justify-center gap-3 rounded-md border border-[#8c8c8c] bg-white px-4 py-2.5 text-sm font-medium text-[#5e5e5e] transition-colors hover:bg-[#f7f8f8]"
                 >
                   <MicrosoftLogo />
-                  Microsoftでログイン
+                  {t("login.microsoft")}
                 </button>
               </form>
             )}
             <p className="text-center text-xs text-ink-faint">
-              はじめての方は、ログイン後に先生から教わった授業コードで授業に参加できます。
+              {t("login.firstTimeHint")}
             </p>
           </div>
         )}
@@ -93,7 +95,7 @@ export default async function LoginPage({
         {ssoEnabled && (
           <div className="flex items-center gap-3 text-xs text-ink-faint" aria-hidden="true">
             <span className="h-px flex-1 bg-line" />
-            メールアドレスでログイン
+            {t("login.byEmail")}
             <span className="h-px flex-1 bg-line" />
           </div>
         )}
@@ -101,9 +103,9 @@ export default async function LoginPage({
         <LoginForm />
 
         <p className="text-center text-sm text-ink-muted">
-          アカウントをお持ちでない方は{" "}
+          {t("login.noAccount")}{" "}
           <Link href="/signup" className="font-medium text-ink underline">
-            新規登録
+            {t("login.signup")}
           </Link>
         </p>
 
@@ -111,13 +113,13 @@ export default async function LoginPage({
 
         <p className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-ink-faint">
           <Link href="/guide" className="underline underline-offset-2">
-            使い方ガイド(動画)
+            {t("login.guide")}
           </Link>
           <Link href="/privacy" className="underline underline-offset-2">
-            プライバシーポリシー
+            {t("top.privacy")}
           </Link>
           <Link href="/terms" className="underline underline-offset-2">
-            利用規約
+            {t("top.terms")}
           </Link>
         </p>
       </div>

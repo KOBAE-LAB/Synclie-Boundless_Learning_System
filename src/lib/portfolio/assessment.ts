@@ -1,12 +1,19 @@
 // 自己評価・教師評価の入力チェックと、評価の段階の定義(DBに触れない純粋な関数)。
 // AIの評価(F20/F24)は材料にとどめ、最終判断は学習者本人と教師に残す(非機能要件)。
 
+import type { Translator } from "@/lib/i18n/translate";
+
 export const RATING_LABELS: Record<number, string> = {
   4: "よくできた",
   3: "できた",
   2: "もう少し",
   1: "これから",
 };
+
+/** 画面の言語に合わせた評価の段階の名前(1〜4)。 */
+export function ratingLabel(t: Translator, rating: number): string {
+  return t(`portfolio.rating${rating as 1 | 2 | 3 | 4}`);
+}
 
 export const MAX_COMMENT_LENGTH = 1000;
 

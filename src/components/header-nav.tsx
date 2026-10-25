@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useT } from "@/lib/i18n/client";
 
 // 画面上部の共通メニュー。「授業一覧」と並ぶ上位のページ(組織・共有ライブラリ・学習ダッシュボード等)
 // への移動を、ここにまとめる(以前は、各画面にリンクが散らばって並んでいた)。
@@ -28,9 +29,10 @@ export function getActiveHref(pathname: string, items: NavItem[]): string | null
 
 export function HeaderNav({ items }: { items: NavItem[] }) {
   const pathname = usePathname();
+  const t = useT();
   const activeHref = getActiveHref(pathname, items);
   return (
-    <nav aria-label="メインメニュー" className="flex flex-wrap items-center gap-1">
+    <nav aria-label={t("common.mainMenu")} className="flex flex-wrap items-center gap-1">
       {items.map((item) => {
         const active = item.href === activeHref;
         return (
