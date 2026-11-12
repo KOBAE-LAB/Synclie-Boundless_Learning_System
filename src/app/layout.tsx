@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Image from "next/image";
+import { BRAND_ICON_SRC, BRAND_LOGO_SRC } from "@/lib/brand";
 import Link from "next/link";
 import "@fontsource-variable/noto-sans-jp/index.css";
 import "./globals.css";
@@ -19,7 +20,12 @@ import { dictionaryFor, type Translator } from "@/lib/i18n/translate";
 
 export async function generateMetadata(): Promise<Metadata> {
   const { t } = await getT();
-  return { title: "Synclie - Boundless Learning System", description: t("meta.description") };
+  return {
+    title: "Synclie - Boundless Learning System",
+    description: t("meta.description"),
+    // タブのアイコン。マスコットを出すかは src/lib/brand.ts で切り替える
+    icons: { icon: BRAND_ICON_SRC },
+  };
 }
 
 export const viewport = {
@@ -105,7 +111,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
               href={ROLE_HOME_HREF[navRole] ?? "/"}
               className="flex items-center gap-2 text-sm font-semibold text-ink"
             >
-              <Image src="/logo.png" alt="" width={28} height={28} priority className="rounded-full" />
+              <Image src={BRAND_LOGO_SRC} unoptimized alt="" width={28} height={28} priority className="rounded-full" />
               Synclie
             </Link>
             {NAV_ITEMS[navRole] && <HeaderNav items={NAV_ITEMS[navRole]} />}

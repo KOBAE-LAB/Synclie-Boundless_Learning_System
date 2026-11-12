@@ -1,5 +1,6 @@
 import { PrVideo } from "@/components/pr-video";
 import Image from "next/image";
+import { BRAND_LOGO_SRC } from "@/lib/brand";
 import Link from "next/link";
 import { LoginForm } from "./login-form";
 import { signInWithMicrosoftAction, signInWithGoogleAction } from "./actions";
@@ -35,7 +36,8 @@ export default async function LoginPage({
       <div className="w-full max-w-sm space-y-5 rounded-lg border border-line bg-surface p-8 shadow-sm">
         <div className="text-center">
           <Image
-            src="/logo.png"
+            src={BRAND_LOGO_SRC}
+            unoptimized
             alt=""
             width={64}
             height={64}

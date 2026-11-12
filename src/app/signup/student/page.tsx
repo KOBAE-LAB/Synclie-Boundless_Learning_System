@@ -1,6 +1,7 @@
 import { getT } from "@/lib/i18n/server";
 import Link from "next/link";
 import Image from "next/image";
+import { BRAND_LOGO_SRC } from "@/lib/brand";
 import { SubmitButton } from "@/components/submit-button";
 import { signupStudentAction } from "../actions";
 
@@ -16,7 +17,7 @@ export default async function SignupStudentPage({
     <div className="flex min-h-screen items-center justify-center bg-canvas px-4">
       <div className="w-full max-w-sm space-y-4 rounded-lg border border-line bg-surface p-8 shadow-sm">
         <div>
-          <Image src="/logo.png" alt="" width={56} height={56} priority className="mb-3 rounded-full" />
+          <Image src={BRAND_LOGO_SRC} unoptimized alt="" width={56} height={56} priority className="mb-3 rounded-full" />
           <h1 className="text-xl font-semibold text-ink">{t("signup.asStudent")}</h1>
           <p className="mt-1 text-sm text-ink-muted">
             {t("signup.studentLead")}
