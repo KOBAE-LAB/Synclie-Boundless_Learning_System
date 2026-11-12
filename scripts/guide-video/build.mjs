@@ -13,7 +13,8 @@ const SHOTS = ROOT + "shots/", AUDIO = ROOT + "audio/", SEG = ROOT + "seg/";
 for (const d of [SHOTS, AUDIO, SEG]) fs.mkdirSync(d, { recursive: true });
 const [, , stage = "all", only] = process.argv;
 const list = videos.filter((v) => !only || v.slug === only);
-const logo = "data:image/png;base64," + fs.readFileSync(REPO + "/public/logo.png").toString("base64");
+// タイトル画面のロゴ。2026-11からマスコットなしの研究室ロゴ(src/lib/brand.ts の SHOW_MASCOT を参照)
+const logo = "data:image/png;base64," + fs.readFileSync(REPO + "/public/logo-lab.png").toString("base64");
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
 
 // 文の区切り(、。)のあとで折り返し、単語の途中では折り返さない。「\n」は明示の改行
