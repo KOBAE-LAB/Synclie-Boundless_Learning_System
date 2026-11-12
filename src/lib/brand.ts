@@ -5,5 +5,5 @@
 //  scripts/guide-video/README.md の「ロゴの差し替え」を参照)
 export const SHOW_MASCOT = false;
 
-export const BRAND_LOGO_SRC = SHOW_MASCOT ? "/logo.png" : "/logo-plain.svg";
-export const BRAND_ICON_SRC = SHOW_MASCOT ? "/icon-mascot.png" : "/logo-plain.svg";
+export const BRAND_LOGO_SRC = SHOW_MASCOT ? "/logo.png" : "/logo-lab.png";
+export const BRAND_ICON_SRC = SHOW_MASCOT ? "/icon-mascot.png" : "/icon-lab.png";

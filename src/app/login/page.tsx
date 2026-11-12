@@ -37,12 +37,11 @@ export default async function LoginPage({
         <div className="text-center">
           <Image
             src={BRAND_LOGO_SRC}
-            unoptimized
             alt=""
             width={64}
             height={64}
             priority
-            className="mx-auto mb-3 rounded-full"
+            className="mx-auto mb-3"
           />
           <h1 className="text-xl font-semibold text-ink">{t("login.title")}</h1>
           <p className="mt-1 text-xs tracking-wide text-ink-muted">Boundless Learning System</p>

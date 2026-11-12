@@ -10,7 +10,7 @@ export default async function SignupPage() {
     <div className="flex min-h-screen items-center justify-center bg-canvas px-4">
       <div className="w-full max-w-sm space-y-4 rounded-lg border border-line bg-surface p-8 shadow-sm">
         <div>
-          <Image src={BRAND_LOGO_SRC} unoptimized alt="" width={56} height={56} priority className="mb-3 rounded-full" />
+          <Image src={BRAND_LOGO_SRC} alt="" width={56} height={56} priority className="mb-3" />
           <h1 className="text-xl font-semibold text-ink">{t("signup.title")}</h1>
           <p className="mt-1 text-sm text-ink-muted">{t("signup.pick")}</p>
         </div>

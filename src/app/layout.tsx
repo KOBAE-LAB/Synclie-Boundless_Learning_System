@@ -111,7 +111,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
               href={ROLE_HOME_HREF[navRole] ?? "/"}
               className="flex items-center gap-2 text-sm font-semibold text-ink"
             >
-              <Image src={BRAND_LOGO_SRC} unoptimized alt="" width={28} height={28} priority className="rounded-full" />
+              <Image src={BRAND_LOGO_SRC} alt="" width={28} height={28} priority />
               Synclie
             </Link>
             {NAV_ITEMS[navRole] && <HeaderNav items={NAV_ITEMS[navRole]} />}
